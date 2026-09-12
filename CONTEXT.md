@@ -3,12 +3,26 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 02:15 IST — Multi-Monitor Screensaver Borderless Fullscreen & Display Sorting Fixes:
-1. **Screensaver Borderless Fullscreen**: Stripped `WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME`, disabled DWM non-client margins and Win11 rounded corners, applied physical `rcMonitor` bounds via `GetMonitorInfoW`, and added 1500ms launch grace period.
-2. **Orphan & Freeze Prevention**: Added unconditional cleanup of all `screensaver_*` windows in `dismiss_screensaver`, synchronized wallpaper pause/resume and mute/unmute, and added `Esc`/`Space`/`Enter` dismissal.
-3. **Black Background Enforced**: Added `data-theme="sovereign-onyx"` and forced `#000000 !important` background in `wallpaper.html` and `wallpaper.jsx` to prevent white screens on secondary displays.
-4. **Monitor Display Ordering & Naming**: Sorted Primary monitor first (`Display 1 (Primary)`), followed by horizontal spatial order (`Display 2`). Mapped friendly display titles in 16×8 Grid Diagnostic, Audio by Display, and Home pills.
-5. **Standalone Binary Recompiled**: Built frontend (`npm run build`, 675ms) and release binary (`cargo build --release`, 2m 46s), updated root `AetherFlow.exe` (timestamp: 2:09:45 AM), launched at PID 35144.
+2026-09-12 18:16 IST — Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation (Task 18.11):
+1. **Desktop Wallpaper Preservation (Zero Black Screen on Dismissal)**:
+   - Root Cause Diagnosed: `trigger_screensaver` was calling `win.hide()` on `wallpaper_` windows. Because desktop wallpaper windows are child windows reparented to `WorkerW` / `Progman`, calling `ShowWindow(SW_HIDE)` destroys their DirectComposition visual surface link, causing WorkerW to fall back to a dead black screen on dismissal.
+   - Solution: Stopped calling `win.hide()` on `wallpaper_` windows. The screensaver is already a topmost fullscreen window (`HWND_TOPMOST = -1`) that completely covers the desktop. Wallpaper windows are now paused in place via `set_mpv_pause(None, true)`, `set_mpv_mute(None, true)`, `aura:pause`, and `aura:mute`.
+   - On dismissal: `set_mpv_pause(None, false)`, `set_mpv_mute(None, false)`, `aura:resume`, `aura:unmute`, and `UpdateWindow` / `InvalidateRect` immediately resume the wallpaper with 0ms black-screen glitch.
+   - Native Wallpaper Fallback: Added `SystemParametersInfoW(SPI_SETDESKWALLPAPER)` on `stop_wallpaper` and app `quit` to prevent empty black desktop.
+2. **Eliminated Windows 11 DWM White Border & Inset Margins (Edge-to-Edge Fullscreen)**:
+   - Added `.fullscreen(true)` to `WebviewWindowBuilder` for true borderless multi-monitor sizing.
+   - Suppressed Windows 11 active window border by setting Win32 `DwmSetWindowAttribute(raw, 34 /* DWMWA_BORDER_COLOR */, &0xFFFFFFFE /* DWMWA_COLOR_NONE */, 4)`.
+   - Set `DWMWCP_DONOTROUND` (33) and `DWMNCRP_DISABLED` (2) to suppress rounded corners and non-client margins.
+   - Removed `EnumChildWindows` manual child window resize loop that disrupted WebView2's internal compositor swapchain.
+   - Enforced `border: none !important; outline: none !important; box-shadow: none !important;` in `wallpaper.html` and `src/wallpaper.jsx`.
+3. **In-App Screensaver Studio Preview & User Wake Refinement**:
+   - Resolved preview card settings: passed `targetWp?.config || ENGINES[resolvedEng]?.defaultConfig || {}` in `Screensaver.jsx`.
+   - Passed both `{ isPreview: true, is_preview: true }` in `trigger_screensaver` IPC.
+   - Refined mouse wake sensitivity: increased mouse wake distance threshold from 10px to 40px and grace period to 1500ms so initial button clicks never cause accidental dismissal.
+4. **Build & Executable Status**:
+   - Frontend Vite build passed in 525ms.
+   - Native release binary compiled and linked in 2m 12s.
+   - Fresh `AetherFlow.exe` deployed and launched successfully (PID 27000).
 
 
 
@@ -197,6 +211,11 @@ npm run tauri:dev
 | 2026-09-11 | Antigravity (Google DeepMind) | Resolved Self-Occlusion Bug in MPV Video Engine & Global/Isolated State Desync: Excluded all MPV PIDs/HWNDs, wallpaper HWNDs, desktop/WorkerW/Progman child hierarchies, and `mpv` class in `enum_occlusion_proc` and `inspect_monitor_occlusion_states`; added `MONITOR_SYNC_REQUESTED` atomic trigger on setting/wallpaper changes for clean state re-evaluation; fixed secondary monitor audio unmuting in `set_mpv_mute`; updated `AetherFlow.exe` (7.09 MB). |
 | 2026-09-11 | Antigravity (Gemini 3.8 Flash) | Resolved Isolated Mode Multi-Monitor Pausing, Audio Scoping & NULL-Handle Occlusion: Fixed NULL-handle evaluation trap on parent/shell_hwnd/progman in `enum_occlusion_proc`; replaced destructive state wipe `paused_monitors.clear()` with deterministic `force_sync` reconciliation; scoped isolated audio policy strictly to the active audio source monitor; added store migration v3 with `pauseOnMaximized: true` fallback; compiled release binary and deployed fresh `AetherFlow.exe` (7.44 MB). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Decoupled Physical Occlusion for "Mute When Covered" & Multi-Window Event Dispatch: Decoupled physical occlusion from visual pause preferences so audio mutes when covered even if pauseOnMaximized is false; dynamically resolved active audio source monitor for MPV and Webview; dispatched mute/unmute events to all webview wallpaper windows and global scope; deployed fresh `AetherFlow.exe` (7.44 MB). |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.6 (eliminated WebView2 white background flash via Color(0,0,0,255) + .visible(false) and MonitorFromPoint physical midpoint bounds query) and Task 17 UI/UX Modernization (ThemeWireframePreview, TaskbarWireframeIllustration, Instant Accent Override, Interface Density Comfortable/Compact, and zero-flicker boot hydration); rebuilt & deployed AetherFlow.exe (7.09MB, PID 28264). |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.7 Impeccable UI Architecture & Dedicated Screensaver Studio: extracted Screensaver to dedicated top-level route (/screensaver) with real-time OLED HUD clock preview and comprehensive power/timing/engine controls; redesigned Settings (/settings) into macOS System Settings / Linear style Master-Detail Two-Column layout with grouped navigation and spacious typography. |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.10 Screensaver Lifecycle Teardown, In-App Preview & Borderless Blackout: fixed black screen upon dismissal and app close via synchronous Win32 SW_HIDE + DestroyWindow + win.destroy(); wired dismiss_screensaver to CloseRequested; aligned Serde camelCase deserialization for ScreensaverSettings; enhanced stage with animated OLED sleep stars; eliminated 8px transparent borders via solid .transparent(false) + WS_POPUP without seam collision; compiled & deployed AetherFlow.exe (PID 5200). |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation: eliminated black screen upon dismissal by removing win.hide() on WorkerW child wallpaper windows; eliminated Windows 11 DWM white border & 8px inset gap via .fullscreen(true), DWMWA_BORDER_COLOR=0xFFFFFFFE, and removing EnumChildWindows; enforced border:none/outline:none in CSS; increased wake threshold to 40px/1500ms; added SystemParametersInfoW desktop restore on stop/quit. |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
+
 

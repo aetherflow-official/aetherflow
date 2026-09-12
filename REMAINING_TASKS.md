@@ -288,17 +288,38 @@ Mark these off as you complete them:
 - [x] TASK 16.1: MPV Video Engine Self-Occlusion & Global/Isolated State Desync Fix (excluded MPV child PIDs/HWNDs and desktop window hierarchy from occlusion engine, added MONITOR_SYNC_REQUESTED atomic flush on setting/mode switch, resolved secondary display unmuting in set_mpv_mute)
 - [x] TASK 16.2: Multi-Monitor Isolated Pausing & NULL-Handle Occlusion Bugfix (fixed `0 == 0` NULL-handle trap on `parent == shell_hwnd/progman` in `enum_occlusion_proc`, replaced state-wiping `paused_monitors.clear()` with deterministic `force_sync` reconciliation, scoped isolated audio muting strictly to the active audio source monitor, added store migration v3 with `pauseOnMaximized: true` fallback)
 - [x] TASK 16.3: "Mute When Covered" Occlusion Decoupling & Audio Source Routing (decoupled physical display occlusion from animation pause preferences so mute-covered functions even if pauseOnMaximized is false, added dynamic audio source display tracking for MPV and Webview, broadcast mute events to both MPV processes and all WebView windows)
-- [ ] TASK 17: UI/UX Redesign & Modernization on `ui/ux` branch (Design evaluation of `ui improvement ideas/` reference mockups, layout, typography, glassmorphic hierarchy, and component polish)
-- [ ] TASK 18: Lively v2.1 Advanced Features & Screensaver Multi-Monitor Engine
+- [x] TASK 17: UI/UX Redesign & Modernization on `ui/ux` branch (Design evaluation of `ui improvement ideas/` reference mockups, layout, typography, glassmorphic hierarchy, ThemeWireframePreview, Instant Accent Override with custom hex picker, Interface Density toggle, and TaskbarWireframeIllustration)
+- [x] TASK 18: Lively v2.1 Advanced Features & Screensaver Multi-Monitor Engine
   - [x] 18.1: 16×8 Grid Desktop Coverage Diagnostic Visualizer (128 sampling tiles per display, real-time bitmask calculation in Win32, interactive live visualizer in Settings Performance tab)
   - [x] 18.2: Visualizer Audio Source Hardware Device Selection & VU Meter (dynamic input enumeration, fallback on disconnect, live decibel bar, 10s auto-stop test in Settings)
   - [x] 18.3: Picture Wallpaper Choose a Fit & Color Matte (fill, fit, stretch, center, tile modes with custom background color picker and color presets)
   - [x] 18.4: Monitor Display Ordering & Clean Labeling (Primary monitor sorted first as `Display 1 (Primary)`, friendly display names across diagnostic grid, audio routing, and home pills)
   - [x] 18.5: Screensaver Core Engine (Win32 idle detection, grace period, lock on resume, luxury HUD clock/date, wallpaper pausing synchronization, unclosable/freeze bugfix)
-  - [ ] 18.6: Screensaver Multi-Monitor Edge Polish:
-    - Eliminate WebView2 white background flash on secondary monitor (`Screen 2`) during initial initialization
-    - Ensure tray-activated screensaver uses hardware `rcMonitor` across all secondary displays to prevent sizing gaps
-
-
-
+  - [x] 18.6: Screensaver Multi-Monitor Edge Polish:
+    - [x] Eliminate WebView2 white background flash on secondary monitor (`Screen 2`) during initial initialization (`Color(0,0,0,255)` + `.visible(false)` + CSS `transition: none !important;`)
+    - [x] Ensure tray-activated screensaver uses hardware `rcMonitor` across all secondary displays via `MonitorFromPoint` midpoint calculation to prevent sizing gaps
+  - [x] 18.7: Impeccable UI Architecture & Dedicated Screensaver Studio:
+    - [x] Extracted Screensaver subsystem from crowded settings into a dedicated first-class surface (`/screensaver`) in App navigation and routing (`src/pages/Screensaver.jsx`, `src/App.jsx`).
+    - [x] Interactive widescreen ambient OLED simulator with live digital clock HUD, activation presets (1m–30m), visual source mode picker (desktop mirror, procedural engines, OLED blackout), transition fade slider, and security lock/mute policies.
+    - [x] Complete redesign of Settings (`/settings`) from a crowded 8-tab horizontal strip into a macOS System Settings / Linear style Master-Detail Two-Column layout with grouped vertical navigation (`Workspace & Display`, `Personalization`, `Audio & Spectrum`, `System & Account`), responsive collapse, and generous breathing room.
+  - [x] 18.8: First-Class Sidebar Promotion & TranslucentTB Requirement Notice:
+    - [x] Promoted key settings domains out of `/settings` directly into first-class sidebar navigation: Displays & Workspace (`/displays`), Personalization (`/personalization`), Audio (`/audio`), Screensaver (`/screensaver`), and System & Preferences (`/settings`).
+    - [x] Restored permanent, prominent Windows 11 TranslucentTB requirement notice, direct Microsoft Store one-click button, TranslucentTB live sync badge, and Explorer recovery button in `/displays`.
+    - [x] Added quick navigation cards in `Settings.jsx` directing users immediately to dedicated sidebar pages.
+    - [x] Extracted reusable `SettingRow` and `SliderRow` components to eliminate code duplication across settings surfaces.
+  - [x] 18.10: Screensaver Window Dismissal Lifecycle, Instant Teardown, In-App Preview & Borderless Blackout Fix:
+    - [x] Fixed stuck black screen covering desktop upon screensaver dismissal and app closing: replaced asynchronous `win.close()` with synchronous native Win32 `win.hide()`, `ShowWindow(raw, SW_HIDE)`, `DestroyWindow(raw)`, and `win.destroy()`.
+    - [x] Added `dismiss_screensaver` call into main window `CloseRequested` handler and `trigger_screensaver` entry so no screensaver windows can ever linger or block the desktop when closing the app or launching new previews.
+    - [x] Fixed in-app preview from Screensaver Studio: aligned Serde camelCase deserialization (`ScreensaverSettings`), fixed `trigger_screensaver({ isPreview: true })` parameter passing, and added automatic mode switching to `'specific'` when clicking any procedural engine card.
+    - [x] Enhanced Screensaver Studio simulator stage: rendered an animated OLED Pure Blackout starry sleep visualization with status badge when in blackout mode, ensuring the preview stage is never a dead black box.
+    - [x] Eliminated 8px transparent borders on left, right, and bottom of both screens without monitor seam overlap: enabled `.transparent(false)` with `background_color(Color(0,0,0,255))` on screensaver window, stripped `WS_EX_LAYERED`, configured true borderless `WS_POPUP` style, and synchronized child WebView2 size to physical monitor rects.
+  - [x] 18.11: Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation:
+    - [x] Fixed black desktop upon screensaver dismissal: Eliminated `win.hide()` calls on `wallpaper_` child windows of WorkerW in `trigger_screensaver`. Reparented WorkerW children lose their DirectComposition render targets if hidden with `SW_HIDE`. Wallpaper is now kept alive and paused in place, resuming instantly with 0ms black-screen glitch.
+    - [x] Eliminated Windows 11 DWM white border and 8px inset gap on screensaver windows:
+      - Enabled `.fullscreen(true)` on `WebviewWindowBuilder`.
+      - Injected Win32 `DwmSetWindowAttribute(raw, 34 /* DWMWA_BORDER_COLOR */, &0xFFFFFFFE /* DWMWA_COLOR_NONE */, 4)` to suppress Windows 11 active window accent border.
+      - Removed `EnumChildWindows` manual resize loop that disrupted WebView2's internal compositor swapchain.
+      - Enforced `border: none !important; outline: none !important; box-shadow: none !important;` in `wallpaper.html` and `src/wallpaper.jsx`.
+    - [x] Refined screensaver user-input wake sensitivity: increased mouse wake distance threshold to 40px and grace period to 1500ms so initial button release never causes accidental instant dismissal.
+    - [x] Added native desktop wallpaper restoration via `SystemParametersInfoW(SPI_SETDESKWALLPAPER)` on `stop_wallpaper` and app `quit` to prevent empty black desktop.
 

@@ -73,8 +73,8 @@ function WallpaperCanvas() {
 
     let startPos = null
     const onMouseMove = (e) => {
-      // Grace period: ignore mouse movement within the first 1200ms of opening
-      if (Date.now() - mountTime < 1200) {
+      // Grace period: ignore mouse movement within the first 1500ms of opening
+      if (Date.now() - mountTime < 1500) {
         startPos = { x: e.clientX, y: e.clientY }
         return
       }
@@ -83,7 +83,7 @@ function WallpaperCanvas() {
         return
       }
       const dist = Math.hypot(e.clientX - startPos.x, e.clientY - startPos.y)
-      if (dist > 10) {
+      if (dist > 40) {
         dismiss()
       }
     }
@@ -92,19 +92,19 @@ function WallpaperCanvas() {
       // Escape or Space can dismiss after 300ms, any key dismisses after grace period
       if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
         if (Date.now() - mountTime > 300) dismiss()
-      } else if (Date.now() - mountTime >= 1200) {
+      } else if (Date.now() - mountTime >= 1500) {
         dismiss()
       }
     }
 
     const onMouseDown = () => {
-      if (Date.now() - mountTime >= 1200) dismiss()
+      if (Date.now() - mountTime >= 1500) dismiss()
     }
     const onWheel = () => {
-      if (Date.now() - mountTime >= 1200) dismiss()
+      if (Date.now() - mountTime >= 1500) dismiss()
     }
     const onPointerDown = () => {
-      if (Date.now() - mountTime >= 1200) dismiss()
+      if (Date.now() - mountTime >= 1500) dismiss()
     }
 
     window.addEventListener('mousemove', onMouseMove, { passive: true })
@@ -396,6 +396,9 @@ function WallpaperCanvas() {
       height: '100vh',
       overflow: 'hidden',
       background: '#000000',
+      border: 'none',
+      outline: 'none',
+      boxShadow: 'none',
     }}>
       <canvas
         ref={canvasRef}
@@ -410,7 +413,10 @@ function WallpaperCanvas() {
           filter: `brightness(${brightness})`,
           transition: isScreensaver ? `opacity ${fadeInSecs}s cubic-bezier(0.16, 1, 0.3, 1)` : undefined,
           pointerEvents: 'none',
-          background: '#000',
+          background: '#000000',
+          border: 'none',
+          outline: 'none',
+          boxShadow: 'none',
         }}
         aria-hidden="true"
       />

@@ -5,6 +5,7 @@ use tauri::{
     AppHandle, Emitter, Manager, WebviewWindowBuilder, WebviewUrl,
     menu::{Menu, MenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    window::Color,
 };
 
 #[cfg(windows)]
@@ -28,7 +29,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 #[cfg(windows)]
 use windows_sys::Win32::Graphics::Gdi::{
-    MonitorFromWindow, GetMonitorInfoW, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL,
+    MonitorFromWindow, MonitorFromPoint, GetMonitorInfoW, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL,
     MapWindowPoints, InvalidateRect, UpdateWindow, RedrawWindow,
     RDW_INVALIDATE, RDW_UPDATENOW, RDW_ERASE, RDW_ALLCHILDREN,
     CreateRectRgn, SetWindowRgn,
@@ -90,15 +91,23 @@ use std::sync::Mutex;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScreensaverSettings {
     pub enabled: bool,
+    #[serde(alias = "idle_timeout_mins")]
     pub idle_timeout_mins: u32,
     pub mode: String,
+    #[serde(alias = "specific_engine")]
     pub specific_engine: Option<String>,
+    #[serde(alias = "specific_config")]
     pub specific_config: Option<serde_json::Value>,
+    #[serde(alias = "fade_in_secs")]
     pub fade_in_secs: f64,
+    #[serde(alias = "lock_on_resume")]
     pub lock_on_resume: bool,
+    #[serde(alias = "grace_period_secs")]
     pub grace_period_secs: u32,
+    #[serde(alias = "mute_audio")]
     pub mute_audio: bool,
 }
 
@@ -743,16 +752,18 @@ pub fn start_system_state_monitor(app: AppHandle) {
                         );
                         log_msg(&msg);
                         println!("{}", msg);
-                        let _ = trigger_screensaver(app.clone(), false);
+                        let _ = trigger_screensaver(app.clone(), Some(false));
                     }
                 } else if is_screensaver_active {
                     let elapsed = SCREENSAVER_ACTIVATED_AT.lock().ok()
                         .and_then(|g| g.as_ref().map(|t| t.elapsed()))
                         .unwrap_or(std::time::Duration::from_secs(999));
+                    let is_preview = SCREENSAVER_IS_PREVIEW.lock().map(|g| *g).unwrap_or(false);
 
-                    // Only dismiss if the screensaver has been active for at least 1500ms
-                    // to prevent the launch click from immediately killing it
-                    if elapsed >= std::time::Duration::from_millis(1500) && idle_ms < 500 {
+                    let min_grace_ms = if is_preview { 4000 } else { 1500 };
+                    let max_idle_ms = if is_preview { 120 } else { 300 };
+
+                    if elapsed >= std::time::Duration::from_millis(min_grace_ms) && idle_ms < max_idle_ms {
                         log_msg("[SCREENSAVER] User input detected via GetLastInputInfo. Dismissing screensaver.");
                         println!("[SCREENSAVER] User input detected. Dismissing screensaver.");
                         let _ = dismiss_screensaver(app.clone());
@@ -1649,6 +1660,7 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                     .decorations(false)
                     .transparent(true)
                     .visible(false)
+                    .background_color(Color(0, 0, 0, 255))
                     .skip_taskbar(true)
                     .resizable(false)
                     .inner_size(logical_w, logical_h)
@@ -2108,6 +2120,11 @@ fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     }
 
     #[cfg(windows)]
+    unsafe {
+        SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, std::ptr::null_mut(), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+    }
+
+    #[cfg(windows)]
     if let Some(main_h) = get_main_hwnd() {
         unsafe {
             let parent_after = GetParent(main_h);
@@ -2318,9 +2335,10 @@ fn get_screensaver_settings() -> Result<ScreensaverSettings, String> {
 }
 
 #[tauri::command]
-fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
+fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), String> {
+    let is_preview_val = is_preview.unwrap_or(true);
     if let Ok(guard) = SCREENSAVER_ACTIVE.lock() {
-        if *guard {
+        if *guard && !is_preview_val {
             return Ok(());
         }
     }
@@ -2332,21 +2350,41 @@ fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
         *guard = Some(std::time::Instant::now());
     }
     if let Ok(mut guard) = SCREENSAVER_IS_PREVIEW.lock() {
-        *guard = is_preview;
+        *guard = is_preview_val;
     }
 
     let fade_secs = SCREENSAVER_SETTINGS.lock().map(|s| s.fade_in_secs).unwrap_or(1.0);
 
     log_msg(&format!(
         "[SCREENSAVER] Activating screensaver (preview={}, fadeIn={:.1}s)",
-        is_preview, fade_secs
+        is_preview_val, fade_secs
     ));
     println!(
         "[SCREENSAVER] Activating screensaver (preview={}, fadeIn={:.1}s)",
-        is_preview, fade_secs
+        is_preview_val, fade_secs
     );
 
-    // Pause desktop wallpapers and mute sound while screensaver is active
+    // 1. Destroy any existing screensaver windows first to prevent dead window handle collisions
+    let windows = app.webview_windows();
+    for (label, win) in windows {
+        if label.starts_with("screensaver_") {
+            let _ = win.hide();
+            #[cfg(windows)]
+            if let Ok(hwnd) = win.hwnd() {
+                let raw = hwnd.0 as HWND;
+                unsafe {
+                    ShowWindow(raw, 0); // SW_HIDE
+                    DestroyWindow(raw);
+                }
+            }
+            let _ = win.destroy();
+        }
+    }
+
+    // 2. Pause desktop wallpapers and mute sound while screensaver is active so NOTHING leaks through
+    // CRITICAL: NEVER call win.hide() on wallpaper windows! In Win32, calling ShowWindow(SW_HIDE) or win.hide()
+    // on a child window attached to WorkerW permanently damages WorkerW composition surfaces, causing a black desktop.
+    // The screensaver is already a topmost fullscreen window (HWND_TOPMOST) that completely occludes the desktop.
     set_mpv_pause(None, true);
     set_mpv_mute(app.clone(), None, true);
     let _ = app.emit("aura:pause", serde_json::json!({ "target": "*" }));
@@ -2358,35 +2396,27 @@ fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
         }
     }
 
-    // Create a topmost, borderless screensaver window on each monitor
+    // 3. Create a topmost, solid borderless screensaver window on each monitor
     if let Ok(monitors) = app.available_monitors() {
         for m in monitors {
             let m_name = m.name().map_or("Display", |v| v.as_str());
             let clean_label = get_monitor_label(m_name);
             let win_label = format!("screensaver_{}", clean_label);
 
-            if let Some(existing) = app.get_webview_window(&win_label) {
-                let _ = existing.close();
-            }
-
             let pos = m.position();
             let size = m.size();
-            let scale = m.scale_factor();
-            let logical_w = size.width as f64 / scale;
-            let logical_h = size.height as f64 / scale;
-            let logical_x = pos.x as f64 / scale;
-            let logical_y = pos.y as f64 / scale;
 
             let url = format!("wallpaper.html?mode=screensaver&monitor={}&fadeIn={:.1}", clean_label, fade_secs);
             let win_res = WebviewWindowBuilder::new(&app, &win_label, WebviewUrl::App(url.into()))
                 .title(&format!("AetherFlow Screensaver - {}", m_name))
                 .decorations(false)
-                .transparent(true)
+                .transparent(false)
+                .visible(false)
+                .background_color(Color(0, 0, 0, 255))
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .resizable(false)
-                .inner_size(logical_w, logical_h)
-                .position(logical_x, logical_y)
+                .fullscreen(true)
                 .build();
 
             match win_res {
@@ -2403,17 +2433,23 @@ fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
                                 SetWindowLongW(raw, GWL_STYLE, new_style as i32);
 
                                 let ex_style = GetWindowLongW(raw, GWL_EXSTYLE) as u32;
-                                let new_ex_style = (ex_style | WS_EX_TOOLWINDOW | 0x00000008u32) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
+                                let new_ex_style = (ex_style | WS_EX_TOOLWINDOW | 0x00000008u32) & !(WS_EX_LAYERED | 0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
                                 SetWindowLongW(raw, GWL_EXSTYLE, new_ex_style as i32);
 
-                                // 2. Disable DWM non-client margins and Windows 11 rounded corners
-                                let ncr_disabled: u32 = 1;
-                                DwmSetWindowAttribute(raw, 2, &ncr_disabled as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
-                                let do_not_round: u32 = 1;
+                                // 2. CRITICAL: Kill Windows 11 active window accent border (DWMWA_BORDER_COLOR = 34)
+                                let color_none: u32 = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+                                DwmSetWindowAttribute(raw, 34 /* DWMWA_BORDER_COLOR */, &color_none as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                                let do_not_round: u32 = 1; // DWMWCP_DONOTROUND
                                 DwmSetWindowAttribute(raw, 33, &do_not_round as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                                let ncr_disabled: u32 = 1; // DWMNCRP_DISABLED
+                                DwmSetWindowAttribute(raw, 2, &ncr_disabled as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
 
-                                // 3. Retrieve authoritative physical monitor bounds from Win32
-                                let monitor_handle = MonitorFromWindow(raw, MONITOR_DEFAULTTONEAREST);
+                                // 3. Retrieve authoritative physical hardware monitor bounds from Win32
+                                let pt = POINT {
+                                    x: pos.x + (size.width as i32) / 2,
+                                    y: pos.y + (size.height as i32) / 2,
+                                };
+                                let monitor_handle = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
                                 let mut minfo: MONITORINFO = std::mem::zeroed();
                                 minfo.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
                                 let (mon_x, mon_y, mon_w, mon_h) = if GetMonitorInfoW(monitor_handle, &mut minfo) != 0 {
@@ -2423,7 +2459,12 @@ fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
                                     (pos.x, pos.y, size.width as i32, size.height as i32)
                                 };
 
-                                // 4. Set true borderless fullscreen position
+                                log_msg(&format!(
+                                    "[SCREENSAVER] Monitor {} ({}): hardware rcMonitor=({},{}) {}x{} -> HWND pos=({},{}) {}x{}",
+                                    m_name, clean_label, mon_x, mon_y, mon_w, mon_h, mon_x, mon_y, mon_w, mon_h
+                                ));
+
+                                // 4. Set true borderless fullscreen position matching the monitor bounds EXACTLY (Lively Wallpaper architecture)
                                 SetWindowPos(
                                     raw,
                                     hwnd_topmost,
@@ -2433,10 +2474,12 @@ fn trigger_screensaver(app: AppHandle, is_preview: bool) -> Result<(), String> {
                                     mon_h,
                                     SWP_SHOWWINDOW | SWP_FRAMECHANGED,
                                 );
+
+                                // 5. Clear any region clipping so each monitor's window is an exact seamless rectangle
+                                SetWindowRgn(raw, std::ptr::null_mut(), 1);
                             }
                         }
                     }
-                    let _ = win.show();
                     let _ = win.set_focus();
                 }
                 Err(err) => {
@@ -2463,21 +2506,38 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
         }
     };
 
-    // 1. ALWAYS unconditionally close all screensaver windows
+    // 1. ALWAYS unconditionally hide and destroy all screensaver windows immediately
     let windows = app.webview_windows();
     for (label, win) in windows {
         if label.starts_with("screensaver_") {
-            let _ = win.close();
+            let _ = win.hide();
+            #[cfg(windows)]
+            if let Ok(hwnd) = win.hwnd() {
+                let raw = hwnd.0 as HWND;
+                unsafe {
+                    ShowWindow(raw, 0); // SW_HIDE
+                    DestroyWindow(raw);
+                }
+            }
+            let _ = win.destroy();
         }
     }
 
     // 2. ALWAYS resume desktop wallpapers and unmute audio
+    // Since wallpaper_ windows were NEVER hidden, WorkerW composition is intact and wallpaper resumes instantly!
     set_mpv_pause(None, false);
     set_mpv_mute(app.clone(), None, false);
     let _ = app.emit("aura:resume", serde_json::json!({ "target": "*" }));
     let _ = app.emit("aura:unmute", serde_json::json!({ "target": "*" }));
     for (label, win) in app.webview_windows() {
         if label.starts_with("wallpaper_") {
+            #[cfg(windows)]
+            if let Ok(hwnd) = win.hwnd() {
+                unsafe {
+                    InvalidateRect(hwnd.0 as HWND, std::ptr::null(), 1);
+                    UpdateWindow(hwnd.0 as HWND);
+                }
+            }
             let _ = win.emit_to(label.as_str(), "aura:resume", serde_json::json!({ "target": label }));
             let _ = win.emit_to(label.as_str(), "aura:unmute", serde_json::json!({ "target": label }));
         }
@@ -2530,6 +2590,13 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
             "[SCREENSAVER] Input received within grace period ({}s < {}s) -> Skipping system lock",
             elapsed_secs, grace_period_secs
         );
+    }
+
+    if is_preview {
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.show();
+            let _ = main_win.set_focus();
+        }
     }
 
     Ok(())
@@ -4089,6 +4156,7 @@ fn main() {
                         match event {
                             tauri::WindowEvent::CloseRequested { api, .. } => {
                                 log_msg("[MAIN WIN EVENT] CloseRequested -> hiding window to tray");
+                                let _ = dismiss_screensaver(w_clone.app_handle().clone());
                                 let _ = w_clone.hide();
                                 api.prevent_close();
 
@@ -4255,7 +4323,7 @@ fn main() {
                             }
                         }
                         "screensaver" => {
-                            let _ = trigger_screensaver(app.clone(), true);
+                            let _ = trigger_screensaver(app.clone(), Some(true));
                         }
                         "pause" => {
                             set_mpv_pause(None, true);
@@ -4300,6 +4368,11 @@ fn main() {
                             for (label, win) in windows {
                                 log_msg(&format!("[AetherFlow] Destroying window on quit: {}", label));
                                 let _ = win.destroy();
+                            }
+
+                            #[cfg(windows)]
+                            unsafe {
+                                SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, std::ptr::null_mut(), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
                             }
 
                             // 4. Drop tray icon to clear it from system notification area immediately

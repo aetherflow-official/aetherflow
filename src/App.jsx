@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { Home, Store, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn } from 'lucide-react'
+import { Home, Store, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2 } from 'lucide-react'
 import { checkForUpdate } from './lib/updater.js'
 import { useStore, syncCustomWallpapersFromDisk } from './store/useStore.js'
 import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperActions.js'
@@ -11,6 +11,10 @@ import StatusBar from './components/StatusBar/index.jsx'
 import HomePage from './pages/Home.jsx'
 import MarketplacePage from './pages/Marketplace.jsx'
 import LibraryPage from './pages/Library.jsx'
+import DisplaysPage from './pages/Displays.jsx'
+import PersonalizationPage from './pages/Personalization.jsx'
+import AudioPage from './pages/Audio.jsx'
+import ScreensaverPage from './pages/Screensaver.jsx'
 import SettingsPage from './pages/Settings.jsx'
 
 // NOTE: WallpaperPlayer is NO LONGER rendered in the control panel.
@@ -19,10 +23,14 @@ import SettingsPage from './pages/Settings.jsx'
 // The control panel communicates with it via Tauri IPC (invoke → Rust → emit).
 
 const NAV = [
-  { to: '/',           icon: Home,    label: 'Home'        },
-  { to: '/marketplace', icon: Store,  label: 'Marketplace' },
-  { to: '/library',    icon: Library, label: 'Library'     },
-  { to: '/settings',   icon: Settings,label: 'Settings'    },
+  { to: '/',                icon: Home,        label: 'Home' },
+  { to: '/library',         icon: Library,     label: 'Library' },
+  { to: '/marketplace',     icon: Store,       label: 'Marketplace' },
+  { to: '/displays',        icon: Monitor,     label: 'Displays & Workspace' },
+  { to: '/personalization', icon: Palette,     label: 'Personalization' },
+  { to: '/audio',           icon: Volume2,     label: 'Audio' },
+  { to: '/screensaver',     icon: Moon,        label: 'Screensaver' },
+  { to: '/settings',        icon: Settings,    label: 'Settings' },
 ]
 
 export default function App() {
@@ -48,6 +56,7 @@ export default function App() {
   const isAuthenticated  = useStore(s => s.isAuthenticated)
   const glowAmbience     = useStore(s => s.glowAmbience) || 'balanced'
   const reducedMotion    = useStore(s => s.reducedMotion) || false
+  const uiDensity        = useStore(s => s.uiDensity) || 'comfortable'
   const setAuthUser      = useStore(s => s.setAuthUser)
   const clearAuth        = useStore(s => s.clearAuth)
   const setShowAuthModal = useStore(s => s.setShowAuthModal)
@@ -56,16 +65,17 @@ export default function App() {
   const [signingOut, setSigningOut] = React.useState(false)
   const userMenuRef = React.useRef(null)
 
-  // Sync ambience & reduced motion attributes to root document
+  // Sync ambience, density & reduced motion attributes to root document
   React.useEffect(() => {
     const mult = glowAmbience === 'vivid' ? '1.5' : glowAmbience === 'balanced' ? '1' : glowAmbience === 'subtle' ? '0.4' : '0'
     document.documentElement.style.setProperty('--glow-multiplier', mult)
+    document.documentElement.setAttribute('data-density', uiDensity)
     if (reducedMotion) {
       document.documentElement.classList.add('reduced-motion')
     } else {
       document.documentElement.classList.remove('reduced-motion')
     }
-  }, [glowAmbience, reducedMotion])
+  }, [glowAmbience, reducedMotion, uiDensity])
 
   // Close user menu on outside click
   React.useEffect(() => {
@@ -287,7 +297,7 @@ export default function App() {
       {/* Control panel shell — pure UI, no wallpaper canvas here */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: sidebarCollapsed ? '60px 1fr' : '200px 1fr',
+        gridTemplateColumns: sidebarCollapsed ? '60px 1fr' : '215px 1fr',
         gridTemplateRows: '1fr auto',
         height: '100vh',
         overflow: 'hidden',
@@ -600,10 +610,14 @@ export default function App() {
           )}
 
           <Routes>
-            <Route path="/"            element={<HomePage />} />
-            <Route path="/marketplace" element={<MarketplacePage />} />
-            <Route path="/library"     element={<LibraryPage />} />
-            <Route path="/settings"    element={<SettingsPage />} />
+            <Route path="/"                element={<HomePage />} />
+            <Route path="/library"         element={<LibraryPage />} />
+            <Route path="/marketplace"     element={<MarketplacePage />} />
+            <Route path="/displays"        element={<DisplaysPage />} />
+            <Route path="/personalization" element={<PersonalizationPage />} />
+            <Route path="/audio"           element={<AudioPage />} />
+            <Route path="/screensaver"     element={<ScreensaverPage />} />
+            <Route path="/settings"        element={<SettingsPage />} />
           </Routes>
         </main>
 

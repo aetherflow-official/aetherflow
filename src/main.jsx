@@ -62,6 +62,14 @@ if (state.themes && state.themes[savedTheme]) {
   })
 }
 
+if (state.uiDensity) {
+  document.documentElement.setAttribute('data-density', state.uiDensity)
+}
+if (state.customAccentColor) {
+  document.documentElement.style.setProperty('--color-brand', state.customAccentColor)
+  document.documentElement.style.setProperty('--border-accent', state.customAccentColor)
+}
+
 // Synchronize taskbar styling with system state
 state.syncTaskbarState?.().catch(() => {})
 

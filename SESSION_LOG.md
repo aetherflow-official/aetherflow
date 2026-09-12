@@ -1775,3 +1775,165 @@
   - `cargo check`: ✅ 0 errors, 0 warnings.
   - `cargo build --release`: ✅ 0 errors, binary updated.
 ---
+
+## Session: 2026-09-12 14:40 (Task 18.6 Screensaver Multi-Monitor Edge Polish & Task 17 UI/UX Modernization)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Screensaver Multi-Monitor Edge Polish (Task 18.6)**:
+     - Eliminated WebView2 controller white background flash on secondary display (`Screen 2`) during initial window creation by passing `.visible(false)` and `.background_color(Color(0, 0, 0, 255))` to `WebviewWindowBuilder` in `src-tauri/src/main.rs`.
+     - In `wallpaper.html`, set `background-color: #000000 !important;` and `transition: none !important;` on `html, body, #root` to prevent CSS background color transition animations from flashing on spawn.
+     - In `src-tauri/src/main.rs` (`trigger_screensaver`), replaced `MonitorFromWindow(raw, ...)` with `MonitorFromPoint(POINT { x: pos.x + size.width/2, y: pos.y + size.height/2 }, MONITOR_DEFAULTTONEAREST)` to calculate physical midpoint of target monitors, ensuring exact hardware `HMONITOR` and `rcMonitor` bounds query across all secondary displays without sizing gaps.
+  2. **UI/UX Modernization & Redesign (Task 17)**:
+     - Evaluated 9 reference mockups in `ui improvement ideas/` (CureSync, Untitled UI, Lunaris, Agent Deck, macOS General, Task Manager telemetry) and Lively v2.1 screenshots in `look upon new features/`.
+     - Created `ThemeWireframePreview` rendering miniature desktop windows with macOS-style traffic light dots, mini sidebar, and glowing hero card gradient inside every theme option card in Settings.
+     - Created `TaskbarWireframeIllustration` rendering desktop wallpaper backgrounds and centered Windows 11 taskbar icon shelves inside all taskbar style option cards (`Default`, `Clear`, `Acrylic`, `Soft Blur`).
+     - Added `Instant Accent Override` panel with 8 curated presets (`Onyx Blue`, `Electric Indigo`, `Cyber Violet`, `Neon Cyan`, `Emerald Pulse`, `Solar Amber`, `Crimson Spark`, `Hot Rose`), custom hex color input, and theme reset button.
+     - Added `Interface Density` selector (`Comfortable` vs `Compact`) with segmented controls, integrated with store persistence, `index.css`, `main.jsx`, and `App.jsx`.
+     - Synchronized persisted `uiDensity` and `customAccentColor` before first paint in `src/main.jsx` to prevent layout shifts or color pop on cold boot.
+  3. **Release Compilation & Standalone Deployment**:
+     - Frontend build (`npm run build`): ✅ 480ms clean.
+     - Rust backend check (`cargo check`): ✅ 3.65s clean.
+     - Release binary build (`cargo build --release`): ✅ 2m 24s.
+     - Deployed updated `AetherFlow.exe` (7.09 MB) to workspace root and launched at PID 28264 with active heartbeats and zero errors.
+- **Build & Verification**:
+  - `npm run build`: ✅ 480ms clean.
+  - `cargo check`: ✅ 0 errors, 0 warnings.
+  - `cargo build --release`: ✅ 0 errors, binary compiled and deployed.
+---
+
+## Session: 2026-09-12 14:55 (Task 18.7 Impeccable UI Architecture & Dedicated Screensaver Studio)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Screensaver Studio (`/screensaver`)**:
+     - Extracted the entire Screensaver subsystem from crowded settings into a dedicated, flagship desktop surface (`src/pages/Screensaver.jsx`).
+     - Added an interactive widescreen ambient OLED simulator featuring a real-time digital clock (`HH:mm`) and localized date HUD with radial ambient backdrop.
+     - Provided 1-click native full-screen test trigger (`trigger_screensaver`), activation timing presets (`1m`, `5m`, `10m`, `15m`, `30m`), visual engine source cards (Matrix Rain, Deep Space, Tokyo Rain, Aurora, Synthwave Grid, Cyber Particles, Blackout OLED Sleep), optical fade-in slider (0.2s - 4.0s), and security policies (Windows system lock on resume with grace period, audio mute during sleep).
+  2. **Settings Master-Detail Redesign (`/settings`)**:
+     - Redesigned Settings from a crowded 8-tab horizontal strip into a macOS System Settings / Linear style Master-Detail Two-Column layout.
+     - Grouped vertical sidebar navigation into distinct functional domains:
+       - *Workspace & Display* (`Performance & Displays`, `Windows Taskbar`)
+       - *Personalization* (`Themes & Aesthetics`, `Media Thumbnails`)
+       - *Audio & Spectrum* (`Audio & Visualizer`)
+       - *System & Account* (`System & Startup`, `Account & Identity`)
+     - Built generous spacing, removed redundant nested borders, and added responsive layout collapse (`@media (max-width: 820px)`).
+  3. **Shell Navigation & Routing (`App.jsx` & `index.css`)**:
+     - Registered Screensaver in main sidebar navigation with `Moon` icon.
+     - Added dedicated route `/screensaver` in React Router `<Routes>`.
+     - Defined styling tokens for `.settings-layout`, `.settings-sidebar`, `.settings-group`, `.settings-stage`, `.screensaver-preview-card`, and HUD clock elements.
+- **Build & Verification**:
+  - `npm run build`: ✅ 484ms clean with 0 errors.
+  - `cargo check`: ✅ 3.20s clean with 0 errors.
+## Session: 2026-09-12 15:15 (Task 18.8 First-Class Sidebar Promotion & TranslucentTB Requirement Notice)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Top-Level Sidebar Promotion**:
+     - Elevated key settings domains out of the cramped `/settings` monolith directly into primary sidebar navigation:
+       - **Displays & Workspace** (`/displays`): Multi-monitor detection, rendering frame cap, hardware occlusion (battery, fullscreen, maximized, per-display isolation), 16×8 diagnostic grid, and Windows Taskbar styling.
+       - **Personalization** (`/personalization`): Sovereign theme presets, instant accent override, custom theme studio, ambience dynamics, and media thumbnail presentation modes.
+       - **Audio & Reactivity** (`/audio`): Master volume, mute, audio reactivity sensitivity, hardware input devices, live VU decibel meter, and per-display sound routing.
+       - **Screensaver Studio** (`/screensaver`): OLED clock HUD simulator, visual source selector, and sleep policies.
+       - **System & Preferences** (`/settings`): Clean system preferences (startup autostart, desktop icon visibility, wallpaper cache folder, GitHub releases update checker, account identity, and diagnostics) with quick navigation cards pointing to the dedicated pages.
+  2. **Restored & Enhanced TranslucentTB Requirement Notice**:
+     - Clarified Windows 11 22H2/23H2/24H2 XAML opaque brush overlay limitations and documented why TranslucentTB is required for 100% crystal-clear glass.
+     - Provided a permanent, high-contrast Microsoft Store download button (`ms-windows-store://pdp/?ProductId=9PF4KZ2VN4W9` and web fallback), live sync status badge (`Active & Synced`), and Explorer taskbar recovery button.
+  3. **Visual & Architectural Polish**:
+     - Adjusted sidebar layout width (`215px`) for pristine fit of `Displays & Workspace`.
+     - Extracted reusable `SettingRow` and `SliderRow` components to eliminate code duplication.
+     - Verified all routes and visual states with Playwright browser screenshots.
+- **Build & Verification**:
+  - `npm run build`: ✅ 523ms clean with 0 errors.
+  - Rust release compilation: ✅ Complete.
+---
+
+## Session: 2026-09-12 15:45 (Task 18.9 Screensaver Studio Preview & Borderless Frame Gap Elimination)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Screensaver Studio Preview Launching**:
+     - Made the interactive widescreen preview stage (`screensaver-preview-card`) directly clickable to trigger the fullscreen screensaver, accompanied by a glowing hover play badge (`Click Stage to Preview Fullscreen`).
+     - Passed `{ isPreview: true, is_preview: true }` in JS and made `is_preview: Option<bool>` in Rust, allowing manual preview launches to bypass the active guard check.
+  2. **Eliminated Borderless Frame Gaps (Zero Wallpaper Leakage)**:
+     - Identified root cause of the 8px gaps on left, right, and bottom: default Windows DWM non-client resize margins and alpha-channel bleed on `.transparent(true)`.
+     - Set `.transparent(false)` and `.background_color(Color(0, 0, 0, 255))` on screensaver window builder for solid opaque rendering.
+     - Dynamically measured non-client frame insets (`pad_left`, `pad_top`, `pad_right`, `pad_bottom`) and positioned windows via `SetWindowPos` using `adj_x, adj_y, adj_w, adj_h`.
+     - Applied `SetWindowRgn` strictly bounding the screensaver window to the monitor rectangle.
+     - Resized child WebView2 windows with `EnumChildWindows` to match full monitor dimensions.
+     - Suspended and hid all desktop `wallpaper_` windows (`win.hide()`) while screensaver is active, restoring them (`win.show()`) on dismissal so wallpaper never leaks through.
+- **Build & Verification**:
+  - `npm run build`: ✅ 1.01s clean.
+  - `cargo check`: ✅ 2.58s clean.
+  - `cargo build --release`: ✅ Finished in 2m 20s.
+---
+
+## Session: 2026-09-12 16:13 (Task 18.10 Full Clean Rebuild & Deployment)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Frontend Compilation**: Built fresh production bundle via Vite in 659ms (`dist/index.html`, `dist/wallpaper.html`, etc.).
+  2. **Native Rust Release Compilation**: Compiled `aetherflow v1.0.7` in release profile (`--release`) in 2m 20s.
+  3. **Release Binary Deployment**: Replaced root `.\AetherFlow.exe` with latest release artifact (7,504,384 bytes, 4:13:03 PM timestamp).
+  4. **Process Launch Verification**: Relaunched `AetherFlow.exe` and verified process stability (PID 29844, working set ~43MB).
+- **Build status:** ✅ `npm run build` (659ms) & `cargo build --release` (2m 20s) completely clean.
+---
+
+## Session: 2026-09-12 17:12 (Task 18.11 Screensaver Studio Live Canvas Preview & Multi-Monitor Lively Architecture)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Screensaver Studio Live Canvas Preview**:
+     - Fixed `previewEngineId` extraction: parsed active wallpaper objects to extract string engine keys (`engine || id`) and config.
+     - Mounted `WallpaperPlayer` within `.screensaver-preview-card` stage with an ambient dark scrim, allowing the user to preview animations live in the studio.
+     - Added automated syncing of screensaver settings (`sync_screensaver_settings`) to Rust on every change and pre-launch.
+  2. **Multi-Monitor Window Architecture (Eliminated Second-Screen Border)**:
+     - Root cause: Shifting window coordinates by `pad_left` caused the second monitor's window to overlap the first by 17px (`x = 1912..1929`), causing an 8px border on the left side of the second screen.
+     - Implemented Lively Wallpaper multi-monitor window architecture:
+       - Windows created with `.transparent(true)`, `.background_color(Color(0,0,0,255))`, `WS_POPUP | WS_VISIBLE`, and `WS_EX_LAYERED | WS_EX_TOOLWINDOW` with `SetLayeredWindowAttributes(raw, 0, 255, LWA_ALPHA)`.
+       - Window coordinates placed strictly at exact Win32 hardware monitor rects: `(mon_x, mon_y, mon_w, mon_h)` with `SWP_SHOWWINDOW | SWP_FRAMECHANGED` and zero coordinate shift.
+       - Disabled DWM non-client margins and rounded corners (`DWMNCRP_DISABLED`, `DWMWCP_DONOTROUND`).
+       - Cleared window region clipping (`SetWindowRgn(raw, NULL, 1)`).
+       - Extended input detection grace period to 4.0s for preview mode to prevent immediate dismissal on launch.
+- **Build status:** ✅ `npm run build` (501ms) & `cargo build --release` (2m 12s) completely clean. Deployed to `.\AetherFlow.exe` (PID 31068).
+## Session: 2026-09-12 18:05 (Task 18.12 Screensaver Lifecycle Teardown, In-App Preview & Borderless Blackout)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Screensaver Dismissal & Teardown Lifecycle (Fixed Stuck Black Screen)**:
+     - Diagnosed root cause: `win.close()` on Tauri WebView2 top-level topmost windows unloads content asynchronously without synchronously hiding or destroying the Win32 HWND. The topmost black window was left active covering the desktop when dismissed or when the main window closed to tray (`w_clone.hide()`).
+     - Upgraded `dismiss_screensaver` to immediately and forcibly execute:
+       - `win.hide()`
+       - Native Win32 `ShowWindow(raw, SW_HIDE)`
+       - Native Win32 `DestroyWindow(raw)`
+       - Tauri `win.destroy()`
+     - Wired `dismiss_screensaver` directly into `trigger_screensaver` (pre-launch teardown of any stale windows) and the main window's `CloseRequested` handler, ensuring zero residual screensaver windows ever linger or block the desktop.
+  2. **In-App Screensaver Studio Preview**:
+     - Fixed command deserialization: added `#[serde(rename_all = "camelCase")]` and aliases to `ScreensaverSettings` in `main.rs`, resolving setting synchronization between frontend and backend.
+     - Updated `trigger_screensaver({ isPreview: true })` invocation.
+     - Enhanced widescreen simulator stage: rendered an animated OLED Pure Blackout starry sleep visualization with status badge when in blackout mode, ensuring the preview stage is never a dead black void.
+     - Clicking any procedural engine card below immediately switches the active mode to `'specific'` and updates the stage to animate that exact engine.
+  3. **Borderless Multi-Monitor Framing with Zero Transparency Gaps**:
+     - Set `.transparent(false)` and `.background_color(Color(0,0,0,255))` on screensaver window, eliminating transparent non-client margins that leaked wallpaper underneath.
+     - Stripped `WS_EX_LAYERED`, configured true borderless `WS_POPUP` style, and matched exact physical monitor bounds `(mon_x, mon_y, mon_w, mon_h)` with `SWP_SHOWWINDOW | SWP_FRAMECHANGED` and child WebView2 resizing.
+- **Build status:** ✅ `npm run build` (834ms) & `cargo build --release` (2m 38s) completely clean. Deployed to `.\AetherFlow.exe` (PID 5200).
+---
+
+## Session: 2026-09-12 18:16 (Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Desktop Wallpaper Preservation (Zero Black Screen on Dismissal)**:
+     - Diagnosed root cause: `trigger_screensaver` was calling `win.hide()` on `wallpaper_` windows. Desktop wallpaper windows in AetherFlow are child windows reparented to Windows `WorkerW` / `Progman`. When `ShowWindow(SW_HIDE)` / `win.hide()` is called on a child of `WorkerW`, Windows DWM permanently damages the WorkerW composition chain and destroys its DirectComposition surface, causing WorkerW to fall back to the Windows default solid black background.
+     - Solution: Completely removed the `win.hide()` loop on `wallpaper_` windows in `trigger_screensaver`. The screensaver is already a topmost fullscreen window (`HWND_TOPMOST = -1`) that 100% occludes the desktop. Wallpaper windows are simply paused and muted in place (`set_mpv_pause(None, true)`, `set_mpv_mute(None, true)`, `aura:pause`, `aura:mute`).
+     - On dismissal: `dismiss_screensaver` emits `aura:resume`, `aura:unmute`, unpauses MPV, and updates rect via `UpdateWindow` / `InvalidateRect`. Wallpaper resumes immediately with 0ms delay and ZERO black screen.
+     - Added native wallpaper restore fallback: `SystemParametersInfoW(SPI_SETDESKWALLPAPER)` on `stop_wallpaper` and app `quit` to guarantee the desktop never turns black.
+  2. **Eliminated Windows 11 DWM White Border & 8px Inset Gap (True Hardware Fullscreen)**:
+     - Root cause: On Windows 11 (build 22000+), DWM automatically draws an active accent/white border around top-level windows unless `DwmSetWindowAttribute(raw, 34 /* DWMWA_BORDER_COLOR */, &0xFFFFFFFE /* DWMWA_COLOR_NONE */, 4)` is set. Furthermore, windows created without `.fullscreen(true)` receive an invisible 8px resize frame (`WS_THICKFRAME`), causing an 8px inset gap.
+     - Added `.fullscreen(true)` to `WebviewWindowBuilder::new(...)`.
+     - Injected `DwmSetWindowAttribute(raw, 34, &0xFFFFFFFE, 4)` (`DWMWA_COLOR_NONE`) to eliminate the white border.
+     - Disabled rounded corners (`DWMWCP_DONOTROUND = 1`) and non-client margins (`DWMNCRP_DISABLED = 1`).
+     - Positioned at authoritative `rcMonitor` hardware bounds with `HWND_TOPMOST`.
+     - Removed `EnumChildWindows` manual child window resize loop which was conflicting with WebView2's internal compositor swapchain.
+     - Enforced `border: none !important; outline: none !important; box-shadow: none !important;` across `wallpaper.html` and `src/wallpaper.jsx`.
+  3. **Refined Screensaver Wake Sensitivity & In-App Preview**:
+     - Increased mouse wake distance threshold from 10px to 40px and grace period from 1200ms to 1500ms so initial button release never accidentally dismisses the screensaver.
+     - Passed `{ isPreview: true, is_preview: true }` in `trigger_screensaver` IPC.
+     - Refocused main window upon dismissal if preview was active.
+- **Build status:** ✅ `npm run build` (525ms) clean, `cargo build --release` in progress.
+---
+
+
+

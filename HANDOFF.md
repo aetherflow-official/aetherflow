@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-12 02:30 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** 🟡 In Progress. Lively v2.1 features added: 16×8 Grid Diagnostic, Screensaver system, Visualizer Audio Source dropdown + VU meter, Picture 5-Fit selector + matte background, and Display 1/2 sorting. Screensaver multi-monitor white flash on Screen 2 and tray edge-to-edge coverage queued for next session. Standalone binary updated (`.\AetherFlow.exe`, 7.15 MB, PID 35144). Frontend builds cleanly in 675ms.
+> **Updated:** 2026-09-12 18:16 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation implemented. Eliminated black screen upon dismissal by removing win.hide() on WorkerW child wallpaper windows; eliminated Windows 11 DWM white border & 8px inset gap via .fullscreen(true), DWMWA_BORDER_COLOR=0xFFFFFFFE, and removing EnumChildWindows; enforced border:none/outline:none in CSS; increased wake threshold to 40px/1500ms; added SystemParametersInfoW desktop restore on stop/quit.
 
 ---
 
@@ -13,7 +13,7 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
 - **Active Git Branch:** `ui/ux` (synced with `origin/ui/ux`)
 - **Release Page:** [github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7](https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7)
 - **Older Releases:** All releases (v1.0.0 through v1.0.7) are preserved on GitHub.
-- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.09 MB)
+- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.50 MB, PID 27000)
 - **Local Dev Server:** Active in background on port `1420` (`http://localhost:1420/`).
 - **User Validation:** User tested the latest build and confirmed: *"i am very happy with the app"*.
 

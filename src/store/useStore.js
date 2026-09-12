@@ -215,9 +215,11 @@ export const useStore = create(
         }
       }),
 
-      // ── Active Theme ──────────────────────────────────────────────────────
+      // ── Active Theme & Accent ─────────────────────────────────────────────
       activeTheme: 'sovereign-onyx',
       themes: {},                      // user-saved custom themes
+      customAccentColor: null,         // custom accent override hex (e.g. '#3b82f6')
+      uiDensity: 'comfortable',        // 'comfortable' | 'compact'
 
       setActiveTheme: (id) => {
         set({ activeTheme: id })
@@ -237,10 +239,46 @@ export const useStore = create(
           document.documentElement.removeAttribute('style');
         }
 
+        // Re-apply custom accent override if active
+        const accent = get().customAccentColor;
+        if (accent) {
+          document.documentElement.style.setProperty('--color-brand', accent);
+          document.documentElement.style.setProperty('--color-brand-hover', accent);
+          document.documentElement.style.setProperty('--color-accent', accent);
+          document.documentElement.style.setProperty('--border-accent', accent);
+          document.documentElement.style.setProperty('--color-glow', `${accent}55`);
+        }
+
         // Always ensure glow ambience multiplier is active
         const val = get().glowAmbience || 'balanced';
         const mult = val === 'vivid' ? '1.5' : val === 'balanced' ? '1' : val === 'subtle' ? '0.4' : '0';
         document.documentElement.style.setProperty('--glow-multiplier', mult);
+
+        // Always ensure UI density is synced
+        const density = get().uiDensity || 'comfortable';
+        document.documentElement.setAttribute('data-density', density);
+      },
+      setCustomAccentColor: (color) => {
+        set({ customAccentColor: color })
+        if (typeof document !== 'undefined') {
+          if (color) {
+            document.documentElement.style.setProperty('--color-brand', color);
+            document.documentElement.style.setProperty('--color-brand-hover', color);
+            document.documentElement.style.setProperty('--color-accent', color);
+            document.documentElement.style.setProperty('--border-accent', color);
+            document.documentElement.style.setProperty('--color-glow', `${color}55`);
+          } else {
+            // Reset to current theme default tokens
+            const id = get().activeTheme || 'sovereign-onyx';
+            get().setActiveTheme(id);
+          }
+        }
+      },
+      setUiDensity: (density) => {
+        set({ uiDensity: density })
+        if (typeof document !== 'undefined') {
+          document.documentElement.setAttribute('data-density', density);
+        }
       },
       saveCustomTheme: (id, tokens) =>
         set((s) => ({ themes: { ...s.themes, [id]: tokens } })),
@@ -549,6 +587,8 @@ export const useStore = create(
         thumbnailMode: s.thumbnailMode,
         glowAmbience: s.glowAmbience,
         reducedMotion: s.reducedMotion,
+        customAccentColor: s.customAccentColor,
+        uiDensity: s.uiDensity,
         wallpaperAudioSettings: s.wallpaperAudioSettings,
         homeWallpaperIds: s.homeWallpaperIds,
         likedWallpaperIds: s.likedWallpaperIds,

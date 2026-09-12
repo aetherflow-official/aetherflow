@@ -627,4 +627,172 @@ input:checked ~ .toggle-thumb {
   background: color-mix(in srgb, var(--color-rose) 15%, transparent);
 }
 
+/* ── Compact Density Mode ─────────────────────────────────────────────────── */
+[data-density="compact"] .setting-card {
+  margin-bottom: 12px;
+}
+[data-density="compact"] .setting-card-header {
+  padding: 10px 14px;
+}
+[data-density="compact"] .setting-row {
+  padding: 9px 14px;
+}
+[data-density="compact"] .option-card {
+  padding: 10px 12px;
+}
+[data-density="compact"] .card {
+  padding: 10px;
+}
+
+/* ── Settings Master-Detail Two-Column Layout ────────────────────────────── */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  padding: 8px 0;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 4px 10px 6px;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.settings-nav-item:hover {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--border-main) 30%, transparent);
+}
+
+.settings-nav-item.active {
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--color-brand) 30%, transparent);
+  font-weight: 600;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+
+.settings-stage {
+  min-width: 0;
+}
+
+@media (max-width: 820px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .settings-sidebar {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    background: var(--bg-card);
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+  }
+}
+
+/* ── Screensaver Studio Widescreen Simulator Card ────────────────────────── */
+.screensaver-preview-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 380px;
+  background: #000000;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-main);
+  box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.screensaver-preview-card:hover {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--color-brand) 25%, transparent), 0 16px 36px -8px rgba(0, 0, 0, 0.6);
+}
+
+.screensaver-play-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+  user-select: none;
+  pointer-events: none;
+}
+
+.screensaver-preview-card:hover .screensaver-play-overlay {
+  opacity: 1;
+}
+
+.screensaver-hud-clock {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 200;
+  letter-spacing: -2px;
+  color: #ffffff;
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.25);
+  user-select: none;
+}
+
+.screensaver-hud-date {
+  font-size: clamp(0.75rem, 1.8vw, 1.1rem);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 8px;
+  user-select: none;
+}
+
+
 
