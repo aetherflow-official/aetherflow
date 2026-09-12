@@ -13,6 +13,8 @@
 3. **Build & Executable Status**:
    - `npm run build` passes in 550ms.
    - `cargo check` passes in 1.62s with 0 warnings and 0 errors.
+   - Production standalone binary compiled via `cargo build --release` (2m 17s).
+   - Deployed and launched fresh `AetherFlow.exe` (7.50MB, PID 6012). Heartbeat confirmed (`visibility=visible`).
 
 
 
