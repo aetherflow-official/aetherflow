@@ -2334,9 +2334,7 @@ fn get_screensaver_settings() -> Result<ScreensaverSettings, String> {
     }
 }
 
-#[tauri::command]
-fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), String> {
-    let is_preview_val = is_preview.unwrap_or(true);
+fn do_trigger_screensaver(app: AppHandle, is_preview_val: bool) -> Result<(), String> {
     if let Ok(guard) = SCREENSAVER_ACTIVE.lock() {
         if *guard && !is_preview_val {
             return Ok(());
@@ -2374,7 +2372,6 @@ fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), S
                 let raw = hwnd.0 as HWND;
                 unsafe {
                     ShowWindow(raw, 0); // SW_HIDE
-                    DestroyWindow(raw);
                 }
             }
             let _ = win.destroy();
@@ -2382,9 +2379,6 @@ fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), S
     }
 
     // 2. Pause desktop wallpapers and mute sound while screensaver is active so NOTHING leaks through
-    // CRITICAL: NEVER call win.hide() on wallpaper windows! In Win32, calling ShowWindow(SW_HIDE) or win.hide()
-    // on a child window attached to WorkerW permanently damages WorkerW composition surfaces, causing a black desktop.
-    // The screensaver is already a topmost fullscreen window (HWND_TOPMOST) that completely occludes the desktop.
     set_mpv_pause(None, true);
     set_mpv_mute(app.clone(), None, true);
     let _ = app.emit("aura:pause", serde_json::json!({ "target": "*" }));
@@ -2495,7 +2489,16 @@ fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), S
 }
 
 #[tauri::command]
-fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
+fn trigger_screensaver(app: AppHandle, is_preview: Option<bool>) -> Result<(), String> {
+    let is_preview_val = is_preview.unwrap_or(true);
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let _ = do_trigger_screensaver(app_handle, is_preview_val);
+    });
+    Ok(())
+}
+
+fn do_dismiss_screensaver(app: AppHandle) -> Result<(), String> {
     let was_active = {
         if let Ok(mut guard) = SCREENSAVER_ACTIVE.lock() {
             let active = *guard;
@@ -2516,7 +2519,6 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
                 let raw = hwnd.0 as HWND;
                 unsafe {
                     ShowWindow(raw, 0); // SW_HIDE
-                    DestroyWindow(raw);
                 }
             }
             let _ = win.destroy();
@@ -2524,7 +2526,6 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
     }
 
     // 2. ALWAYS resume desktop wallpapers and unmute audio
-    // Since wallpaper_ windows were NEVER hidden, WorkerW composition is intact and wallpaper resumes instantly!
     set_mpv_pause(None, false);
     set_mpv_mute(app.clone(), None, false);
     let _ = app.emit("aura:resume", serde_json::json!({ "target": "*" }));
@@ -2599,6 +2600,15 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let _ = do_dismiss_screensaver(app_handle);
+    });
     Ok(())
 }
 

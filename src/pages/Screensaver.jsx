@@ -95,35 +95,42 @@ export default function Screensaver() {
   })()
 
   const handleLaunchScreensaver = async () => {
+    if (testingLaunch) return
+    setTestingLaunch(true)
+
+    // Fail-safe safety guard: unconditionally release button lock after 2000ms
+    const safetyTimer = setTimeout(() => {
+      setTestingLaunch(false)
+    }, 2000)
+
     try {
-      setTestingLaunch(true)
       const { invoke } = await import('@tauri-apps/api/core')
       // Ensure backend settings are fully up-to-date before launching
       await invoke('sync_screensaver_settings', {
         settings: {
           enabled: screensaverEnabled,
-          idleTimeoutMins: screensaverTimeoutMins,
           idle_timeout_mins: screensaverTimeoutMins,
           mode: screensaverMode,
-          specificEngine: screensaverSpecificEngine,
           specific_engine: screensaverSpecificEngine,
-          specificConfig: null,
           specific_config: null,
-          fadeInSecs: screensaverFadeInSecs,
           fade_in_secs: screensaverFadeInSecs,
-          lockOnResume: screensaverLockOnResume,
           lock_on_resume: screensaverLockOnResume,
-          gracePeriodSecs: screensaverGracePeriodSecs,
           grace_period_secs: screensaverGracePeriodSecs,
-          muteAudio: screensaverMuteAudio,
           mute_audio: screensaverMuteAudio,
         }
       }).catch((e) => console.warn('[Screensaver] sync error:', e))
-      await invoke('trigger_screensaver', { isPreview: true, is_preview: true })
+
+      // Trigger screensaver with timeout protection so IPC never blocks UI
+      const triggerPromise = invoke('trigger_screensaver', { isPreview: true, is_preview: true })
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Screensaver launch timeout')), 1500)
+      )
+      await Promise.race([triggerPromise, timeoutPromise])
     } catch (err) {
-      console.warn('[Screensaver] Launch error:', err)
+      console.warn('[Screensaver] Launch warning/error:', err)
     } finally {
-      setTimeout(() => setTestingLaunch(false), 1200)
+      clearTimeout(safetyTimer)
+      setTimeout(() => setTestingLaunch(false), 800)
     }
   }
 
