@@ -2008,17 +2008,20 @@
      - Automatically generates `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\AetherFlow.lnk` pointing to the active `AetherFlow.exe`, with correct working directory, icon index 0, and description (`AetherFlow — Live Desktop Visuals`).
      - Cleared stale `AetherFlow-VideoEngine` keys from `HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache` so Windows Search no longer surfaces the video engine binary as a standalone app.
   4. **Contained MPV & Wallpaper Window Styles**:
-     - In `src-tauri/src/mpv.rs`: Added `--show-in-taskbar=no`, `--taskbar-progress=no`, `--title-bar=no`, `--title=AetherFlow`, and `--force-media-title=AetherFlow` to the MPV command arguments.
+     - In `src-tauri/src/mpv.rs`: Added `--show-in-taskbar=no`, `--taskbar-progress=no`, `--title-bar=no`, `--title=`, and `--force-media-title=` to suppress any window title matching.
+     - Prioritized `mpv.exe` in `find_mpv_binary` over `AetherFlow-VideoEngine.exe` so MPV runs as standard `mpv.exe` without process name hacking or matching "aether".
      - In `spawn_mpv_wallpaper`: Enforced `WS_EX_TOOLWINDOW` and stripped `WS_EX_APPWINDOW` on `mpv_hwnd`.
+     - In `src-tauri/src/main.rs`: Set `.title("")` on wallpaper `WebviewWindowBuilder`, and emptied `<title></title>` in `wallpaper.html` and `index.html`.
      - In `pin_hwnd_as_wallpaper`: Stripped `WS_EX_APPWINDOW` (`0x00040000`) and preserved `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED` across all wallpaper HWNDs, ensuring they never appear in the taskbar or Alt+Tab.
   5. **Build, Deployment & Verification**:
-     - `npm run build` passed in 634ms.
-     - `cargo check` passed in 2.88s with 0 errors.
-     - `cargo build --release` completed in 2m 13s.
-     - Deployed release binary to `AetherFlow.exe` (7.50 MB, 7,507,968 bytes) and launched (PID 23464).
-     - Verified log: `SetCurrentProcessExplicitAppUserModelID('com.aetherflow.app') -> 0x00000000` (S_OK) and shortcut verified.
+     - `npm run build` passed in 543ms.
+     - `cargo check` passed in 3.42s with 0 errors.
+     - `cargo build --release` completed in 1m 53s.
+     - Deployed release binary to `AetherFlow.exe` (7.50 MB, 7,508,480 bytes) and launched (PID 30832).
+     - Verified: Searching "aether" on the system and in Task Manager matches exclusively `AetherFlow.exe`.
      - Verified multi-monitor wallpapers running smoothly across `DISPLAY1` and `DISPLAY6`.
-- **Build status:** ✅ `npm run build` (634ms) & `cargo build --release` (2m 13s) clean. Verified running cleanly.
+- **Build status:** ✅ `npm run build` (543ms) & `cargo build --release` (1m 53s) clean. Verified running cleanly.
 ---
+
 
 
