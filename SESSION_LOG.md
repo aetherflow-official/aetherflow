@@ -1935,5 +1935,23 @@
 - **Build status:** ✅ `npm run build` (525ms) clean, `cargo build --release` in progress.
 ---
 
-
-
+## Session: 2026-09-12 18:35 IST (Screensaver In-App Preview Launch Resolution & Modularization Commit)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Committed Settings Modularization (`8f9d3b2`)**:
+     - Modularized large monolithic `Settings.jsx` into separate dedicated view pages (`Audio.jsx`, `Displays.jsx`, `Personalization.jsx`, `Screensaver.jsx`) and reusable components (`SettingRow.jsx`).
+     - Added look upon new features screenshots and verified clean compilation.
+  2. **Resolved In-App Screensaver Preview Getting Stuck on "Launching..." (`d7c2ade`)**:
+     - **Root Cause**: When triggered from the frontend webview via `invoke('trigger_screensaver')`, execution ran on a Tokio worker thread. Calling `WebviewWindowBuilder::build()` and raw Win32 `DestroyWindow(raw)` from a worker thread caused deadlocks with the main event loop and WebView2 window handle corruption, hanging the IPC promise and preventing the `finally` block from releasing the button state.
+     - **Rust Backend Fix (`src-tauri/src/main.rs`)**:
+       - Separated execution into `do_trigger_screensaver` and `do_dismiss_screensaver`.
+       - Routed `trigger_screensaver` and `dismiss_screensaver` commands through `app.run_on_main_thread(move || { ... })`, returning `Ok(())` immediately (<1ms) to the IPC caller while executing window creation cleanly on the Windows UI event loop.
+       - Removed raw foreign-thread `DestroyWindow(raw)` calls, relying on `ShowWindow(SW_HIDE)` combined with Tauri's native `win.destroy()`.
+     - **Frontend Resilience (`src/pages/Screensaver.jsx`)**:
+       - Added an unconditional 2000ms `safetyTimer` that guarantees `testingLaunch` resets back to `false` even if any platform or network exception occurs.
+       - Added `Promise.race` with a 1500ms timeout guard around `invoke('trigger_screensaver')` so that the async call never hangs the UI.
+  3. **Verification**:
+     - `npm run build` passed in 550ms.
+     - `cargo check` in `src-tauri` passed in 1.62s with 0 errors and 0 warnings.
+- **Build status:** ✅ `npm run build` (550ms) and `cargo check` (1.62s) clean.
+---

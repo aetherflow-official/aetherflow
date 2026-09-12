@@ -3,26 +3,16 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 18:16 IST — Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation (Task 18.11):
-1. **Desktop Wallpaper Preservation (Zero Black Screen on Dismissal)**:
-   - Root Cause Diagnosed: `trigger_screensaver` was calling `win.hide()` on `wallpaper_` windows. Because desktop wallpaper windows are child windows reparented to `WorkerW` / `Progman`, calling `ShowWindow(SW_HIDE)` destroys their DirectComposition visual surface link, causing WorkerW to fall back to a dead black screen on dismissal.
-   - Solution: Stopped calling `win.hide()` on `wallpaper_` windows. The screensaver is already a topmost fullscreen window (`HWND_TOPMOST = -1`) that completely covers the desktop. Wallpaper windows are now paused in place via `set_mpv_pause(None, true)`, `set_mpv_mute(None, true)`, `aura:pause`, and `aura:mute`.
-   - On dismissal: `set_mpv_pause(None, false)`, `set_mpv_mute(None, false)`, `aura:resume`, `aura:unmute`, and `UpdateWindow` / `InvalidateRect` immediately resume the wallpaper with 0ms black-screen glitch.
-   - Native Wallpaper Fallback: Added `SystemParametersInfoW(SPI_SETDESKWALLPAPER)` on `stop_wallpaper` and app `quit` to prevent empty black desktop.
-2. **Eliminated Windows 11 DWM White Border & Inset Margins (Edge-to-Edge Fullscreen)**:
-   - Added `.fullscreen(true)` to `WebviewWindowBuilder` for true borderless multi-monitor sizing.
-   - Suppressed Windows 11 active window border by setting Win32 `DwmSetWindowAttribute(raw, 34 /* DWMWA_BORDER_COLOR */, &0xFFFFFFFE /* DWMWA_COLOR_NONE */, 4)`.
-   - Set `DWMWCP_DONOTROUND` (33) and `DWMNCRP_DISABLED` (2) to suppress rounded corners and non-client margins.
-   - Removed `EnumChildWindows` manual child window resize loop that disrupted WebView2's internal compositor swapchain.
-   - Enforced `border: none !important; outline: none !important; box-shadow: none !important;` in `wallpaper.html` and `src/wallpaper.jsx`.
-3. **In-App Screensaver Studio Preview & User Wake Refinement**:
-   - Resolved preview card settings: passed `targetWp?.config || ENGINES[resolvedEng]?.defaultConfig || {}` in `Screensaver.jsx`.
-   - Passed both `{ isPreview: true, is_preview: true }` in `trigger_screensaver` IPC.
-   - Refined mouse wake sensitivity: increased mouse wake distance threshold from 10px to 40px and grace period to 1500ms so initial button clicks never cause accidental dismissal.
-4. **Build & Executable Status**:
-   - Frontend Vite build passed in 525ms.
-   - Native release binary compiled and linked in 2m 12s.
-   - Fresh `AetherFlow.exe` deployed and launched successfully (PID 27000).
+2026-09-12 18:35 IST — Screensaver In-App Preview Launch Resolution & Modularization Commit:
+1. **Committed Settings Modularization (`8f9d3b2`)**:
+   - Split monolithic `Settings.jsx` into modular dedicated sub-pages (`Audio.jsx`, `Displays.jsx`, `Personalization.jsx`, `Screensaver.jsx`) with clean layout and reusable `SettingRow.jsx`.
+2. **Screensaver In-App Preview IPC Deadlock Fix (`d7c2ade`)**:
+   - Root Cause: Invoking `trigger_screensaver` from the webview ran inside a Tokio worker thread. Constructing/destroying windows via `WebviewWindowBuilder::build()` and Win32 `DestroyWindow(raw)` on a foreign thread caused thread contention with the main event loop, causing the IPC promise to hang and leaving the UI stuck on "Launching...".
+   - Rust Backend Fix: Routed `trigger_screensaver` and `dismiss_screensaver` through `app.run_on_main_thread(move || { ... })`, returning `Ok(())` immediately to the caller and executing window lifecycle operations safely on the UI event loop. Removed raw foreign-thread `DestroyWindow` calls.
+   - Frontend Guard: Added an unconditional 2000ms `safetyTimer` and a 1500ms `Promise.race` timeout guard in `Screensaver.jsx` so the launch button can never get stuck.
+3. **Build & Executable Status**:
+   - `npm run build` passes in 550ms.
+   - `cargo check` passes in 1.62s with 0 warnings and 0 errors.
 
 
 
@@ -215,6 +205,7 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.7 Impeccable UI Architecture & Dedicated Screensaver Studio: extracted Screensaver to dedicated top-level route (/screensaver) with real-time OLED HUD clock preview and comprehensive power/timing/engine controls; redesigned Settings (/settings) into macOS System Settings / Linear style Master-Detail Two-Column layout with grouped navigation and spacious typography. |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.10 Screensaver Lifecycle Teardown, In-App Preview & Borderless Blackout: fixed black screen upon dismissal and app close via synchronous Win32 SW_HIDE + DestroyWindow + win.destroy(); wired dismiss_screensaver to CloseRequested; aligned Serde camelCase deserialization for ScreensaverSettings; enhanced stage with animated OLED sleep stars; eliminated 8px transparent borders via solid .transparent(false) + WS_POPUP without seam collision; compiled & deployed AetherFlow.exe (PID 5200). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation: eliminated black screen upon dismissal by removing win.hide() on WorkerW child wallpaper windows; eliminated Windows 11 DWM white border & 8px inset gap via .fullscreen(true), DWMWA_BORDER_COLOR=0xFFFFFFFE, and removing EnumChildWindows; enforced border:none/outline:none in CSS; increased wake threshold to 40px/1500ms; added SystemParametersInfoW desktop restore on stop/quit. |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Committed Settings Modularization (8f9d3b2) & Resolved Screensaver In-App Preview Getting Stuck on Launching (d7c2ade): routed trigger_screensaver and dismiss_screensaver to app.run_on_main_thread in main.rs, removed foreign-thread DestroyWindow, and added safetyTimer (2s) and Promise.race (1.5s) timeout safeguards in Screensaver.jsx. |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 
