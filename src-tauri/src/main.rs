@@ -1197,8 +1197,8 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
         
         let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
-        // Strip 3D non-client borders and frames (WS_EX_WINDOWEDGE, WS_EX_CLIENTEDGE, etc.)
-        let new_ex_style = (ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
+        // Strip 3D non-client borders and frames, and strip WS_EX_APPWINDOW (0x00040000) so wallpaper never appears in Taskbar/Alt+Tab
+        let new_ex_style = (ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000 | 0x00040000);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex_style as i32);
         SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
 
@@ -3968,12 +3968,82 @@ fn get_diagnostics(app: AppHandle) -> serde_json::Value {
     })
 }
 
+#[cfg(windows)]
+fn ensure_canonical_start_menu_shortcut() {
+    std::thread::spawn(|| {
+        let current_exe = match std::env::current_exe() {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        let exe_str = current_exe.to_string_lossy().to_lowercase();
+        if exe_str.contains("target\\debug") {
+            return;
+        }
+
+        let appdata = match std::env::var("APPDATA") {
+            Ok(v) => std::path::PathBuf::from(v),
+            Err(_) => return,
+        };
+
+        let programs_dir = appdata.join("Microsoft").join("Windows").join("Start Menu").join("Programs");
+        if !programs_dir.exists() {
+            let _ = std::fs::create_dir_all(&programs_dir);
+        }
+
+        let lnk_path = programs_dir.join("AetherFlow.lnk");
+        let exe_path_str = current_exe.to_string_lossy().to_string();
+        let dir_str = current_exe.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+
+        use std::os::windows::process::CommandExt;
+        let ps_cmd = format!(
+            "$w = New-Object -ComObject WScript.Shell; \
+             $s = $w.CreateShortcut('{lnk}'); \
+             $s.TargetPath = '{exe}'; \
+             $s.WorkingDirectory = '{dir}'; \
+             $s.IconLocation = '{exe},0'; \
+             $s.Description = 'AetherFlow — Live Desktop Visuals'; \
+             $s.Save(); \
+             $k = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\MuiCache'; \
+             $props = (Get-ItemProperty $k -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object {{ $_.Name -like '*AetherFlow-VideoEngine*' }}; \
+             foreach ($p in $props) {{ Remove-ItemProperty -Path $k -Name $p.Name -ErrorAction SilentlyContinue }};",
+            lnk = lnk_path.display(),
+            exe = exe_path_str,
+            dir = dir_str
+        );
+
+        let _ = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-WindowStyle")
+            .arg("Hidden")
+            .arg("-Command")
+            .arg(&ps_cmd)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .status();
+
+        log_msg(&format!("[APP IDENTITY] Verified canonical Start Menu shortcut at: {:?}", lnk_path));
+    });
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
     #[cfg(windows)]
     {
-        // Link all child processes (WebView2, MPV) into a Windows Job Object so they form a single managed unit
+        // 1. Set explicit Application User Model ID (AUMID) so Windows groups all windows,
+        // notifications, taskbar entries, and inherited WebView2 instances under a single canonical AetherFlow identity.
+        unsafe {
+            #[link(name = "shell32")]
+            extern "system" {
+                fn SetCurrentProcessExplicitAppUserModelID(AppID: *const u16) -> i32;
+            }
+            let aumid: Vec<u16> = "com.aetherflow.app\0".encode_utf16().collect();
+            let hr = SetCurrentProcessExplicitAppUserModelID(aumid.as_ptr());
+            log_msg(&format!("[APP IDENTITY] SetCurrentProcessExplicitAppUserModelID('com.aetherflow.app') -> 0x{:08X}", hr));
+            println!("[APP IDENTITY] SetCurrentProcessExplicitAppUserModelID('com.aetherflow.app') -> 0x{:08X}", hr);
+        }
+
+        // 2. Link all child processes (WebView2, MPV) into a Windows Job Object so they form a single managed unit
         unsafe {
             use windows_sys::Win32::System::JobObjects::{
                 CreateJobObjectW, SetInformationJobObject, AssignProcessToJobObject,
@@ -4202,6 +4272,10 @@ fn main() {
 
             // Start the system state monitor thread (battery & fullscreen pausing)
             start_system_state_monitor(app.handle().clone());
+
+            // Ensure canonical Windows Start Menu shortcut with AUMID is registered
+            #[cfg(windows)]
+            ensure_canonical_start_menu_shortcut();
 
             // Periodic background memory trimmer: reclaims unused V8 / WebView2 working set
             // Runs an initial trim at 2.5s to collapse startup Chromium allocation, then every 45s

@@ -3,21 +3,19 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 19:02 IST — Multi-Display Arrangement, Unlimited FPS & Live Occlusion Grid Fixes Deployed:
-1. **Multi-Display Wallpaper Arrangement**:
-   - Added dedicated "Multi-Display Wallpaper Arrangement" card to `Displays.jsx`.
-   - Wired segmented control for "Duplicate Across All" vs "Distinct Per-Screen" to Zustand `screenArrangement`.
-2. **Unlimited Frame Rate Support (Native Refresh Rate)**:
-   - Refactored all 7 Canvas 2D engines (`matrix-rain`, `cyber-particles`, `synthwave-grid`, `deep-space`, `aurora`, `tokyo-rain`, `audio-spectrum`) and `fps-meter` to check `if (fps && fps > 0 && fps < 240)`. Setting FPS to 0 or 240+ syncs with native monitor Hz (144Hz, 240Hz, 360Hz).
-   - Updated `Displays.jsx` slider with presets up to Unlimited (0 / 240) and formatting "Unlimited (Native Hz)".
-   - Updated Home cockpit chip to format as `UNLIMITED FPS`.
-3. **Live 16×8 Occlusion Grid Diagnostic Fix**:
-   - Aligned telemetry data binding in `Displays.jsx` with Rust `MonitorGridReport` (`rep.label`, `rep.is_occluded`, `rep.coverage_percent`, `rep.covered_tiles`, and `rep.tiles` 128 boolean vector).
-   - Covered tiles now glow red with coverage counts, and polling frequency increased to 750ms.
-4. **Build & Deployment**:
-   - `npm run build` passed in 589ms.
-   - `cargo build --release` completed in 2m 30s.
-   - Deployed updated `AetherFlow.exe` (7.50MB, PID 10868). Clean heartbeat verified.
+2026-09-12 19:35 IST — Windows Application Identity, Taskbar Grouping & Helper Process Containment Deployed:
+1. **Explicit Process AppUserModelID (AUMID)**:
+   - Added `SetCurrentProcessExplicitAppUserModelID(L"com.aetherflow.app")` at the absolute start of `fn main()` in `src-tauri/src/main.rs`.
+   - Binds main window, notifications, and inherited WebView2 child runtimes under a single unified application identity.
+2. **Canonical Start Menu Application Registration**:
+   - Implemented `ensure_canonical_start_menu_shortcut()` in `src-tauri/src/main.rs`: creates canonical `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\AetherFlow.lnk` pointing to `AetherFlow.exe` with icon and app description.
+   - Cleans stale `AetherFlow-VideoEngine` MuiCache keys so Windows Search indexes the primary application rather than raw binaries.
+3. **Helper Process Containment (MPV & WebView2)**:
+   - Added `--show-in-taskbar=no`, `--taskbar-progress=no`, `--title-bar=no`, `--title=AetherFlow`, and `--force-media-title=AetherFlow` to MPV launcher in `src-tauri/src/mpv.rs`.
+   - Enforced `WS_EX_TOOLWINDOW` and stripped `WS_EX_APPWINDOW` (`0x00040000`) across all wallpaper windows and MPV HWNDs, preventing standalone Alt+Tab or taskbar representation.
+4. **Build & Verification**:
+   - `npm run build` (634ms), `cargo check` (2.88s), `cargo build --release` (2m 13s) verified clean.
+   - Deployed release binary to `AetherFlow.exe` (7.50 MB, PID 23464), verified log (`0x00000000` S_OK) and active multi-monitor wallpaper.
 
 
 
@@ -213,6 +211,7 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Committed Settings Modularization (8f9d3b2) & Resolved Screensaver In-App Preview Getting Stuck on Launching (d7c2ade): routed trigger_screensaver and dismiss_screensaver to app.run_on_main_thread in main.rs, removed foreign-thread DestroyWindow, and added safetyTimer (2s) and Promise.race (1.5s) timeout safeguards in Screensaver.jsx. |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Executed Screensaver Option 1 (838f204): removed in-app preview button and hover play overlay from Screensaver.jsx, added informational banner directing to working System Tray "Screensaver" preview, recompiled standalone release binary and deployed updated AetherFlow.exe (PID 11252). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Restored Multi-Display Wallpaper Arrangement in Displays.jsx (Duplicate Across All vs Distinct Per-Screen); enabled Unlimited FPS support across all 7 engines, fps-meter, and slider (bypassing throttle on 0 or 240+ for native 144Hz/240Hz+); fixed 16x8 Diagnostic Occlusion Grid telemetry data binding (rep.label, rep.is_occluded, rep.coverage_percent, rep.tiles boolean mapping, 750ms polling); recompiled release binary and deployed fresh AetherFlow.exe (PID 10868). |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Unified Windows Application Identity & Helper Process Containment: Enforced `SetCurrentProcessExplicitAppUserModelID("com.aetherflow.app")` at startup in main.rs; created canonical Start Menu shortcut (`AetherFlow.lnk`) to register single app identity for Windows Search; purged stale MuiCache `AetherFlow-VideoEngine` keys; suppressed MPV taskbar identity with `--show-in-taskbar=no`, `--taskbar-progress=no`, and stripped `WS_EX_APPWINDOW` while enforcing `WS_EX_TOOLWINDOW` on all MPV and wallpaper HWNDs; recompiled release binary and deployed fresh AetherFlow.exe (PID 23464). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

@@ -363,6 +363,11 @@ pub fn spawn_mpv_wallpaper(
     // Lively-style standalone borderless window flags:
     // MPV initializes its own Direct3D 11 swapchain without cross-process --wid restrictions.
     cmd.arg("--no-config")
+        .arg("--show-in-taskbar=no")
+        .arg("--taskbar-progress=no")
+        .arg("--title-bar=no")
+        .arg("--title=AetherFlow")
+        .arg("--force-media-title=AetherFlow")
         .arg("--no-border")
         .arg("--no-osc")
         .arg("--no-osd-bar")
@@ -442,18 +447,21 @@ pub fn spawn_mpv_wallpaper(
     let mpv_hwnd = match find_mpv_hwnd(mpv_pid) {
         Some(h) => {
             log_mpv_msg(&format!("[MPV] Located native MPV HWND: 0x{:X} for PID={}", h as usize, mpv_pid));
-            if let Some(op) = opacity {
-                use windows_sys::Win32::UI::WindowsAndMessaging::{
-                    GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes,
-                    GWL_EXSTYLE, WS_EX_LAYERED, LWA_ALPHA
-                };
-                unsafe {
-                    let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
-                    if (ex & WS_EX_LAYERED) == 0 {
-                        SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_LAYERED) as i32);
-                    }
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes,
+                GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, LWA_ALPHA
+            };
+            unsafe {
+                let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
+                // Enforce WS_EX_TOOLWINDOW and strip WS_EX_APPWINDOW to prevent independent Taskbar/Alt+Tab presence
+                let mut new_ex = (ex | WS_EX_TOOLWINDOW) & !WS_EX_APPWINDOW;
+                if let Some(op) = opacity {
+                    new_ex |= WS_EX_LAYERED;
+                    SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
                     let alpha = (op.max(0.05).min(1.0) * 255.0).round() as u8;
                     SetLayeredWindowAttributes(h, 0, alpha, LWA_ALPHA);
+                } else if new_ex != ex {
+                    SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
                 }
             }
             h

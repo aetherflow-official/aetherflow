@@ -1993,3 +1993,32 @@
 - **Build status:** ✅ `npm run build` (589ms) & `cargo build --release` passing with 0 errors. Verified running cleanly.
 ---
 
+## Session: 2026-09-12 19:35 IST (Windows Application Identity, Taskbar Grouping & Helper Process Containment)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Root Cause Analysis (Windows Process & Application Architecture)**:
+     - Checked `GetCurrentProcessExplicitAppUserModelID`: returned `0x80004005 (E_FAIL)`, confirming that AetherFlow had no explicit AppUserModelID configured. Windows was falling back to implicit per-executable-path identities, isolating the main executable from child processes and windows.
+     - Found no Start Menu shortcut for AetherFlow in `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\`. Windows Search therefore indexed raw binary paths on disk, matching `bin\mpv\AetherFlow-VideoEngine.exe` as well as its cached friendly name in `MuiCache` (`mpv`).
+     - Inspected MPV CLI parameters: MPV enables `--show-in-taskbar=yes` and `--taskbar-progress=yes` by default unless explicitly disabled, causing it to attempt taskbar registration when spawned.
+  2. **Enforced Explicit Application User Model ID (`com.aetherflow.app`)**:
+     - In `src-tauri/src/main.rs`, invoked `SetCurrentProcessExplicitAppUserModelID(L"com.aetherflow.app")` at the very beginning of `fn main()` prior to any window creation or WebView2 environment initialization.
+     - Returned `0x00000000` (`S_OK`), establishing a unified, canonical application identity for AetherFlow that groups main window, notifications, and inherited WebView2 child runtimes.
+  3. **Created Canonical Start Menu Application Shortcut & Cleared MuiCache**:
+     - Added `ensure_canonical_start_menu_shortcut()` in `src-tauri/src/main.rs`.
+     - Automatically generates `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\AetherFlow.lnk` pointing to the active `AetherFlow.exe`, with correct working directory, icon index 0, and description (`AetherFlow — Live Desktop Visuals`).
+     - Cleared stale `AetherFlow-VideoEngine` keys from `HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache` so Windows Search no longer surfaces the video engine binary as a standalone app.
+  4. **Contained MPV & Wallpaper Window Styles**:
+     - In `src-tauri/src/mpv.rs`: Added `--show-in-taskbar=no`, `--taskbar-progress=no`, `--title-bar=no`, `--title=AetherFlow`, and `--force-media-title=AetherFlow` to the MPV command arguments.
+     - In `spawn_mpv_wallpaper`: Enforced `WS_EX_TOOLWINDOW` and stripped `WS_EX_APPWINDOW` on `mpv_hwnd`.
+     - In `pin_hwnd_as_wallpaper`: Stripped `WS_EX_APPWINDOW` (`0x00040000`) and preserved `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED` across all wallpaper HWNDs, ensuring they never appear in the taskbar or Alt+Tab.
+  5. **Build, Deployment & Verification**:
+     - `npm run build` passed in 634ms.
+     - `cargo check` passed in 2.88s with 0 errors.
+     - `cargo build --release` completed in 2m 13s.
+     - Deployed release binary to `AetherFlow.exe` (7.50 MB, 7,507,968 bytes) and launched (PID 23464).
+     - Verified log: `SetCurrentProcessExplicitAppUserModelID('com.aetherflow.app') -> 0x00000000` (S_OK) and shortcut verified.
+     - Verified multi-monitor wallpapers running smoothly across `DISPLAY1` and `DISPLAY6`.
+- **Build status:** ✅ `npm run build` (634ms) & `cargo build --release` (2m 13s) clean. Verified running cleanly.
+---
+
+
