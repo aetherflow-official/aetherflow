@@ -29,7 +29,6 @@ export default function Screensaver() {
 
   // Real-time clock for the HUD simulation preview
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [testingLaunch, setTestingLaunch] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -94,46 +93,6 @@ export default function Screensaver() {
     return { previewEngineId: 'aurora', previewConfig: ENGINES['aurora']?.defaultConfig || {}, isBlackoutMode: false }
   })()
 
-  const handleLaunchScreensaver = async () => {
-    if (testingLaunch) return
-    setTestingLaunch(true)
-
-    // Fail-safe safety guard: unconditionally release button lock after 2000ms
-    const safetyTimer = setTimeout(() => {
-      setTestingLaunch(false)
-    }, 2000)
-
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      // Ensure backend settings are fully up-to-date before launching
-      await invoke('sync_screensaver_settings', {
-        settings: {
-          enabled: screensaverEnabled,
-          idle_timeout_mins: screensaverTimeoutMins,
-          mode: screensaverMode,
-          specific_engine: screensaverSpecificEngine,
-          specific_config: null,
-          fade_in_secs: screensaverFadeInSecs,
-          lock_on_resume: screensaverLockOnResume,
-          grace_period_secs: screensaverGracePeriodSecs,
-          mute_audio: screensaverMuteAudio,
-        }
-      }).catch((e) => console.warn('[Screensaver] sync error:', e))
-
-      // Trigger screensaver with timeout protection so IPC never blocks UI
-      const triggerPromise = invoke('trigger_screensaver', { isPreview: true, is_preview: true })
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Screensaver launch timeout')), 1500)
-      )
-      await Promise.race([triggerPromise, timeoutPromise])
-    } catch (err) {
-      console.warn('[Screensaver] Launch warning/error:', err)
-    } finally {
-      clearTimeout(safetyTimer)
-      setTimeout(() => setTestingLaunch(false), 800)
-    }
-  }
-
   const PROCEDURAL_ENGINES = [
     { id: 'matrix-rain', name: 'Matrix Rain', desc: 'Cascading digital katakana rain' },
     { id: 'deep-space', name: 'Deep Space', desc: 'Parallax starfield & cosmic nebula' },
@@ -146,7 +105,7 @@ export default function Screensaver() {
   return (
     <div className="animate-fadeIn" style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 48 }}>
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
             Screensaver Studio
@@ -160,27 +119,30 @@ export default function Screensaver() {
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: screensaverEnabled ? 'var(--color-emerald)' : 'var(--text-subtle)' }} />
             {screensaverEnabled ? 'Screensaver Active' : 'Screensaver Disabled'}
           </span>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ fontSize: 12, padding: '5px 14px', height: 32 }}
-            onClick={handleLaunchScreensaver}
-            disabled={testingLaunch}
-          >
-            <Sparkles size={14} /> {testingLaunch ? 'Launching...' : 'Preview Fullscreen'}
-          </button>
         </div>
       </div>
 
+      {/* Information Tip Banner */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '10px 14px',
+        borderRadius: 8,
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid var(--border-main)',
+        marginBottom: 18,
+        fontSize: 12,
+        color: 'var(--text-muted)',
+      }}>
+        <Sparkles size={15} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
+        <span>
+          <strong>Live Preview Stage:</strong> The stage below simulates your real-time clock HUD and active screensaver engine. To test fullscreen screensaver anytime, right-click the <strong>AetherFlow Tray Icon → Screensaver</strong>.
+        </span>
+      </div>
+
       {/* Interactive Widescreen Simulator Stage */}
-      <div
-        className="screensaver-preview-card"
-        onClick={handleLaunchScreensaver}
-        title="Click to launch fullscreen screensaver preview"
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleLaunchScreensaver() }}
-      >
+      <div className="screensaver-preview-card">
         {/* Live Wallpaper Animation Layer */}
         {previewEngineId ? (
           <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
@@ -247,25 +209,7 @@ export default function Screensaver() {
           }}
         />
 
-        {/* Play Overlay on Hover */}
-        <div className="screensaver-play-overlay">
-          <div style={{
-            width: 46, height: 46, borderRadius: '50%',
-            background: 'var(--color-brand)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 24px var(--color-glow)',
-            color: '#fff',
-            marginBottom: 8,
-          }}>
-            <Play size={22} fill="#fff" style={{ marginLeft: 3 }} />
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', letterSpacing: '0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
-            {testingLaunch ? 'Launching Screensaver…' : 'Click Stage to Preview Fullscreen'}
-          </span>
-          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)', marginTop: 3 }}>
-            Move mouse or press any key to wake
-          </span>
-        </div>
+
 
         {/* HUD Centerpiece Clock & Date */}
         <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', userSelect: 'none' }}>

@@ -743,34 +743,12 @@ input:checked ~ .toggle-thumb {
   align-items: center;
   justify-content: center;
   margin-bottom: 24px;
-  cursor: pointer;
+  cursor: default;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .screensaver-preview-card:hover {
-  border-color: var(--color-brand);
-  box-shadow: 0 0 30px color-mix(in srgb, var(--color-brand) 25%, transparent), 0 16px 36px -8px rgba(0, 0, 0, 0.6);
-}
-
-.screensaver-play-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  z-index: 10;
-  user-select: none;
-  pointer-events: none;
-}
-
-.screensaver-preview-card:hover .screensaver-play-overlay {
-  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .screensaver-hud-clock {
