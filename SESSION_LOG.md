@@ -1955,3 +1955,18 @@
      - `cargo check` in `src-tauri` passed in 1.62s with 0 errors and 0 warnings.
 - **Build status:** ✅ `npm run build` (550ms) and `cargo check` (1.62s) clean.
 ---
+
+## Session: 2026-09-12 18:47 IST (Screensaver Option 1 Executed & New Release Deployed)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Option 1 Executed (`838f204`)**:
+     - Removed the in-app "Preview Fullscreen" button and hover play overlay from `Screensaver.jsx`.
+     - Set `.screensaver-preview-card` cursor to default.
+     - Added an informational banner guiding users to the functional System Tray "Screensaver" option.
+     - Retained the live in-card ambient simulation stage (rendering clock HUD, date, and selected wallpaper engine).
+  2. **Compiled & Deployed Production Binary**:
+     - `npm run build` completed in 607ms.
+     - `cargo build --release` completed in 2m 10s.
+     - Deployed new `AetherFlow.exe` (7.50MB) and launched process (PID 11252).
+- **Build status:** ✅ `npm run build` (607ms) & `cargo build --release` passing with 0 errors. Verified running cleanly.
+---

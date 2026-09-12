@@ -3,18 +3,16 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 18:35 IST — Screensaver In-App Preview Launch Resolution & Modularization Commit:
-1. **Committed Settings Modularization (`8f9d3b2`)**:
-   - Split monolithic `Settings.jsx` into modular dedicated sub-pages (`Audio.jsx`, `Displays.jsx`, `Personalization.jsx`, `Screensaver.jsx`) with clean layout and reusable `SettingRow.jsx`.
-2. **Screensaver In-App Preview IPC Deadlock Fix (`d7c2ade`)**:
-   - Root Cause: Invoking `trigger_screensaver` from the webview ran inside a Tokio worker thread. Constructing/destroying windows via `WebviewWindowBuilder::build()` and Win32 `DestroyWindow(raw)` on a foreign thread caused thread contention with the main event loop, causing the IPC promise to hang and leaving the UI stuck on "Launching...".
-   - Rust Backend Fix: Routed `trigger_screensaver` and `dismiss_screensaver` through `app.run_on_main_thread(move || { ... })`, returning `Ok(())` immediately to the caller and executing window lifecycle operations safely on the UI event loop. Removed raw foreign-thread `DestroyWindow` calls.
-   - Frontend Guard: Added an unconditional 2000ms `safetyTimer` and a 1500ms `Promise.race` timeout guard in `Screensaver.jsx` so the launch button can never get stuck.
-3. **Build & Executable Status**:
-   - `npm run build` passes in 550ms.
-   - `cargo check` passes in 1.62s with 0 warnings and 0 errors.
-   - Production standalone binary compiled via `cargo build --release` (2m 17s).
-   - Deployed and launched fresh `AetherFlow.exe` (7.50MB, PID 6012). Heartbeat confirmed (`visibility=visible`).
+2026-09-12 18:47 IST — Screensaver Option 1 Executed & New Release Deployed:
+1. **Removed In-App Fullscreen Trigger from Settings (`838f204`)**:
+   - Removed the "Preview Fullscreen" button and hover play overlay from `Screensaver.jsx`.
+   - Changed `.screensaver-preview-card` cursor to default.
+   - Added an informational banner guiding users to the functional System Tray "Screensaver" option.
+   - Kept the live interactive 2D canvas simulation with digital clock HUD and selected wallpaper engine inside the stage card.
+2. **Build & Executable Status**:
+   - `npm run build` passes in 607ms.
+   - Production standalone binary compiled via `cargo build --release` (2m 10s).
+   - Deployed and launched updated `AetherFlow.exe` (7.50MB, PID 11252). Clean heartbeat confirmed.
 
 
 
@@ -208,6 +206,7 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.10 Screensaver Lifecycle Teardown, In-App Preview & Borderless Blackout: fixed black screen upon dismissal and app close via synchronous Win32 SW_HIDE + DestroyWindow + win.destroy(); wired dismiss_screensaver to CloseRequested; aligned Serde camelCase deserialization for ScreensaverSettings; enhanced stage with animated OLED sleep stars; eliminated 8px transparent borders via solid .transparent(false) + WS_POPUP without seam collision; compiled & deployed AetherFlow.exe (PID 5200). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation: eliminated black screen upon dismissal by removing win.hide() on WorkerW child wallpaper windows; eliminated Windows 11 DWM white border & 8px inset gap via .fullscreen(true), DWMWA_BORDER_COLOR=0xFFFFFFFE, and removing EnumChildWindows; enforced border:none/outline:none in CSS; increased wake threshold to 40px/1500ms; added SystemParametersInfoW desktop restore on stop/quit. |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Committed Settings Modularization (8f9d3b2) & Resolved Screensaver In-App Preview Getting Stuck on Launching (d7c2ade): routed trigger_screensaver and dismiss_screensaver to app.run_on_main_thread in main.rs, removed foreign-thread DestroyWindow, and added safetyTimer (2s) and Promise.race (1.5s) timeout safeguards in Screensaver.jsx. |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Executed Screensaver Option 1 (838f204): removed in-app preview button and hover play overlay from Screensaver.jsx, added informational banner directing to working System Tray "Screensaver" preview, recompiled standalone release binary and deployed updated AetherFlow.exe (PID 11252). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 
