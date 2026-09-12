@@ -33,7 +33,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
     muted: config.muted !== undefined ? config.muted : audioMuted,
     opacity: wallpaperOpacity,
     brightness: wallpaperBrightness,
-    fps: fps || 60,
+    fps: fps ?? 60,
     preview,   // audio-spectrum uses this to skip mic request in thumbnail mode
   }
 

@@ -144,7 +144,7 @@ export function createAudioSpectrum(canvas, options = {}) {
 
   function frame(ts) {
     animId = requestAnimationFrame(frame)
-    if (fps < 120) {
+    if (fps && fps > 0 && fps < 240) {
       const minInterval = 1000 / fps
       if (ts - lastFrame < minInterval - 1) {
         return

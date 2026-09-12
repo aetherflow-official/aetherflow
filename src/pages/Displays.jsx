@@ -107,8 +107,10 @@ function TaskbarWireframeIllustration({ styleId, isSelected }) {
 }
 
 export default function DisplaysPage() {
-  const fps = useStore(s => s.fps) || 60
+  const fps = useStore(s => s.fps) ?? 60
   const setFps = useStore(s => s.setFps)
+  const screenArrangement = useStore(s => s.screenArrangement) || 'duplicate'
+  const setScreenArrangement = useStore(s => s.setScreenArrangement)
   const pauseOnBattery = useStore(s => s.pauseOnBattery) || false
   const togglePauseOnBattery = useStore(s => s.togglePauseOnBattery)
   const pauseOnFullscreen = useStore(s => s.pauseOnFullscreen) ?? true
@@ -182,7 +184,7 @@ export default function DisplaysPage() {
       } catch (e) {}
     }
     fetchGrid()
-    const interval = setInterval(fetchGrid, 1200)
+    const interval = setInterval(fetchGrid, 750)
     return () => {
       mounted = false
       clearInterval(interval)
@@ -258,6 +260,65 @@ export default function DisplaysPage() {
         </div>
       </div>
 
+      {/* Card: Multi-Display Wallpaper Arrangement */}
+      <div className="setting-card">
+        <div className="setting-card-header">
+          <div className="flex items-center gap-2.5">
+            <Monitor size={16} style={{ color: 'var(--color-brand)' }} />
+            <span className="text-sm font-semibold">Multi-Display Wallpaper Arrangement</span>
+          </div>
+          <span className="badge font-mono" style={{ fontSize: 10 }}>
+            {monitors.length > 1 ? `${monitors.length} Displays` : 'Single Display'}
+          </span>
+        </div>
+
+        <SettingRow
+          label="Display Arrangement Mode"
+          desc={screenArrangement === 'duplicate'
+            ? 'Duplicate Across All: Mirrors the selected active wallpaper across all connected monitors with synchronous timing.'
+            : 'Distinct Per-Screen: Enables separate wallpaper assignment per display. Target monitor selectors are unlocked on Home and Library.'}
+        >
+          <div className="segmented-control">
+            <button
+              type="button"
+              className={`segmented-item ${screenArrangement === 'duplicate' ? 'active-brand' : ''}`}
+              onClick={() => setScreenArrangement('duplicate')}
+            >
+              Duplicate Across All
+            </button>
+            <button
+              type="button"
+              className={`segmented-item ${screenArrangement === 'per-screen' ? 'active-brand' : ''}`}
+              onClick={() => setScreenArrangement('per-screen')}
+            >
+              Distinct Per-Screen
+            </button>
+          </div>
+        </SettingRow>
+
+        {screenArrangement === 'per-screen' && (
+          <div style={{ padding: '0 18px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'rgba(var(--rgb-brand), 0.08)',
+              border: '1px solid rgba(var(--rgb-brand), 0.2)',
+              fontSize: 12,
+              color: 'var(--text-main)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <CheckCircle2 size={15} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
+              <span>
+                Per-Screen mode is active. You can now select individual monitors on the <strong>Home</strong> and <strong>Library</strong> pages to set different wallpapers per screen.
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Card 1: Engine Performance & Occlusion Rules */}
       <div className="setting-card">
         <div className="setting-card-header">
@@ -270,17 +331,19 @@ export default function DisplaysPage() {
 
         <SliderRow
           label="Rendering Frame Cap"
-          desc="Target frame rate limit for Canvas 2D engines & video renderers"
-          value={fps}
-          set={handleFpsChange}
-          min={10}
-          max={120}
-          step={10}
-          fmt={v => v >= 120 ? '120 FPS (Max)' : `${v} FPS`}
+          desc="Target frame rate limit for Canvas 2D engines & video renderers (Unlimited syncs with your monitor's native refresh rate, e.g. 144Hz, 240Hz+)"
+          value={fps <= 0 ? 240 : fps}
+          set={v => handleFpsChange(v >= 240 ? 0 : v)}
+          min={15}
+          max={240}
+          step={15}
+          fmt={v => (v <= 0 || v >= 240) ? 'Unlimited (Native Hz)' : `${v} FPS`}
           presets={[
             { label: '30 FPS', val: 30 },
             { label: '60 FPS', val: 60 },
             { label: '120 FPS', val: 120 },
+            { label: '144 FPS', val: 144 },
+            { label: 'Unlimited', val: 240 },
           ]}
         />
 
@@ -360,14 +423,16 @@ export default function DisplaysPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))`, gap: 16 }}>
               {gridReports.map((rep, rIdx) => {
-                const matchedMon = monitors.find(m => m.label === rep.monitor_label)
-                const monTitle = matchedMon?.displayName || `Display ${rIdx + 1}`
-                const bitmask = rep.bitmask || [0, 0, 0, 0]
-                const isPaused = rep.is_paused
+                const matchedMon = monitors.find(m => m.label === rep.label)
+                const monTitle = matchedMon?.displayName || rep.label || `Display ${rIdx + 1}`
+                const isOccluded = Boolean(rep.is_occluded)
+                const coveragePct = typeof rep.coverage_percent === 'number' ? rep.coverage_percent.toFixed(0) : '0'
+                const coveredCount = rep.covered_tiles ?? 0
+                const tiles = Array.isArray(rep.tiles) ? rep.tiles : []
 
                 return (
                   <div
-                    key={rep.monitor_label || rIdx}
+                    key={rep.label || rIdx}
                     style={{
                       background: 'color-mix(in srgb, var(--border-main) 20%, var(--bg-card))',
                       borderRadius: 10,
@@ -376,9 +441,14 @@ export default function DisplaysPage() {
                     }}
                   >
                     <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                      <span className="text-xs font-semibold" style={{ color: 'var(--text-main)' }}>{monTitle}</span>
-                      <span className={`badge ${isPaused ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: 10 }}>
-                        {isPaused ? 'PAUSED' : 'ACTIVE'}
+                      <div>
+                        <div className="text-xs font-semibold" style={{ color: 'var(--text-main)' }}>{monTitle}</div>
+                        <div className="text-[10px] text-muted font-mono" style={{ marginTop: 2 }}>
+                          {coveredCount}/128 Tiles ({coveragePct}% Covered)
+                        </div>
+                      </div>
+                      <span className={`badge ${isOccluded ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: 10 }}>
+                        {isOccluded ? 'OCCLUDED (PAUSED)' : 'ACTIVE'}
                       </span>
                     </div>
 
@@ -393,17 +463,17 @@ export default function DisplaysPage() {
                       aspectRatio: '16 / 8',
                     }}>
                       {Array.from({ length: 128 }).map((_, cellIdx) => {
-                        const u32Idx = Math.floor(cellIdx / 32)
-                        const bitIdx = cellIdx % 32
-                        const isCovered = (bitmask[u32Idx] & (1 << bitIdx)) !== 0
+                        const isCovered = Boolean(tiles[cellIdx])
                         return (
                           <div
                             key={cellIdx}
+                            title={`Tile ${cellIdx + 1}: ${isCovered ? 'Covered by window' : 'Clear desktop'}`}
                             style={{
                               borderRadius: 1.5,
                               background: isCovered
-                                ? 'rgba(239, 68, 68, 0.7)'
-                                : 'rgba(16, 185, 129, 0.4)',
+                                ? 'rgba(239, 68, 68, 0.85)'
+                                : 'rgba(16, 185, 129, 0.45)',
+                              boxShadow: isCovered ? '0 0 4px rgba(239, 68, 68, 0.4)' : 'none',
                               transition: 'background 0.15s ease',
                             }}
                           />

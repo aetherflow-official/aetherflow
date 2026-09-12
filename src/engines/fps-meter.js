@@ -42,7 +42,7 @@ export function createFpsMeter(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
 
     // FPS Pacing limiter
-    if (fps < 120) {
+    if (fps && fps > 0 && fps < 240) {
       const minInterval = 1000 / fps
       if (ts - lastFrame < minInterval - 1) {
         return
@@ -63,7 +63,7 @@ export function createFpsMeter(canvas, options = {}) {
       if (frameTimes.length > 0) {
         const avgDelta = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length
         currentFps = Math.round(1000 / avgDelta)
-        avgFps = Math.min(fps, currentFps)
+        avgFps = (fps && fps > 0 && fps < 240) ? Math.min(fps, currentFps) : currentFps
       }
       lastFpsUpdate = ts
     }
@@ -153,7 +153,7 @@ export function createFpsMeter(canvas, options = {}) {
     ctx.stroke()
 
     // Active FPS arc indicator (proportional to target or 120)
-    const maxScale = Math.max(fps, 60)
+    const maxScale = (fps && fps > 0 && fps < 240) ? Math.max(fps, 60) : Math.max(avgFps, 144)
     const pct = Math.min(Math.max(avgFps / maxScale, 0), 1)
     const endArc = Math.PI * 0.75 + pct * (Math.PI * 1.5)
 
@@ -193,9 +193,10 @@ export function createFpsMeter(canvas, options = {}) {
 
     // Target Limit vs Frame Time
     const currentMs = delta ? delta.toFixed(1) : (1000 / (fps || 60)).toFixed(1)
+    const limitLabel = (fps && fps > 0 && fps < 240) ? `${fps} FPS` : 'UNLIMITED'
     ctx.fillStyle = 'rgba(255, 255, 255, 0.75)'
     ctx.font = '12px "JetBrains Mono", monospace'
-    ctx.fillText(`LIMIT: ${fps} FPS  •  FRAME: ${currentMs}ms`, cx, cy + radius * 0.55)
+    ctx.fillText(`LIMIT: ${limitLabel}  •  FRAME: ${currentMs}ms`, cx, cy + radius * 0.55)
 
     // 6. Bottom Oscilloscope Graph
     const graphW = Math.min(W * 0.55, 420)

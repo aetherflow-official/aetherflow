@@ -436,7 +436,7 @@ export default function HomePage() {
   const setThumbnailMode      = useStore(s => s.setThumbnailMode)
   const wallpaperAudioSettings = useStore(s => s.wallpaperAudioSettings) || {}
   const setWallpaperAudio     = useStore(s => s.setWallpaperAudio)
-  const fpsCap                = useStore(s => s.fpsCap) || 60
+  const fpsCap                = useStore(s => s.fps) ?? 60
 
   const screenArrangement     = useStore(s => s.screenArrangement)
   const monitorWallpapers     = useStore(s => s.monitorWallpapers)
@@ -1035,7 +1035,7 @@ export default function HomePage() {
             <div className="telemetry-chip">
               <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>{activeWallpaper.engine || activeWallpaper.id || 'native'}</span>
               <span style={{ opacity: 0.4 }}>•</span>
-              <span>{fpsCap} FPS CAP</span>
+              <span>{fpsCap > 0 && fpsCap < 240 ? `${fpsCap} FPS CAP` : 'UNLIMITED FPS'}</span>
             </div>
           </div>
 

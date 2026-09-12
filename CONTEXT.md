@@ -3,16 +3,21 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 18:47 IST — Screensaver Option 1 Executed & New Release Deployed:
-1. **Removed In-App Fullscreen Trigger from Settings (`838f204`)**:
-   - Removed the "Preview Fullscreen" button and hover play overlay from `Screensaver.jsx`.
-   - Changed `.screensaver-preview-card` cursor to default.
-   - Added an informational banner guiding users to the functional System Tray "Screensaver" option.
-   - Kept the live interactive 2D canvas simulation with digital clock HUD and selected wallpaper engine inside the stage card.
-2. **Build & Executable Status**:
-   - `npm run build` passes in 607ms.
-   - Production standalone binary compiled via `cargo build --release` (2m 10s).
-   - Deployed and launched updated `AetherFlow.exe` (7.50MB, PID 11252). Clean heartbeat confirmed.
+2026-09-12 19:02 IST — Multi-Display Arrangement, Unlimited FPS & Live Occlusion Grid Fixes Deployed:
+1. **Multi-Display Wallpaper Arrangement**:
+   - Added dedicated "Multi-Display Wallpaper Arrangement" card to `Displays.jsx`.
+   - Wired segmented control for "Duplicate Across All" vs "Distinct Per-Screen" to Zustand `screenArrangement`.
+2. **Unlimited Frame Rate Support (Native Refresh Rate)**:
+   - Refactored all 7 Canvas 2D engines (`matrix-rain`, `cyber-particles`, `synthwave-grid`, `deep-space`, `aurora`, `tokyo-rain`, `audio-spectrum`) and `fps-meter` to check `if (fps && fps > 0 && fps < 240)`. Setting FPS to 0 or 240+ syncs with native monitor Hz (144Hz, 240Hz, 360Hz).
+   - Updated `Displays.jsx` slider with presets up to Unlimited (0 / 240) and formatting "Unlimited (Native Hz)".
+   - Updated Home cockpit chip to format as `UNLIMITED FPS`.
+3. **Live 16×8 Occlusion Grid Diagnostic Fix**:
+   - Aligned telemetry data binding in `Displays.jsx` with Rust `MonitorGridReport` (`rep.label`, `rep.is_occluded`, `rep.coverage_percent`, `rep.covered_tiles`, and `rep.tiles` 128 boolean vector).
+   - Covered tiles now glow red with coverage counts, and polling frequency increased to 750ms.
+4. **Build & Deployment**:
+   - `npm run build` passed in 589ms.
+   - `cargo build --release` completed in 2m 30s.
+   - Deployed updated `AetherFlow.exe` (7.50MB, PID 10868). Clean heartbeat verified.
 
 
 
@@ -207,6 +212,7 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Completed Task 18.11 Screensaver Seamless Fullscreen Hardware Pinning & Desktop Wallpaper Preservation: eliminated black screen upon dismissal by removing win.hide() on WorkerW child wallpaper windows; eliminated Windows 11 DWM white border & 8px inset gap via .fullscreen(true), DWMWA_BORDER_COLOR=0xFFFFFFFE, and removing EnumChildWindows; enforced border:none/outline:none in CSS; increased wake threshold to 40px/1500ms; added SystemParametersInfoW desktop restore on stop/quit. |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Committed Settings Modularization (8f9d3b2) & Resolved Screensaver In-App Preview Getting Stuck on Launching (d7c2ade): routed trigger_screensaver and dismiss_screensaver to app.run_on_main_thread in main.rs, removed foreign-thread DestroyWindow, and added safetyTimer (2s) and Promise.race (1.5s) timeout safeguards in Screensaver.jsx. |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Executed Screensaver Option 1 (838f204): removed in-app preview button and hover play overlay from Screensaver.jsx, added informational banner directing to working System Tray "Screensaver" preview, recompiled standalone release binary and deployed updated AetherFlow.exe (PID 11252). |
+| 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Restored Multi-Display Wallpaper Arrangement in Displays.jsx (Duplicate Across All vs Distinct Per-Screen); enabled Unlimited FPS support across all 7 engines, fps-meter, and slider (bypassing throttle on 0 or 240+ for native 144Hz/240Hz+); fixed 16x8 Diagnostic Occlusion Grid telemetry data binding (rep.label, rep.is_occluded, rep.coverage_percent, rep.tiles boolean mapping, 750ms polling); recompiled release binary and deployed fresh AetherFlow.exe (PID 10868). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

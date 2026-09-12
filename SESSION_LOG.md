@@ -1970,3 +1970,26 @@
      - Deployed new `AetherFlow.exe` (7.50MB) and launched process (PID 11252).
 - **Build status:** ✅ `npm run build` (607ms) & `cargo build --release` passing with 0 errors. Verified running cleanly.
 ---
+
+## Session: 2026-09-12 19:02 IST (Multi-Display Arrangement, Unlimited FPS & Occlusion Grid Fixes)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Restored Multi-Display Wallpaper Arrangement in Displays.jsx**:
+     - Added dedicated "Multi-Display Wallpaper Arrangement" card with segmented toggle for "Duplicate Across All" vs "Distinct Per-Screen".
+     - Tied to Zustand `screenArrangement` / `setScreenArrangement`, unlocking target monitor chips across Home and Library pages.
+  2. **Unlimited FPS Support (Native Monitor Hz)**:
+     - Refactored all 7 Canvas 2D engines (`matrix-rain`, `cyber-particles`, `synthwave-grid`, `deep-space`, `aurora`, `tokyo-rain`, `audio-spectrum`) and `fps-meter` to check `if (fps && fps > 0 && fps < 240)`.
+     - Setting FPS to 0 or 240+ syncs with native monitor refresh rate (144Hz, 240Hz, 360Hz) via `requestAnimationFrame`.
+     - Updated `Displays.jsx` slider to support presets `[30, 60, 120, 144, Unlimited]` with "Unlimited (Native Hz)" readout.
+     - Fixed `fpsCap` store selector in `Home.jsx` (`s.fps ?? 60`) and formatted cockpit badge to `UNLIMITED FPS`.
+     - Updated `WallpaperPlayer/index.jsx` to pass `fps: fps ?? 60`.
+  3. **Resolved 16×8 Occlusion Grid Diagnostic Telemetry**:
+     - Aligned frontend telemetry data binding in `Displays.jsx` with Rust `MonitorGridReport` struct: replaced undefined properties `monitor_label`, `is_paused`, and `bitmask` with `rep.label`, `rep.is_occluded`, `rep.coverage_percent`, `rep.covered_tiles`, and `Boolean(rep.tiles[cellIdx])`.
+     - Occluded tiles now glow red with coverage readout (`42/128 Tiles (33% Covered)`), open desktop tiles render in emerald green, and polling frequency increased from 1200ms to 750ms to sync with Rust hardware occlusion loop.
+  4. **Compiled & Deployed Production Binary**:
+     - `npm run build` completed in 589ms.
+     - `cargo build --release` completed in 2m 30s.
+     - Deployed new `AetherFlow.exe` (7.50MB) and launched process (PID 10868).
+- **Build status:** ✅ `npm run build` (589ms) & `cargo build --release` passing with 0 errors. Verified running cleanly.
+---
+
