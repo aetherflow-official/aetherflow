@@ -3,22 +3,19 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 19:51 IST — Full Windows Application Identity, Task Manager & Helper Process Containment Deployed:
-1. **Task Manager Process Search De-duplication**:
-   - Diagnosed root cause of multiple results when searching "aether" in Task Manager: wallpaper WebView2 windows had title `"AetherFlow Wallpaper - \\.\DISPLAY1/6"` and `<title>AetherFlow Wallpaper</title>`, MPV had title `"AetherFlow"`, and MPV ran as `AetherFlow-VideoEngine.exe`.
-   - Cleared window titles on background wallpaper Webviews (`.title("")` in `main.rs`, `<title></title>` in `wallpaper.html` and `index.html`).
-   - Prioritized standard `mpv.exe` in `find_mpv_binary()` and cleared MPV window title (`--title=`, `--force-media-title=`).
-   - Searching "aether" in Windows Search and Task Manager now returns exclusively `AetherFlow` (the primary application).
-2. **Explicit Process AppUserModelID (AUMID)**:
-   - Enforced `SetCurrentProcessExplicitAppUserModelID(L"com.aetherflow.app")` at the absolute start of `fn main()` in `src-tauri/src/main.rs`.
-3. **Canonical Start Menu Application Registration**:
-   - `ensure_canonical_start_menu_shortcut()` creates `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\AetherFlow.lnk` pointing to `AetherFlow.exe` and clears stale MuiCache keys.
-4. **Helper Process Containment (MPV & WebView2)**:
-   - Passed `--show-in-taskbar=no`, `--taskbar-progress=no`, `--title-bar=no` to MPV.
-   - Enforced `WS_EX_TOOLWINDOW` and stripped `WS_EX_APPWINDOW` (`0x00040000`) on all wallpaper and MPV HWNDs.
-5. **Build & Verification**:
-   - Rebuilt frontend (`npm run build` 543ms), compiled release binary (`cargo build --release` 1m 53s), deployed `AetherFlow.exe` (7.50 MB, PID 30832).
-   - Verified only `AetherFlow.exe` matches "aether", multi-monitor wallpapers running cleanly.
+2026-09-12 22:20 IST — Option A Task Manager Search Surfacing Deployed:
+1. **Option A Implemented (Task Manager Search Surfacing)**:
+   - Configured hosted document and engine titles so searching "aether" in Windows 11 Task Manager surfaces all AetherFlow components:
+     - `index.html`: Set `<title>AetherFlow</title>` so Edge WebView2 registers the main UI document title under `WebView2 Manager`.
+     - `wallpaper.html`: Set `<title>AetherFlow Wallpaper Engine</title>`.
+     - `src-tauri/src/main.rs`: Set `.title(&format!("AetherFlow Wallpaper - {}", name))` on wallpaper `WebviewWindowBuilder`.
+     - `src-tauri/src/mpv.rs`: Set `--title=AetherFlow Video Engine` and `--force-media-title=AetherFlow Video Engine`.
+   - Retained `--show-in-taskbar=no`, `--taskbar-progress=no`, and `WS_EX_TOOLWINDOW` so wallpaper windows and MPV never show standalone taskbar buttons or Alt+Tab entries.
+   - User confirmed they have an active Microsoft Developer Account; when ready for Microsoft Store release in the future, Desktop-Bridge Full-Trust MSIX packaging will natively provide true single-tree grouping in Task Manager without breaking desktop pinning.
+2. **Build & Verification**:
+   - Rebuilt frontend (`npm run build` 731ms), verified `cargo check` (3.06s).
+   - Deployed release binary `AetherFlow.exe` (7.50 MB, PID 22812).
+   - Verified running smoothly with MPV video engine (PIDs 32524 & 32536).
 
 
 

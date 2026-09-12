@@ -2023,5 +2023,26 @@
 - **Build status:** ✅ `npm run build` (543ms) & `cargo build --release` (1m 53s) clean. Verified running cleanly.
 ---
 
+## Session: 2026-09-12 22:20 IST (Option A Task Manager Search Surfacing & Store Planning)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Option A Implemented (Task Manager Search Surfacing)**:
+     - Configured hosted document and engine titles so searching "aether" in Windows 11 Task Manager surfaces all AetherFlow components:
+       - `index.html`: Set `<title>AetherFlow</title>` so Edge WebView2 registers the main UI document title under `WebView2 Manager`.
+       - `wallpaper.html`: Set `<title>AetherFlow Wallpaper Engine</title>`.
+       - `src-tauri/src/main.rs`: Set `.title(&format!("AetherFlow Wallpaper - {}", name))` on wallpaper `WebviewWindowBuilder`.
+       - `src-tauri/src/mpv.rs`: Set `--title=AetherFlow Video Engine` and `--force-media-title=AetherFlow Video Engine`.
+     - Retained `--show-in-taskbar=no`, `--taskbar-progress=no`, and `WS_EX_TOOLWINDOW` so wallpaper windows and MPV never show standalone taskbar buttons or Alt+Tab entries.
+  2. **Microsoft Store & Identity Roadmap**:
+     - User confirmed possession of an active Microsoft Developer Account.
+     - Option A satisfies all active development requirements without process renaming hacks or altering WorkerW desktop pinning.
+     - Documented future store submission path: Desktop-Bridge Full-Trust MSIX packaging natively yields single-tree grouping in Windows 11 Task Manager (`Aether └── AetherFlow / WebView2 / mpv.exe`).
+  3. **Build & Verification**:
+     - Frontend build (`npm run build`): passed in 731ms.
+     - Rust backend check (`cargo check`): passed in 3.06s.
+     - Release binary `AetherFlow.exe` running (PID 22812), MPV video engine running (PIDs 32524 & 32536).
+- **Build status:** ✅ `npm run build` & `cargo check` passing with 0 errors. Verified running cleanly.
+---
+
 
 

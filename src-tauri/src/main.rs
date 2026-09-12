@@ -1656,7 +1656,7 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
 "#;
 
                 let win_res = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("wallpaper.html".into()))
-                    .title("")
+                    .title(&format!("AetherFlow Wallpaper - {}", name))
                     .decorations(false)
                     .transparent(true)
                     .visible(false)
