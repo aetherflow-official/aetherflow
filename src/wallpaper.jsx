@@ -1,15 +1,15 @@
 /**
- * wallpaper.jsx — AuraOS Wallpaper Window Entry Point
+ * wallpaper.jsx — AetherFlow Wallpaper Window Entry Point
  *
  * This is a completely separate React root from the main control panel.
  * It renders ONLY a full-screen canvas that animates the active wallpaper engine.
  *
  * Communication: Tauri backend emits events → this window reacts.
- *   'aura:set-engine'     { engineId, config }  — swap wallpaper engine
- *   'aura:update-config'  { ...config }          — hot-update config
- *   'aura:stop'           {}                     — stop and clear canvas
- *   'aura:set-brightness' { brightness }         — apply CSS filter
- *   'aura:set-opacity'    { opacity }            — apply CSS opacity
+ *   'aether:set-engine'     { engineId, config }  — swap wallpaper engine
+ *   'aether:update-config'  { ...config }          — hot-update config
+ *   'aether:stop'           {}                     — stop and clear canvas
+ *   'aether:set-brightness' { brightness }         — apply CSS filter
+ *   'aether:set-opacity'    { opacity }            — apply CSS opacity
  */
 
 import React, { useEffect, useRef, useState } from 'react'
@@ -177,7 +177,7 @@ function WallpaperCanvas() {
 
     const descriptor = ENGINES[resolvedEngineId]
     if (!descriptor) {
-      console.error('[AuraOS Wallpaper] Unknown engine:', engineId)
+      console.error('[AetherFlow Wallpaper] Unknown engine:', engineId)
       return
     }
 
@@ -202,7 +202,7 @@ function WallpaperCanvas() {
       engineRef.current = engine
       engine.start()
     } catch (err) {
-      console.error('[AuraOS Wallpaper] Failed to load engine:', engineId, err)
+      console.error('[AetherFlow Wallpaper] Failed to load engine:', engineId, err)
     }
   }
 
@@ -247,7 +247,12 @@ function WallpaperCanvas() {
           }
         }
 
-        await addListener('aura:set-engine', (payload) => {
+        async function registerEvent(name, handler) {
+          await addListener('aether:' + name, handler)
+          await addListener('aura:' + name, handler)
+        }
+
+        await registerEvent('set-engine', (payload) => {
           const cfg = { ...(payload?.config || {}) }
           const isSecondaryScreen = Boolean(cfg.isSecondary)
           if (isSecondaryScreen) {
@@ -258,7 +263,7 @@ function WallpaperCanvas() {
           bootEngine(payload?.engineId, cfg)
         })
 
-        await addListener('aura:update-config', (payload) => {
+        await registerEvent('update-config', (payload) => {
           const cfg = { ...(payload?.config || payload || {}) }
           const isSecondaryScreen = Boolean(cfg.isSecondary)
           if (isSecondaryScreen) {
@@ -269,7 +274,7 @@ function WallpaperCanvas() {
           engineRef.current?.updateOptions?.(cfg)
         })
 
-        await addListener('aura:stop', () => {
+        await registerEvent('stop', () => {
           bootSeqRef.current++
           activeIdRef.current = null
           setActiveId(null)
@@ -286,7 +291,7 @@ function WallpaperCanvas() {
           }
         })
 
-        await addListener('aura:pause', () => {
+        await registerEvent('pause', () => {
           try { engineRef.current?.pause?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: true }) } catch (e) {}
           document.querySelectorAll('video, audio').forEach(el => {
@@ -294,7 +299,7 @@ function WallpaperCanvas() {
           })
         })
 
-        await addListener('aura:resume', () => {
+        await registerEvent('resume', () => {
           try { engineRef.current?.resume?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: false }) } catch (e) {}
           document.querySelectorAll('video').forEach(el => {
@@ -302,29 +307,29 @@ function WallpaperCanvas() {
           })
         })
 
-        await addListener('aura:mute', () => {
+        await registerEvent('mute', () => {
           document.querySelectorAll('video, audio').forEach(el => {
             try { el.muted = true } catch (e) {}
           })
           try { engineRef.current?.updateOptions?.({ muted: true }) } catch (e) {}
         })
 
-        await addListener('aura:unmute', () => {
+        await registerEvent('unmute', () => {
           document.querySelectorAll('video, audio').forEach(el => {
             try { el.muted = false } catch (e) {}
           })
           try { engineRef.current?.updateOptions?.({ muted: false }) } catch (e) {}
         })
 
-        await addListener('aura:set-brightness', (payload) => {
+        await registerEvent('set-brightness', (payload) => {
           if (payload?.brightness !== undefined) setBrightness(payload.brightness)
         })
 
-        await addListener('aura:set-opacity', (payload) => {
+        await registerEvent('set-opacity', (payload) => {
           if (payload?.opacity !== undefined) setOpacity(payload.opacity)
         })
 
-        await addListener('aura:set-fps', (payload) => {
+        await registerEvent('set-fps', (payload) => {
           if (payload?.fps) {
             engineRef.current?.updateOptions?.({ fps: payload.fps })
           }
@@ -352,12 +357,12 @@ function WallpaperCanvas() {
             }
           }
         } catch (e) {
-          console.warn('[AuraOS Wallpaper] initialization query failed:', e)
+          console.warn('[AetherFlow Wallpaper] initialization query failed:', e)
         }
       } catch (err) {
         // Only auto-boot in a regular browser (NOT inside Tauri)
         if (!window.__TAURI_INTERNALS__) {
-          console.warn('[AuraOS Wallpaper] Tauri not available, loading preview engine')
+          console.warn('[AetherFlow Wallpaper] Tauri not available, loading preview engine')
           const firstId = Object.keys(ENGINES)[0]
           if (firstId) bootEngine(firstId, ENGINES[firstId].defaultConfig)
         }

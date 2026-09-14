@@ -1,4 +1,4 @@
-# SESSION_LOG.md — AuraOS Session History
+# SESSION_LOG.md — AetherFlow Session History
 
 <!-- This file is updated at the end of EVERY session by the AI agent. -->
 <!-- Format: newest session at the bottom. Never delete old sessions. -->

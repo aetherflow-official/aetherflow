@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import {
   Moon, Sparkles, Clock, Shield, ShieldCheck, Volume2, VolumeX,
-  Play, Check, AlertCircle, Laptop, Sliders, Zap, Eye, RotateCcw
+  Play, Check, AlertCircle, Laptop, Sliders, Zap, Eye, RotateCcw,
+  Film, Maximize2
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { ENGINES } from '../engines/index.js'
@@ -24,6 +25,12 @@ export default function Screensaver() {
   const setScreensaverGracePeriodSecs = useStore(s => s.setScreensaverGracePeriodSecs)
   const screensaverMuteAudio = useStore(s => s.screensaverMuteAudio) ?? true
   const toggleScreensaverMuteAudio = useStore(s => s.toggleScreensaverMuteAudio)
+  const screensaverInhibitFullscreen = useStore(s => s.screensaverInhibitFullscreen) ?? true
+  const toggleScreensaverInhibitFullscreen = useStore(s => s.toggleScreensaverInhibitFullscreen)
+  const screensaverInhibitMaximized = useStore(s => s.screensaverInhibitMaximized) ?? true
+  const toggleScreensaverInhibitMaximized = useStore(s => s.toggleScreensaverInhibitMaximized)
+  const screensaverInhibitMediaPlayback = useStore(s => s.screensaverInhibitMediaPlayback) ?? true
+  const toggleScreensaverInhibitMediaPlayback = useStore(s => s.toggleScreensaverInhibitMediaPlayback)
   const activeWallpaper = useStore(s => s.activeWallpaper)
   const currentDesktopWallpaper = useStore(s => s.currentDesktopWallpaper)
 
@@ -49,6 +56,9 @@ export default function Screensaver() {
           lock_on_resume: screensaverLockOnResume,
           grace_period_secs: screensaverGracePeriodSecs,
           mute_audio: screensaverMuteAudio,
+          inhibit_fullscreen: screensaverInhibitFullscreen,
+          inhibit_maximized: screensaverInhibitMaximized,
+          inhibit_audio: screensaverInhibitMediaPlayback,
         }
       }).catch(() => {})
     }).catch(() => {})
@@ -61,6 +71,9 @@ export default function Screensaver() {
     screensaverLockOnResume,
     screensaverGracePeriodSecs,
     screensaverMuteAudio,
+    screensaverInhibitFullscreen,
+    screensaverInhibitMaximized,
+    screensaverInhibitMediaPlayback,
   ])
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -364,7 +377,84 @@ export default function Screensaver() {
         </div>
       </div>
 
-      {/* Setting Card 2: Visual Engine & Mode */}
+      {/* Setting Card 2: Smart Trigger & Media Suppression */}
+      <div className="setting-card">
+        <div className="setting-card-header">
+          <div className="flex items-center gap-2.5">
+            <Shield size={16} style={{ color: 'var(--color-cyan)' }} />
+            <span className="text-sm font-semibold">Smart Trigger & Media Suppression</span>
+          </div>
+          <span className="badge font-mono" style={{ fontSize: 10 }}>Intelligent Sleep</span>
+        </div>
+
+        {/* Inhibit on Fullscreen */}
+        <div className="setting-row">
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+              <span>Do Not Activate When Fullscreen App is Running</span>
+              <span className="badge font-mono" style={{ fontSize: 9 }}>Video & Games</span>
+            </div>
+            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
+              Prevents the screensaver from turning on while watching anime, movies, YouTube, or playing video games in fullscreen mode
+            </div>
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={screensaverInhibitFullscreen}
+              onChange={toggleScreensaverInhibitFullscreen}
+            />
+            <div className="toggle-track" />
+            <div className="toggle-thumb" />
+          </label>
+        </div>
+
+        {/* Inhibit on Maximized */}
+        <div className="setting-row">
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+              <span>Do Not Activate When Window is Maximized</span>
+              <span className="badge font-mono" style={{ fontSize: 9 }}>Desktop Work</span>
+            </div>
+            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
+              Suppresses screensaver when any active application window is maximized (e.g. streaming anime in a maximized browser window)
+            </div>
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={screensaverInhibitMaximized}
+              onChange={toggleScreensaverInhibitMaximized}
+            />
+            <div className="toggle-track" />
+            <div className="toggle-thumb" />
+          </label>
+        </div>
+
+        {/* Inhibit on Audio / Media Playback */}
+        <div className="setting-row">
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
+              <span>Do Not Activate During Media & Audio Playback</span>
+              <span className="badge font-mono" style={{ fontSize: 9 }}>WASAPI Audio</span>
+            </div>
+            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
+              Suppresses screensaver while audio or video dialogue is playing through your speakers, preventing screensaver interruptions
+            </div>
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={screensaverInhibitMediaPlayback}
+              onChange={toggleScreensaverInhibitMediaPlayback}
+            />
+            <div className="toggle-track" />
+            <div className="toggle-thumb" />
+          </label>
+        </div>
+      </div>
+
+      {/* Setting Card 3: Visual Engine & Mode */}
       <div className="setting-card">
         <div className="setting-card-header">
           <div className="flex items-center gap-2.5">

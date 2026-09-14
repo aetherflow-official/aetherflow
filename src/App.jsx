@@ -52,6 +52,9 @@ export default function App() {
   const screensaverLockOnResume = useStore(s => s.screensaverLockOnResume)
   const screensaverGracePeriodSecs = useStore(s => s.screensaverGracePeriodSecs)
   const screensaverMuteAudio = useStore(s => s.screensaverMuteAudio)
+  const screensaverInhibitFullscreen = useStore(s => s.screensaverInhibitFullscreen)
+  const screensaverInhibitMaximized = useStore(s => s.screensaverInhibitMaximized)
+  const screensaverInhibitMediaPlayback = useStore(s => s.screensaverInhibitMediaPlayback)
   const authUser         = useStore(s => s.authUser)
   const isAuthenticated  = useStore(s => s.isAuthenticated)
   const glowAmbience     = useStore(s => s.glowAmbience) || 'balanced'
@@ -124,14 +127,19 @@ export default function App() {
       }
     }
 
-    safeListen('aura:oauth-callback', handleOAuthCallback)
+    safeListen('aether:oauth-callback', handleOAuthCallback)
       .then(u => { unlistenApp = u })
+      .catch(() => {})
+    safeListen('aura:oauth-callback', handleOAuthCallback)
       .catch(() => {})
 
     if (isTauri()) {
       import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-        getCurrentWebviewWindow().listen('aura:oauth-callback', handleOAuthCallback)
+        const win = getCurrentWebviewWindow()
+        win.listen('aether:oauth-callback', handleOAuthCallback)
           .then(u => { unlistenWindow = u })
+          .catch(() => {})
+        win.listen('aura:oauth-callback', handleOAuthCallback)
           .catch(() => {})
       }).catch(() => {})
     }
@@ -219,6 +227,9 @@ export default function App() {
             lock_on_resume: !!screensaverLockOnResume,
             grace_period_secs: Number(screensaverGracePeriodSecs) || 5,
             mute_audio: screensaverMuteAudio !== false,
+            inhibit_fullscreen: screensaverInhibitFullscreen !== false,
+            inhibit_maximized: screensaverInhibitMaximized !== false,
+            inhibit_audio: screensaverInhibitMediaPlayback !== false,
           }
         }).catch(() => {})
       } catch (err) {}
@@ -233,6 +244,9 @@ export default function App() {
     screensaverLockOnResume,
     screensaverGracePeriodSecs,
     screensaverMuteAudio,
+    screensaverInhibitFullscreen,
+    screensaverInhibitMaximized,
+    screensaverInhibitMediaPlayback,
   ])
 
   // Ensure window is visible and focused on mount unless launched minimized at startup

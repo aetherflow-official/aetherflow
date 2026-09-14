@@ -86,7 +86,7 @@ export async function syncCustomWallpapersFromDisk() {
 }
 
 /**
- * AuraOS Global State (Zustand)
+ * AetherFlow Global State (Zustand)
  * Persisted to localStorage so settings survive restarts.
  */
 export const useStore = create(
@@ -114,6 +114,9 @@ export const useStore = create(
       screensaverLockOnResume: false,
       screensaverGracePeriodSecs: 5,
       screensaverMuteAudio: true,
+      screensaverInhibitFullscreen: true,
+      screensaverInhibitMaximized: true,
+      screensaverInhibitMediaPlayback: true,
 
       setScreensaverEnabled: (v) => set({ screensaverEnabled: v }),
       toggleScreensaverEnabled: () => set((s) => ({ screensaverEnabled: !s.screensaverEnabled })),
@@ -126,6 +129,12 @@ export const useStore = create(
       setScreensaverGracePeriodSecs: (v) => set({ screensaverGracePeriodSecs: v }),
       setScreensaverMuteAudio: (v) => set({ screensaverMuteAudio: v }),
       toggleScreensaverMuteAudio: () => set((s) => ({ screensaverMuteAudio: !s.screensaverMuteAudio })),
+      setScreensaverInhibitFullscreen: (v) => set({ screensaverInhibitFullscreen: v }),
+      toggleScreensaverInhibitFullscreen: () => set((s) => ({ screensaverInhibitFullscreen: !s.screensaverInhibitFullscreen })),
+      setScreensaverInhibitMaximized: (v) => set({ screensaverInhibitMaximized: v }),
+      toggleScreensaverInhibitMaximized: () => set((s) => ({ screensaverInhibitMaximized: !s.screensaverInhibitMaximized })),
+      setScreensaverInhibitMediaPlayback: (v) => set({ screensaverInhibitMediaPlayback: v }),
+      toggleScreensaverInhibitMediaPlayback: () => set((s) => ({ screensaverInhibitMediaPlayback: !s.screensaverInhibitMediaPlayback })),
 
       // Card thumbnail presentation mode: 'always' | 'hover' | 'off'
       thumbnailMode: 'hover',
@@ -604,6 +613,9 @@ export const useStore = create(
         screensaverLockOnResume: s.screensaverLockOnResume,
         screensaverGracePeriodSecs: s.screensaverGracePeriodSecs,
         screensaverMuteAudio: s.screensaverMuteAudio,
+        screensaverInhibitFullscreen: s.screensaverInhibitFullscreen ?? true,
+        screensaverInhibitMaximized: s.screensaverInhibitMaximized ?? true,
+        screensaverInhibitMediaPlayback: s.screensaverInhibitMediaPlayback ?? true,
         authUser: s.authUser ? {
           id: s.authUser.id,
           email: s.authUser.email,

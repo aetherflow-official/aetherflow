@@ -71,9 +71,12 @@ export default function LibraryPage() {
     }
     loadMonitors()
 
-    safeListen('aura:monitors-changed', () => {
+    safeListen('aether:monitors-changed', () => {
       loadMonitors()
     }).then(u => { unlistenMonitors = u }).catch(() => {})
+    safeListen('aura:monitors-changed', () => {
+      loadMonitors()
+    }).catch(() => {})
 
     window.addEventListener('focus', loadMonitors)
     return () => {

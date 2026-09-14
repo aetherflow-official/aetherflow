@@ -158,7 +158,8 @@ export default function DisplaysPage() {
     }
     loadMonitors()
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('aura:monitors-changed', () => loadMonitors()).then(u => { unlistenMonitors = u })
+      listen('aether:monitors-changed', () => loadMonitors()).then(u => { unlistenMonitors = u })
+      listen('aura:monitors-changed', () => loadMonitors())
     }).catch(() => {})
     window.addEventListener('focus', loadMonitors)
     return () => {

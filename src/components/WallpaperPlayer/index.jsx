@@ -94,7 +94,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
         engine.start()
       }
     } catch (err) {
-      console.error('AuraOS: Failed to load engine', engineId, err)
+      console.error('AetherFlow: Failed to load engine', engineId, err)
     }
   }, [engineId, silenceLocalMedia]) // Re-mount only when engine ID changes
 

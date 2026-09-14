@@ -1,27 +1,26 @@
-# AuraOS — Living Context File
+# AetherFlow — Living Context File
 <!-- AUTO-UPDATED: This file is rewritten at the end of every session. -->
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-12 22:20 IST — Option A Task Manager Search Surfacing Deployed:
-1. **Option A Implemented (Task Manager Search Surfacing)**:
-   - Configured hosted document and engine titles so searching "aether" in Windows 11 Task Manager surfaces all AetherFlow components:
-     - `index.html`: Set `<title>AetherFlow</title>` so Edge WebView2 registers the main UI document title under `WebView2 Manager`.
-     - `wallpaper.html`: Set `<title>AetherFlow Wallpaper Engine</title>`.
-     - `src-tauri/src/main.rs`: Set `.title(&format!("AetherFlow Wallpaper - {}", name))` on wallpaper `WebviewWindowBuilder`.
-     - `src-tauri/src/mpv.rs`: Set `--title=AetherFlow Video Engine` and `--force-media-title=AetherFlow Video Engine`.
-   - Retained `--show-in-taskbar=no`, `--taskbar-progress=no`, and `WS_EX_TOOLWINDOW` so wallpaper windows and MPV never show standalone taskbar buttons or Alt+Tab entries.
-   - User confirmed they have an active Microsoft Developer Account; when ready for Microsoft Store release in the future, Desktop-Bridge Full-Trust MSIX packaging will natively provide true single-tree grouping in Task Manager without breaking desktop pinning.
-2. **Build & Verification**:
-   - Rebuilt frontend (`npm run build` 731ms), verified `cargo check` (3.06s).
-   - Deployed release binary `AetherFlow.exe` (7.50 MB, PID 22812).
-   - Verified running smoothly with MPV video engine (PIDs 32524 & 32536).
+2026-09-14 16:05 IST — Screensaver Smart Suppression & Fullscreen Wallpaper Pause Fixed:
+1. **Screensaver Smart Suppression & Media Awareness**:
+   - Implemented three configurable inhibition rules in `ScreensaverSettings`: `inhibit_fullscreen` (default true), `inhibit_maximized` (default true), and `inhibit_audio` (default true).
+   - Added native Win32 WASAPI endpoint peak meter query (`is_system_audio_active()`) detecting active audio/dialogue through speakers.
+   - Added shell notification & DirectX fullscreen detector (`is_presentation_or_d3d_fullscreen()`).
+   - Integrated inhibition checks into the idle loop so screensaver never triggers during anime, movies, YouTube, or gaming.
+2. **Wallpaper Fullscreen Pause Restoration on Screensaver Dismissal**:
+   - Eliminated unconditional `set_mpv_pause(None, false)` and `aura:resume` broadcasts in `do_dismiss_screensaver`.
+   - Replaced with atomic `MONITOR_SYNC_REQUESTED` reconciliation so the occlusion engine evaluates true display state: if an app is fullscreen or maximized, wallpaper remains paused and audio remains muted.
+3. **Frontend & Deployment**:
+   - Added "Smart Trigger & Media Suppression" setting card in Screensaver Studio with persisted Zustand toggles.
+   - Rebuilt frontend (`npm run build` 481ms) and backend (`cargo check` 2.96s), compiled release binary `AetherFlow.exe` (7.51 MB, PID 24216).
 
 
 
 ---
 
-## What AuraOS Is
+## What AetherFlow Is
 
 A **standalone Windows desktop application** that:
 - Shows **live animated wallpapers** behind the Windows desktop (like Wallpaper Engine)
@@ -146,7 +145,7 @@ rustup default stable
 rustup target add x86_64-pc-windows-msvc
 
 # 3. Launch native Windows app
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run tauri:dev
 # First run: 5-10 min compile. Subsequent: 10-30 sec.
 ```
@@ -212,6 +211,7 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Executed Screensaver Option 1 (838f204): removed in-app preview button and hover play overlay from Screensaver.jsx, added informational banner directing to working System Tray "Screensaver" preview, recompiled standalone release binary and deployed updated AetherFlow.exe (PID 11252). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Restored Multi-Display Wallpaper Arrangement in Displays.jsx (Duplicate Across All vs Distinct Per-Screen); enabled Unlimited FPS support across all 7 engines, fps-meter, and slider (bypassing throttle on 0 or 240+ for native 144Hz/240Hz+); fixed 16x8 Diagnostic Occlusion Grid telemetry data binding (rep.label, rep.is_occluded, rep.coverage_percent, rep.tiles boolean mapping, 750ms polling); recompiled release binary and deployed fresh AetherFlow.exe (PID 10868). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Full Windows Application Identity, Task Manager & Helper Process Containment: Diagnosed Task Manager process search de-duplication; suppressed window titles on wallpaper WebViews (`.title("")` in main.rs, `<title></title>` in wallpaper.html & index.html); prioritized standard `mpv.exe` in `find_mpv_binary` and cleared MPV window title (`--title=`, `--force-media-title=`); enforced `SetCurrentProcessExplicitAppUserModelID("com.aetherflow.app")`; created canonical Start Menu shortcut (`AetherFlow.lnk`); stripped `WS_EX_APPWINDOW` and enforced `WS_EX_TOOLWINDOW`; compiled & deployed release binary `AetherFlow.exe` (PID 30832). |
+| 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Resolved screensaver appearing during anime/video playback and wallpaper unpausing after dismissal: implemented smart trigger inhibition (inhibit_fullscreen, inhibit_maximized, inhibit_audio) with Win32 WASAPI peak meter & SHQueryUserNotificationState; replaced unconditional wallpaper resume in do_dismiss_screensaver with atomic MONITOR_SYNC_REQUESTED reconciliation so wallpapers stay paused when fullscreen apps are open; added Smart Trigger & Media Suppression card in Screensaver Studio; compiled release binary and deployed fresh AetherFlow.exe (7.51MB, PID 24216). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

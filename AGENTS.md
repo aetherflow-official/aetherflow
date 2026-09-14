@@ -71,7 +71,7 @@ If `npm run build` **succeeds**, proceed to the remaining tasks in HANDOFF.md.
 Here is every important file and what it does:
 
 ```
-AURAOS/
+AetherFlow/
 │
 ├── AGENTS.md               ← You are reading this
 ├── GEMINI.md               ← Extra rules auto-loaded by Gemini
@@ -315,7 +315,7 @@ export function createMyEngine(canvas, options = {}) {
 
 ### Option A: Frontend only (no Rust needed, fast)
 ```powershell
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run dev
 # Open http://localhost:1420/ in your browser
 ```
@@ -332,16 +332,16 @@ rustup default stable
 rustup target add x86_64-pc-windows-msvc
 
 # Then run the app:
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run tauri:dev
 # First run takes 5-10 minutes (compiling Rust). Subsequent runs: 10-30 seconds.
 ```
 
 ### Option C: Build the Windows installer (.exe)
 ```powershell
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run tauri:build
-# Installer appears at: src-tauri\target\release\bundle\nsis\AuraOS_1.0.0_x64-setup.exe
+# Installer appears at: src-tauri\target\release\bundle\nsis\AetherFlow_1.0.7_x64-setup.exe
 ```
 
 ---
@@ -385,7 +385,7 @@ The marketplace is connected to Supabase. The app works fine WITHOUT Supabase �
 
 To enable the marketplace:
 1. Go to https://supabase.com and create a free account + new project
-2. Create a file `C:\Users\Yashpreet_o7\Desktop\AURAOS\.env`:
+2. Create a file `C:\Users\Yashpreet_o7\Desktop\AetherFlow\.env`:
 ```
 VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here

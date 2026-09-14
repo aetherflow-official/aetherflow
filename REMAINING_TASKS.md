@@ -1,4 +1,4 @@
-# REMAINING_TASKS.md — AuraOS Next Steps
+# REMAINING_TASKS.md — AetherFlow Next Steps
 <!-- Read AGENTS.md first. This file describes what is left to do. -->
 <!-- Each task has EXACT commands to run, EXACT files to create/edit, and a verification step. -->
 
@@ -41,14 +41,14 @@ cargo --version
 ```
 Both should print version numbers. If not, restart your terminal and try again.
 
-### Step 1.4 — Run AuraOS as a native Windows app (first time)
+### Step 1.4 — Run AetherFlow as a native Windows app (first time)
 ```powershell
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run tauri:dev
 ```
 **IMPORTANT:** The first run downloads and compiles many Rust packages. This takes **5–10 minutes**. Do not cancel it. You will see lots of "Compiling..." messages — this is normal.
 
-When it's done, a real Windows application window will open with the AuraOS UI.
+When it's done, a real Windows application window will open with the AetherFlow UI.
 
 ### Step 1.5 — Verify it works
 - [ ] A Windows app window opens (not a browser tab)
@@ -76,13 +76,13 @@ To:
 
 ### Step 2.1 — Create the previews directory
 ```powershell
-mkdir C:\Users\Yashpreet_o7\Desktop\AURAOS\public\previews 2>$null
+mkdir C:\Users\Yashpreet_o7\Desktop\AetherFlow\public\previews 2>$null
 ```
 
 ### Step 2.2 — Generate placeholders
 Since we can't auto-screenshot Canvas animations, create colored placeholder images.
 
-Create the file `C:\Users\Yashpreet_o7\Desktop\AURAOS\scripts\generate-previews.html`:
+Create the file `C:\Users\Yashpreet_o7\Desktop\AetherFlow\scripts\generate-previews.html`:
 ```html
 <!DOCTYPE html>
 <html>
@@ -159,7 +159,7 @@ In Supabase dashboard:
 3. Copy "Project URL" and "anon public" key
 
 ### Step 3.3 — Create .env file
-Create the file `C:\Users\Yashpreet_o7\Desktop\AURAOS\.env`:
+Create the file `C:\Users\Yashpreet_o7\Desktop\AetherFlow\.env`:
 ```
 VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJh...your_anon_key...
@@ -201,7 +201,7 @@ $$ LANGUAGE sql SECURITY DEFINER;
 
 ### Step 3.5 — Verify
 ```powershell
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run dev
 ```
 Open http://localhost:1420/marketplace — the "Offline" badge should disappear. You should see "Featured" wallpapers (empty at first, which is correct).
@@ -210,13 +210,13 @@ Open http://localhost:1420/marketplace — the "Offline" badge should disappear.
 
 ## TASK 4 — Build Windows Installer (Final Step)
 
-**What this does:** Creates a `.exe` installer file anyone can double-click to install AuraOS.
+**What this does:** Creates a `.exe` installer file anyone can double-click to install AetherFlow.
 
 **Requirements:** Rust must be installed (Task 1 must be complete).
 
 ### Step 4.1 — Build the installer
 ```powershell
-cd C:\Users\Yashpreet_o7\Desktop\AURAOS
+cd C:\Users\Yashpreet_o7\Desktop\AetherFlow
 npm run tauri:build
 ```
 This takes 3–10 minutes. You'll see Rust compilation output.
@@ -224,11 +224,11 @@ This takes 3–10 minutes. You'll see Rust compilation output.
 ### Step 4.2 — Find the installer
 The installer will be at:
 ```
-C:\Users\Yashpreet_o7\Desktop\AURAOS\src-tauri\target\release\bundle\nsis\AuraOS_1.0.0_x64-setup.exe
+C:\Users\Yashpreet_o7\Desktop\AetherFlow\src-tauri\target\release\bundle\nsis\AetherFlow_1.0.7_x64-setup.exe
 ```
 
 ### Step 4.3 — Verify
-Double-click the `.exe` to install AuraOS. It should install and launch normally.
+Double-click the `.exe` to install AetherFlow. It should install and launch normally.
 
 ---
 
@@ -322,4 +322,9 @@ Mark these off as you complete them:
       - Enforced `border: none !important; outline: none !important; box-shadow: none !important;` in `wallpaper.html` and `src/wallpaper.jsx`.
     - [x] Refined screensaver user-input wake sensitivity: increased mouse wake distance threshold to 40px and grace period to 1500ms so initial button release never causes accidental instant dismissal.
     - [x] Added native desktop wallpaper restoration via `SystemParametersInfoW(SPI_SETDESKWALLPAPER)` on `stop_wallpaper` and app `quit` to prevent empty black desktop.
+  - [x] 18.12: Screensaver Smart Suppression & Wallpaper Fullscreen Pause Restoration:
+    - [x] Added smart trigger inhibition rules (`inhibit_fullscreen`, `inhibit_maximized`, `inhibit_audio`) preventing screensaver from interrupting while watching anime, movies, YouTube, or playing video games.
+    - [x] Implemented native Win32 WASAPI peak audio meter (`is_system_audio_active()`) and shell presentation detector (`is_presentation_or_d3d_fullscreen()`).
+    - [x] Fixed wallpaper resume bug on screensaver dismissal: replaced unconditional unpause with atomic `MONITOR_SYNC_REQUESTED` reconciliation, ensuring wallpaper remains paused and audio remains muted while any app is fullscreen or maximized.
+    - [x] Added "Smart Trigger & Media Suppression" setting card in Screensaver Studio (`Screensaver.jsx`) with persisted Zustand toggles (`useStore.js`).
 

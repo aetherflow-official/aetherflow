@@ -42,3 +42,4 @@ __pycache__/
 .env
 .env.*
 !.env.example
+cyberpunk_rain_city.jpg

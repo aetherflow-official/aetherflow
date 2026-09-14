@@ -90,6 +90,10 @@ pub fn get_system_idle_millis() -> u64 {
 use std::sync::Mutex;
 use std::collections::HashMap;
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreensaverSettings {
@@ -109,6 +113,12 @@ pub struct ScreensaverSettings {
     pub grace_period_secs: u32,
     #[serde(alias = "mute_audio")]
     pub mute_audio: bool,
+    #[serde(default = "default_true", alias = "inhibit_fullscreen")]
+    pub inhibit_fullscreen: bool,
+    #[serde(default = "default_true", alias = "inhibit_maximized")]
+    pub inhibit_maximized: bool,
+    #[serde(default = "default_true", alias = "inhibit_audio")]
+    pub inhibit_audio: bool,
 }
 
 static SCREENSAVER_SETTINGS: Mutex<ScreensaverSettings> = Mutex::new(ScreensaverSettings {
@@ -121,6 +131,9 @@ static SCREENSAVER_SETTINGS: Mutex<ScreensaverSettings> = Mutex::new(Screensaver
     lock_on_resume: false,
     grace_period_secs: 5,
     mute_audio: true,
+    inhibit_fullscreen: true,
+    inhibit_maximized: true,
+    inhibit_audio: true,
 });
 
 static SCREENSAVER_ACTIVE: Mutex<bool> = Mutex::new(false);
@@ -140,6 +153,127 @@ pub struct MonitorGridReport {
 }
 
 static LATEST_GRID_REPORTS: Mutex<Vec<MonitorGridReport>> = Mutex::new(Vec::new());
+
+#[cfg(windows)]
+#[allow(dead_code)]
+pub fn is_system_audio_active() -> bool {
+    use windows_sys::Win32::System::Com::*;
+    use windows_sys::core::GUID;
+    use std::ffi::c_void;
+
+    // CLSID_MMDeviceEnumerator: {BCDE0395-E52F-467C-8E3D-C4579291692E}
+    const CLSID_MM_DEVICE_ENUMERATOR: GUID = GUID {
+        data1: 0xBCDE0395,
+        data2: 0xE52F,
+        data3: 0x467C,
+        data4: [0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E],
+    };
+
+    // IID_IMMDeviceEnumerator: {A95664D2-9614-4F35-A746-DE8DB63617E6}
+    const IID_IMM_DEVICE_ENUMERATOR: GUID = GUID {
+        data1: 0xA95664D2,
+        data2: 0x9614,
+        data3: 0x4F35,
+        data4: [0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6],
+    };
+
+    // IID_IAudioMeterInformation: {C02216F6-8C67-4B5B-9D00-D008E73E0064}
+    const IID_IAUDIO_METER_INFORMATION: GUID = GUID {
+        data1: 0xC02216F6,
+        data2: 0x8C67,
+        data3: 0x4B5B,
+        data4: [0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64],
+    };
+
+    #[repr(C)]
+    struct IMMDeviceEnumeratorVtbl {
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+        enum_audio_endpoints: unsafe extern "system" fn(*mut c_void, i32, u32, *mut *mut c_void) -> i32,
+        get_default_audio_endpoint: unsafe extern "system" fn(*mut c_void, i32, i32, *mut *mut c_void) -> i32,
+    }
+
+    #[repr(C)]
+    struct IMMDeviceVtbl {
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+        activate: unsafe extern "system" fn(*mut c_void, *const GUID, u32, *const c_void, *mut *mut c_void) -> i32,
+    }
+
+    #[repr(C)]
+    struct IAudioMeterInformationVtbl {
+        query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+        get_peak_value: unsafe extern "system" fn(*mut c_void, *mut f32) -> i32,
+    }
+
+    unsafe {
+        let _ = CoInitializeEx(std::ptr::null(), COINIT_MULTITHREADED as u32);
+
+        let mut enumerator_ptr: *mut c_void = std::ptr::null_mut();
+        let hr = CoCreateInstance(
+            &CLSID_MM_DEVICE_ENUMERATOR,
+            std::ptr::null_mut(),
+            CLSCTX_ALL,
+            &IID_IMM_DEVICE_ENUMERATOR,
+            &mut enumerator_ptr,
+        );
+        if hr != 0 || enumerator_ptr.is_null() {
+            return false;
+        }
+
+        let enumerator_vtbl = *(enumerator_ptr as *mut *mut IMMDeviceEnumeratorVtbl);
+        let mut device_ptr: *mut c_void = std::ptr::null_mut();
+        let hr2 = ((*enumerator_vtbl).get_default_audio_endpoint)(enumerator_ptr, 0, 1, &mut device_ptr);
+        ((*enumerator_vtbl).release)(enumerator_ptr);
+
+        if hr2 != 0 || device_ptr.is_null() {
+            return false;
+        }
+
+        let device_vtbl = *(device_ptr as *mut *mut IMMDeviceVtbl);
+        let mut meter_ptr: *mut c_void = std::ptr::null_mut();
+        let hr3 = ((*device_vtbl).activate)(device_ptr, &IID_IAUDIO_METER_INFORMATION, CLSCTX_ALL, std::ptr::null(), &mut meter_ptr);
+        ((*device_vtbl).release)(device_ptr);
+
+        if hr3 != 0 || meter_ptr.is_null() {
+            return false;
+        }
+
+        let meter_vtbl = *(meter_ptr as *mut *mut IAudioMeterInformationVtbl);
+        let mut peak: f32 = 0.0;
+        let hr4 = ((*meter_vtbl).get_peak_value)(meter_ptr, &mut peak);
+        ((*meter_vtbl).release)(meter_ptr);
+
+        hr4 == 0 && peak > 0.0005
+    }
+}
+
+#[cfg(not(windows))]
+pub fn is_system_audio_active() -> bool {
+    false
+}
+
+#[cfg(windows)]
+pub fn is_presentation_or_d3d_fullscreen() -> bool {
+    use windows_sys::Win32::UI::Shell::*;
+    let mut state = 0;
+    let hr = unsafe { SHQueryUserNotificationState(&mut state) };
+    if hr == 0 {
+        // QUNS_BUSY = 2, QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4, QUNS_APP = 7
+        state == 2 || state == 3 || state == 4 || state == 7
+    } else {
+        false
+    }
+}
+
+#[cfg(not(windows))]
+pub fn is_presentation_or_d3d_fullscreen() -> bool {
+    false
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PerformanceSettings {
@@ -177,7 +311,7 @@ pub mod mpv;
 pub mod taskbar;
 static MPV_PLAYERS: Mutex<Option<HashMap<String, mpv::MpvProcess>>> = Mutex::new(None);
 
-// ─── Main AuraOS Window Protection & HWND Identity ───────────────────────────
+// ─── Main AetherFlow Window Protection & HWND Identity ───────────────────────────
 static MAIN_HWND: Mutex<Option<usize>> = Mutex::new(None);
 static TRAY_HOLDER: Mutex<Option<tauri::tray::TrayIcon>> = Mutex::new(None);
 static ACTIVE_OAUTH_PORT: Mutex<Option<u16>> = Mutex::new(None);
@@ -186,7 +320,7 @@ static ACTIVE_OAUTH_PORT: Mutex<Option<u16>> = Mutex::new(None);
 pub fn set_main_hwnd(hwnd: HWND) {
     if let Ok(mut guard) = MAIN_HWND.lock() {
         *guard = Some(hwnd as usize);
-        let msg = format!("[DIAG 1] Main AuraOS HWND registered: 0x{:X}", hwnd as usize);
+        let msg = format!("[DIAG 1] Main AetherFlow HWND registered: 0x{:X}", hwnd as usize);
         log_msg(&msg);
         println!("{}", msg);
     }
@@ -726,56 +860,6 @@ pub fn start_system_state_monitor(app: AppHandle) {
 
             let force_sync = MONITOR_SYNC_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst);
 
-            // ── Screensaver Idle Detection & Input Wakeup ─────────────────
-            let is_screensaver_active = SCREENSAVER_ACTIVE.lock().map(|g| *g).unwrap_or(false);
-            let screensaver_cfg = SCREENSAVER_SETTINGS.lock().map(|g| g.clone()).unwrap_or_else(|_| ScreensaverSettings {
-                enabled: false,
-                idle_timeout_mins: 5,
-                mode: String::new(),
-                specific_engine: None,
-                specific_config: None,
-                fade_in_secs: 1.0,
-                lock_on_resume: false,
-                grace_period_secs: 5,
-                mute_audio: true,
-            });
-
-            #[cfg(windows)]
-            {
-                let idle_ms = get_system_idle_millis();
-                if screensaver_cfg.enabled && !is_screensaver_active {
-                    let timeout_ms = (screensaver_cfg.idle_timeout_mins as u64).max(1) * 60 * 1000;
-                    if idle_ms >= timeout_ms {
-                        let msg = format!(
-                            "[SCREENSAVER] System idle: {}ms >= {}ms. Triggering screensaver.",
-                            idle_ms, timeout_ms
-                        );
-                        log_msg(&msg);
-                        println!("{}", msg);
-                        let _ = trigger_screensaver(app.clone(), Some(false));
-                    }
-                } else if is_screensaver_active {
-                    let elapsed = SCREENSAVER_ACTIVATED_AT.lock().ok()
-                        .and_then(|g| g.as_ref().map(|t| t.elapsed()))
-                        .unwrap_or(std::time::Duration::from_secs(999));
-                    let is_preview = SCREENSAVER_IS_PREVIEW.lock().map(|g| *g).unwrap_or(false);
-
-                    let min_grace_ms = if is_preview { 4000 } else { 1500 };
-                    let max_idle_ms = if is_preview { 120 } else { 300 };
-
-                    if elapsed >= std::time::Duration::from_millis(min_grace_ms) && idle_ms < max_idle_ms {
-                        log_msg("[SCREENSAVER] User input detected via GetLastInputInfo. Dismissing screensaver.");
-                        println!("[SCREENSAVER] User input detected. Dismissing screensaver.");
-                        let _ = dismiss_screensaver(app.clone());
-                    }
-                }
-            }
-
-            if is_screensaver_active {
-                std::thread::sleep(std::time::Duration::from_millis(150));
-                continue;
-            }
-
             let (pause_on_battery, pause_on_fullscreen, pause_on_maximized, multi_monitor_pause_mode, audio_playback_rule) = {
                 if let Ok(guard) = PERFORMANCE_SETTINGS.lock() {
                     let mode = if guard.multi_monitor_pause_mode.is_empty() {
@@ -802,6 +886,88 @@ pub fn start_system_state_monitor(app: AppHandle) {
 
             let on_battery = pause_on_battery && is_running_on_battery();
             let (occlusion_map, is_app_focused) = inspect_monitor_occlusion_states(&app);
+
+            // ── Screensaver Idle Detection, Smart Inhibition & Input Wakeup ─────────────────
+            let is_screensaver_active = SCREENSAVER_ACTIVE.lock().map(|g| *g).unwrap_or(false);
+            let screensaver_cfg = SCREENSAVER_SETTINGS.lock().map(|g| g.clone()).unwrap_or_else(|_| ScreensaverSettings {
+                enabled: false,
+                idle_timeout_mins: 5,
+                mode: String::new(),
+                specific_engine: None,
+                specific_config: None,
+                fade_in_secs: 1.0,
+                lock_on_resume: false,
+                grace_period_secs: 5,
+                mute_audio: true,
+                inhibit_fullscreen: true,
+                inhibit_maximized: true,
+                inhibit_audio: true,
+            });
+
+            #[cfg(windows)]
+            {
+                let idle_ms = get_system_idle_millis();
+                if screensaver_cfg.enabled && !is_screensaver_active {
+                    let timeout_ms = (screensaver_cfg.idle_timeout_mins as u64).max(1) * 60 * 1000;
+
+                    let any_fullscreen = occlusion_map.values().any(|s| s.is_fullscreen) || is_presentation_or_d3d_fullscreen();
+                    let any_maximized = occlusion_map.values().any(|s| s.is_maximized);
+                    let is_audio_playing = is_system_audio_active();
+
+                    let suppress_fullscreen = screensaver_cfg.inhibit_fullscreen && any_fullscreen;
+                    let suppress_maximized = screensaver_cfg.inhibit_maximized && any_maximized;
+                    let suppress_audio = screensaver_cfg.inhibit_audio && is_audio_playing && (is_app_focused || any_fullscreen || any_maximized || audio_muted_by_policy);
+
+                    let is_suppressed = suppress_fullscreen || suppress_maximized || suppress_audio;
+
+                    if idle_ms >= timeout_ms {
+                        if is_suppressed {
+                            if taskbar_tick % 8 == 0 {
+                                let reason = if suppress_fullscreen {
+                                    "fullscreen app / presentation active"
+                                } else if suppress_maximized {
+                                    "maximized window active"
+                                } else {
+                                    "active media / audio playback detected"
+                                };
+                                let msg = format!(
+                                    "[SCREENSAVER] Idle timeout reached ({}ms >= {}ms), but screensaver suppressed: {}",
+                                    idle_ms, timeout_ms, reason
+                                );
+                                log_msg(&msg);
+                                println!("{}", msg);
+                            }
+                        } else {
+                            let msg = format!(
+                                "[SCREENSAVER] System idle: {}ms >= {}ms. Triggering screensaver.",
+                                idle_ms, timeout_ms
+                            );
+                            log_msg(&msg);
+                            println!("{}", msg);
+                            let _ = trigger_screensaver(app.clone(), Some(false));
+                        }
+                    }
+                } else if is_screensaver_active {
+                    let elapsed = SCREENSAVER_ACTIVATED_AT.lock().ok()
+                        .and_then(|g| g.as_ref().map(|t| t.elapsed()))
+                        .unwrap_or(std::time::Duration::from_secs(999));
+                    let is_preview = SCREENSAVER_IS_PREVIEW.lock().map(|g| *g).unwrap_or(false);
+
+                    let min_grace_ms = if is_preview { 4000 } else { 1500 };
+                    let max_idle_ms = if is_preview { 120 } else { 300 };
+
+                    if elapsed >= std::time::Duration::from_millis(min_grace_ms) && idle_ms < max_idle_ms {
+                        log_msg("[SCREENSAVER] User input detected via GetLastInputInfo. Dismissing screensaver.");
+                        println!("[SCREENSAVER] User input detected. Dismissing screensaver.");
+                        let _ = dismiss_screensaver(app.clone());
+                    }
+                }
+            }
+
+            if is_screensaver_active {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                continue;
+            }
 
             // Collect active wallpaper window labels
             let windows = app.webview_windows();
@@ -930,13 +1096,26 @@ pub fn start_system_state_monitor(app: AppHandle) {
                         set_mpv_pause(None, should_p);
                     }
 
-                    let event_name = if should_p { "aura:pause" } else { "aura:resume" };
+                    let event_name = if should_p { "aether:pause" } else { "aether:resume" };
+                    let legacy_event = if should_p { "aura:pause" } else { "aura:resume" };
                     if let Some(win) = app.get_webview_window(label.as_str()) {
+                        #[cfg(windows)]
+                        if !should_p {
+                            if let Ok(hwnd) = win.hwnd() {
+                                unsafe {
+                                    InvalidateRect(hwnd.0 as HWND, std::ptr::null(), 1);
+                                    UpdateWindow(hwnd.0 as HWND);
+                                }
+                            }
+                        }
                         let _ = win.emit_to(label.as_str(), event_name, serde_json::json!({ "target": label }));
+                        let _ = win.emit_to(label.as_str(), legacy_event, serde_json::json!({ "target": label }));
                     }
                     let _ = app.emit(event_name, serde_json::json!({ "target": label }));
+                    let _ = app.emit(legacy_event, serde_json::json!({ "target": label }));
                     if wallpaper_labels.len() <= 1 {
                         let _ = app.emit(event_name, serde_json::json!({ "target": "*" }));
+                        let _ = app.emit(legacy_event, serde_json::json!({ "target": "*" }));
                     }
 
                     let state_str = if should_p { "PAUSED" } else { "RESUMED" };
@@ -950,18 +1129,22 @@ pub fn start_system_state_monitor(app: AppHandle) {
             if should_mute_audio != audio_muted_by_policy || force_sync {
                 audio_muted_by_policy = should_mute_audio;
                 set_mpv_mute(app.clone(), None, should_mute_audio);
-                let mute_event = if should_mute_audio { "aura:mute" } else { "aura:unmute" };
+                let mute_event = if should_mute_audio { "aether:mute" } else { "aether:unmute" };
+                let legacy_mute_event = if should_mute_audio { "aura:mute" } else { "aura:unmute" };
                 for (label, win) in &windows {
                     if label.starts_with("wallpaper_") {
                         let is_target = match audio_source_label {
                             Some(ref src) => src == label,
                             None => true,
                         };
-                        let win_event = if should_mute_audio || !is_target { "aura:mute" } else { "aura:unmute" };
+                        let win_event = if should_mute_audio || !is_target { "aether:mute" } else { "aether:unmute" };
+                        let legacy_win_event = if should_mute_audio || !is_target { "aura:mute" } else { "aura:unmute" };
                         let _ = win.emit_to(label.as_str(), win_event, serde_json::json!({ "target": label }));
+                        let _ = win.emit_to(label.as_str(), legacy_win_event, serde_json::json!({ "target": label }));
                     }
                 }
                 let _ = app.emit(mute_event, serde_json::json!({ "target": "*" }));
+                let _ = app.emit(legacy_mute_event, serde_json::json!({ "target": "*" }));
                 let msg = format!("[SYSTEM MONITOR] Audio policy transition -> muted: {} (rule: {}, audio_src: {:?}, force_sync={})", should_mute_audio, audio_playback_rule, audio_source_label, force_sync);
                 log_msg(&msg);
                 println!("{}", msg);
@@ -1011,16 +1194,16 @@ unsafe extern "system" fn enum_window(window: HWND, lparam: LPARAM) -> i32 {
     let cls = String::from_utf16_lossy(&cls_buf[..cls_len as usize]);
     
     if cls == "WorkerW" {
-        log_msg(&format!("[AuraOS Enum] Found WorkerW: 0x{:X}", window as usize));
+        log_msg(&format!("[AetherFlow Enum] Found WorkerW: 0x{:X}", window as usize));
     }
 
     let shell = FindWindowExW(window, std::ptr::null_mut(), shell_class.as_ptr(), std::ptr::null());
     if !shell.is_null() {
-        log_msg(&format!("[AuraOS Enum] Found SHELLDLL_DefView inside 0x{:X}", window as usize));
+        log_msg(&format!("[AetherFlow Enum] Found SHELLDLL_DefView inside 0x{:X}", window as usize));
         state.shell = shell; // Found the shell view (the icons)
         let worker = FindWindowExW(std::ptr::null_mut(), window, worker_class.as_ptr(), std::ptr::null());
         if !worker.is_null() {
-            log_msg(&format!("[AuraOS Enum] Found sibling WorkerW: 0x{:X}", worker as usize));
+            log_msg(&format!("[AetherFlow Enum] Found sibling WorkerW: 0x{:X}", worker as usize));
             state.workerw = worker;
         }
     }
@@ -1052,13 +1235,13 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
     }
 
     unsafe {
-        log_msg(&format!("\n--- [AuraOS WP] pin_hwnd_as_wallpaper called: hwnd=0x{:X} ---",
+        log_msg(&format!("\n--- [AetherFlow WP] pin_hwnd_as_wallpaper called: hwnd=0x{:X} ---",
             hwnd as usize));
 
         // ── Step 1: exact monitor bounds from target_bounds or Win32 ─────────
         let (mon_screen_x, mon_screen_y, mon_w, mon_h) = if let Some(bounds) = target_bounds {
             log_msg(&format!(
-                "[AuraOS WP] Using target monitor bounds: ({},{}) {}x{}",
+                "[AetherFlow WP] Using target monitor bounds: ({},{}) {}x{}",
                 bounds.0, bounds.1, bounds.2, bounds.3
             ));
             bounds
@@ -1074,7 +1257,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             let w = rc.right  - rc.left;
             let h = rc.bottom - rc.top;
             log_msg(&format!(
-                "[AuraOS WP] Monitor rcMonitor: left={} top={} right={} bottom={} ({}x{})",
+                "[AetherFlow WP] Monitor rcMonitor: left={} top={} right={} bottom={} ({}x{})",
                 x, y, rc.right, rc.bottom, w, h
             ));
             (x, y, w, h)
@@ -1084,16 +1267,16 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let vscreen_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
         log_msg(&format!(
-            "[AuraOS WP] Monitor screen bounds: ({},{}) {}x{}",
+            "[AetherFlow WP] Monitor screen bounds: ({},{}) {}x{}",
             mon_screen_x, mon_screen_y, mon_w, mon_h
         ));
-        log_msg(&format!("[AuraOS WP] Virtual desktop origin: ({},{})", vscreen_x, vscreen_y));
+        log_msg(&format!("[AetherFlow WP] Virtual desktop origin: ({},{})", vscreen_x, vscreen_y));
 
         // Log HWND rect before any reparenting
         let mut hwnd_rect: RECT = std::mem::zeroed();
         GetWindowRect(hwnd, &mut hwnd_rect);
         log_msg(&format!(
-            "[AuraOS WP] HWND rect BEFORE SetParent: ({},{}) ({},{})",
+            "[AetherFlow WP] HWND rect BEFORE SetParent: ({},{}) ({},{})",
             hwnd_rect.left, hwnd_rect.top, hwnd_rect.right, hwnd_rect.bottom
         ));
 
@@ -1114,7 +1297,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         }
 
         if progman.is_null() {
-            log_msg("[AuraOS WP] Progman not ready on first attempt (cold boot / reboot). Waiting for Explorer...");
+            log_msg("[AetherFlow WP] Progman not ready on first attempt (cold boot / reboot). Waiting for Explorer...");
             for attempt in 0..30 {
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 progman = FindWindowW(progman_class.as_ptr(), progman_title.as_ptr());
@@ -1125,7 +1308,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
                     progman = GetShellWindow();
                 }
                 if !progman.is_null() {
-                    log_msg(&format!("[AuraOS WP] Found Progman on cold boot retry #{} ({}ms): 0x{:X}", attempt + 1, (attempt + 1) * 200, progman as usize));
+                    log_msg(&format!("[AetherFlow WP] Found Progman on cold boot retry #{} ({}ms): 0x{:X}", attempt + 1, (attempt + 1) * 200, progman as usize));
                     break;
                 }
             }
@@ -1134,11 +1317,11 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let progman = if !progman.is_null() {
             progman
         } else {
-            log_msg("[AuraOS WP] CRITICAL: Cannot find Progman or ShellWindow after retry timeout!");
+            log_msg("[AetherFlow WP] CRITICAL: Cannot find Progman or ShellWindow after retry timeout!");
             
             // HWND_BOTTOM fallback — use exact monitor screen coords directly
             // (no SetParent, so screen coordinates apply as-is).
-            log_msg(&format!("[AuraOS WP] HWND_BOTTOM fallback: pos=({},{}) size={}x{}",
+            log_msg(&format!("[AetherFlow WP] HWND_BOTTOM fallback: pos=({},{}) size={}x{}",
                 mon_screen_x, mon_screen_y, mon_w, mon_h));
             let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
             let new_style = (style | WS_VISIBLE) & !(WS_CAPTION | WS_THICKFRAME | WS_BORDER);
@@ -1148,7 +1331,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             return;
         };
         
-        log_msg(&format!("[AuraOS WP] Using progman HWND = 0x{:X}", progman as usize));
+        log_msg(&format!("[AetherFlow WP] Using progman HWND = 0x{:X}", progman as usize));
 
         let shell_class: Vec<u16> = "SHELLDLL_DefView\0".encode_utf16().collect();
         let worker_class: Vec<u16> = "WorkerW\0".encode_utf16().collect();
@@ -1156,22 +1339,22 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         // Check if Progman has WS_EX_NOREDIRECTIONBITMAP (Windows 11 raised desktop mode)
         let prog_ex = GetWindowLongW(progman, GWL_EXSTYLE) as u32;
         let is_raised_desktop = (prog_ex & 0x00200000) != 0;
-        log_msg(&format!("[AuraOS WP] Progman exStyle=0x{:08X}, is_raised_desktop={}", prog_ex, is_raised_desktop));
+        log_msg(&format!("[AetherFlow WP] Progman exStyle=0x{:08X}, is_raised_desktop={}", prog_ex, is_raised_desktop));
 
         // Always send 0x052C to progman on Windows so Explorer splits the desktop layer on cold boot
-        log_msg("[AuraOS WP] Sending 0x052C to progman (wParam=0x0D lParam=0x1)...");
+        log_msg("[AetherFlow WP] Sending 0x052C to progman (wParam=0x0D lParam=0x1)...");
         SendMessageTimeoutW(progman, 0x052C, 0x0D, 0x1, SMTO_NORMAL, 1000, std::ptr::null_mut());
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         let progman_shell = FindWindowExW(progman, std::ptr::null_mut(), shell_class.as_ptr(), std::ptr::null());
-        log_msg(&format!("[AuraOS WP] SHELLDLL_DefView under Progman = 0x{:X}", progman_shell as usize));
+        log_msg(&format!("[AetherFlow WP] SHELLDLL_DefView under Progman = 0x{:X}", progman_shell as usize));
         if !progman_shell.is_null() {
             state.shell = progman_shell;
         } else {
             for attempt in 0..5usize {
                 EnumWindows(Some(enum_window), &mut state as *mut DesktopWindows as LPARAM);
                 if !state.shell.is_null() {
-                    log_msg(&format!("[AuraOS WP] SHELLDLL_DefView found on attempt {}", attempt + 1));
+                    log_msg(&format!("[AetherFlow WP] SHELLDLL_DefView found on attempt {}", attempt + 1));
                     break;
                 }
                 if attempt < 4 {
@@ -1184,12 +1367,12 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let child_workerw = FindWindowExW(progman, std::ptr::null_mut(), worker_class.as_ptr(), std::ptr::null());
         if !child_workerw.is_null() {
             state.workerw = child_workerw;
-            log_msg(&format!("[AuraOS WP] Found child WorkerW under Progman: 0x{:X}", child_workerw as usize));
+            log_msg(&format!("[AetherFlow WP] Found child WorkerW under Progman: 0x{:X}", child_workerw as usize));
             // Move child WorkerW to HWND_BOTTOM so Explorer's static wallpaper never draws over our live wallpaper
             SetWindowPos(child_workerw, 1 as HWND, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
-        log_msg(&format!("[AuraOS WP] After enum: workerw=0x{:X} shell=0x{:X}",
+        log_msg(&format!("[AetherFlow WP] After enum: workerw=0x{:X} shell=0x{:X}",
             state.workerw as usize, state.shell as usize));
 
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
@@ -1220,16 +1403,16 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             std::mem::size_of::<u32>() as u32,
         );
         
-        log_msg(&format!("[AuraOS WP] Set GWL_STYLE: 0x{:08X} -> 0x{:08X}, added WS_EX_LAYERED, DWM frame disabled", style, new_style));
+        log_msg(&format!("[AetherFlow WP] Set GWL_STYLE: 0x{:08X} -> 0x{:08X}, added WS_EX_LAYERED, DWM frame disabled", style, new_style));
 
         let parent_hwnd = if is_raised_desktop || !progman_shell.is_null() {
-            log_msg(&format!("[AuraOS WP] MODE: Raised Desktop — parent = Progman 0x{:X}", progman as usize));
+            log_msg(&format!("[AetherFlow WP] MODE: Raised Desktop — parent = Progman 0x{:X}", progman as usize));
             progman
         } else if !state.workerw.is_null() {
-            log_msg(&format!("[AuraOS WP] MODE: Standard Desktop — parent = WorkerW 0x{:X}", state.workerw as usize));
+            log_msg(&format!("[AetherFlow WP] MODE: Standard Desktop — parent = WorkerW 0x{:X}", state.workerw as usize));
             state.workerw
         } else {
-            log_msg(&format!("[AuraOS WP] MODE: Fallback — parent = Progman 0x{:X}", progman as usize));
+            log_msg(&format!("[AetherFlow WP] MODE: Fallback — parent = Progman 0x{:X}", progman as usize));
             progman
         };
 
@@ -1237,7 +1420,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let mut parent_client: RECT = std::mem::zeroed();
         GetClientRect(parent_hwnd, &mut parent_client);
         log_msg(&format!(
-            "[AuraOS WP] Parent client rect: ({},{}) ({},{})",
+            "[AetherFlow WP] Parent client rect: ({},{}) ({},{})",
             parent_client.left, parent_client.top,
             parent_client.right, parent_client.bottom
         ));
@@ -1247,7 +1430,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let mut hwnd_rect_after: RECT = std::mem::zeroed();
         GetWindowRect(hwnd, &mut hwnd_rect_after);
         log_msg(&format!(
-            "[AuraOS WP] HWND rect AFTER SetParent: ({},{}) ({},{})",
+            "[AetherFlow WP] HWND rect AFTER SetParent: ({},{}) ({},{})",
             hwnd_rect_after.left, hwnd_rect_after.top, hwnd_rect_after.right, hwnd_rect_after.bottom
         ));
 
@@ -1260,7 +1443,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let client_y = pts[0].y;
 
         log_msg(&format!(
-            "[AuraOS WP] Monitor screen ({},{}) → parent client ({},{})",
+            "[AetherFlow WP] Monitor screen ({},{}) → parent client ({},{})",
             mon_screen_x, mon_screen_y, client_x, client_y
         ));
 
@@ -1281,11 +1464,11 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let bottom_frame = pre_wr.bottom - (client_origin[0].y + pre_cr.bottom);
 
         log_msg(&format!(
-            "[AuraOS WP] Measured frame insets: left={}, top={}, right={}, bottom={}",
+            "[AetherFlow WP] Measured frame insets: left={}, top={}, right={}, bottom={}",
             left_frame, top_frame, right_frame, bottom_frame
         ));
         log_msg(&format!(
-            "[AuraOS WP] Pre-positioning: WinRect=({},{})-({},{}) [{}x{}], ClientScreen=({},{})",
+            "[AetherFlow WP] Pre-positioning: WinRect=({},{})-({},{}) [{}x{}], ClientScreen=({},{})",
             pre_wr.left, pre_wr.top, pre_wr.right, pre_wr.bottom,
             pre_wr.right - pre_wr.left, pre_wr.bottom - pre_wr.top,
             client_origin[0].x, client_origin[0].y
@@ -1303,7 +1486,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let adj_h = mon_h + pad_top + pad_bottom;
 
         log_msg(&format!(
-            "[AuraOS WP] Target client pos=({},{}) size={}x{} -> HWND pos=({},{}) size={}x{}",
+            "[AetherFlow WP] Target client pos=({},{}) size={}x{} -> HWND pos=({},{}) size={}x{}",
             client_x, client_y, mon_w, mon_h,
             adj_x, adj_y, adj_w, adj_h
         ));
@@ -1315,10 +1498,10 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         // window behind state.shell (hWndInsertAfter = state.shell) guarantees
         // icons remain in front of the live wallpaper.
         let insert_after = if !state.shell.is_null() && parent_hwnd == progman {
-            log_msg(&format!("[AuraOS WP] Z-order: placing directly behind SHELLDLL_DefView 0x{:X}", state.shell as usize));
+            log_msg(&format!("[AetherFlow WP] Z-order: placing directly behind SHELLDLL_DefView 0x{:X}", state.shell as usize));
             state.shell
         } else {
-            log_msg("[AuraOS WP] Z-order: using HWND_BOTTOM");
+            log_msg("[AetherFlow WP] Z-order: using HWND_BOTTOM");
             HWND_BOTTOM
         };
 
@@ -1341,7 +1524,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             );
             SetWindowRgn(hwnd, rgn, 1);
             log_msg(&format!(
-                "[AuraOS WP] SetWindowRgn: clipped non-client frame to ({},{})-({},{})",
+                "[AetherFlow WP] SetWindowRgn: clipped non-client frame to ({},{})-({},{})",
                 pad_left, pad_top, pad_left + mon_w, pad_top + mon_h
             ));
         } else {
@@ -1378,17 +1561,17 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         MapWindowPoints(hwnd, std::ptr::null_mut(), final_client_screen.as_mut_ptr(), 1);
 
         log_msg(&format!(
-            "[AuraOS WP] POST-POSITION HWND WinRect: ({},{})-({},{}) [{}x{}]",
+            "[AetherFlow WP] POST-POSITION HWND WinRect: ({},{})-({},{}) [{}x{}]",
             final_wr.left, final_wr.top, final_wr.right, final_wr.bottom,
             final_wr.right - final_wr.left, final_wr.bottom - final_wr.top
         ));
         log_msg(&format!(
-            "[AuraOS WP] POST-POSITION ClientRect: [{}x{}], ScreenOrigin: ({},{}) vs MonitorOrigin: ({},{})",
+            "[AetherFlow WP] POST-POSITION ClientRect: [{}x{}], ScreenOrigin: ({},{}) vs MonitorOrigin: ({},{})",
             final_cr.right, final_cr.bottom,
             final_client_screen[0].x, final_client_screen[0].y,
             mon_screen_x, mon_screen_y
         ));
-        log_msg("[AuraOS WP] pin_hwnd_as_wallpaper complete.");
+        log_msg("[AetherFlow WP] pin_hwnd_as_wallpaper complete.");
         let host_summary = format!(
             "[WALLPAPER HOST]\nparent HWND: 0x{:X}\nWebView controller created: true\nattached to WorkerW: 0x{:X}\nSetWindowPos: ({}, {}) [{} x {}]\nshown: true",
             parent_hwnd as usize,
@@ -1773,7 +1956,7 @@ fn get_monitors(app: AppHandle) -> serde_json::Value {
 }
 
 /// Apply a wallpaper engine: shows & pins the wallpaper window, then emits
-/// 'aura:set-engine' to the wallpaper WebView so it boots the canvas engine,
+/// 'aether:set-engine' to the wallpaper WebView so it boots the canvas engine,
 /// or launches MPV for video wallpapers.
 #[tauri::command]
 async fn apply_wallpaper(
@@ -1815,7 +1998,7 @@ async fn apply_wallpaper(
     };
     #[cfg(windows)]
     {
-        let msg = format!("[DIAG 1 & 4] Main AuraOS HWND: 0x{:X}, Parent before apply: 0x{:X}", main_h_usize, main_parent_before);
+        let msg = format!("[DIAG 1 & 4] Main AetherFlow HWND: 0x{:X}, Parent before apply: 0x{:X}", main_h_usize, main_parent_before);
         log_msg(&msg);
         println!("{}", msg);
     }
@@ -1877,6 +2060,7 @@ async fn apply_wallpaper(
 
                 // 1. Hide the canvas WebviewWindow for this monitor to release decoding & GPU
                 if let Some(win) = app.get_webview_window(&label) {
+                    let _ = win.emit_to(label.as_str(), "aether:stop", serde_json::json!({ "target": label.clone() }));
                     let _ = win.emit_to(label.as_str(), "aura:stop", serde_json::json!({ "target": label.clone() }));
                     let _ = win.hide();
                 }
@@ -1988,7 +2172,7 @@ async fn apply_wallpaper(
                         None
                     });
                     log_msg(&format!(
-                        "[AuraOS WP] Re-pinning and clipping wallpaper window {} (HWND=0x{:X}) after unhide: {:?}",
+                        "[AetherFlow WP] Re-pinning and clipping wallpaper window {} (HWND=0x{:X}) after unhide: {:?}",
                         label, hwnd as usize, mon_bounds
                     ));
                     pin_hwnd_as_wallpaper(hwnd, mon_bounds);
@@ -2037,9 +2221,13 @@ async fn apply_wallpaper(
                     "config": win_config,
                     "target": label.clone(),
                 });
+                let _ = win.emit_to(label.as_str(), "aether:set-engine", payload.clone());
                 let _ = win.emit_to(label.as_str(), "aura:set-engine", payload.clone());
+                let _ = win.emit_to(label.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": brightness, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-brightness", serde_json::json!({ "brightness": brightness, "target": label.clone() }));
+                let _ = win.emit_to(label.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": opacity, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-opacity", serde_json::json!({ "opacity": opacity, "target": label.clone() }));
+                let _ = win.emit_to(label.as_str(), "aether:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
             }
         }
@@ -2050,7 +2238,7 @@ async fn apply_wallpaper(
     if let Some(main_h) = get_main_hwnd() {
         unsafe {
             let parent_after = GetParent(main_h);
-            let msg = format!("[DIAG 5] Main AuraOS HWND: 0x{:X}, Parent AFTER apply: 0x{:X} (Expected 0x0)", main_h as usize, parent_after as usize);
+            let msg = format!("[DIAG 5] Main AetherFlow HWND: 0x{:X}, Parent AFTER apply: 0x{:X} (Expected 0x0)", main_h as usize, parent_after as usize);
             log_msg(&msg);
             println!("{}", msg);
             if parent_after != std::ptr::null_mut() {
@@ -2114,6 +2302,7 @@ fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     for (label, win) in windows {
         if label.starts_with("wallpaper_") && (target == "*" || target == label) {
             let payload = serde_json::json!({ "target": target.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:stop", payload.clone());
             let _ = win.emit_to(label.as_str(), "aura:stop", payload);
             let _ = win.hide();
         }
@@ -2128,7 +2317,7 @@ fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     if let Some(main_h) = get_main_hwnd() {
         unsafe {
             let parent_after = GetParent(main_h);
-            log_msg(&format!("[DIAG 5] Main AuraOS HWND: 0x{:X}, Parent AFTER stop: 0x{:X}", main_h as usize, parent_after as usize));
+            log_msg(&format!("[DIAG 5] Main AetherFlow HWND: 0x{:X}, Parent AFTER stop: 0x{:X}", main_h as usize, parent_after as usize));
         }
     }
 
@@ -2318,8 +2507,9 @@ fn sync_screensaver_settings(settings: ScreensaverSettings) -> Result<(), String
     if let Ok(mut guard) = SCREENSAVER_SETTINGS.lock() {
         *guard = settings;
         log_msg(&format!(
-            "[SCREENSAVER] Settings updated: enabled={}, timeout={}m, mode='{}', lock_on_resume={}, grace={}s",
-            guard.enabled, guard.idle_timeout_mins, guard.mode, guard.lock_on_resume, guard.grace_period_secs
+            "[SCREENSAVER] Settings updated: enabled={}, timeout={}m, mode='{}', lock_on_resume={}, grace={}s, inhibit_fs={}, inhibit_max={}, inhibit_audio={}",
+            guard.enabled, guard.idle_timeout_mins, guard.mode, guard.lock_on_resume, guard.grace_period_secs,
+            guard.inhibit_fullscreen, guard.inhibit_maximized, guard.inhibit_audio
         ));
     }
     Ok(())
@@ -2381,11 +2571,15 @@ fn do_trigger_screensaver(app: AppHandle, is_preview_val: bool) -> Result<(), St
     // 2. Pause desktop wallpapers and mute sound while screensaver is active so NOTHING leaks through
     set_mpv_pause(None, true);
     set_mpv_mute(app.clone(), None, true);
+    let _ = app.emit("aether:pause", serde_json::json!({ "target": "*" }));
     let _ = app.emit("aura:pause", serde_json::json!({ "target": "*" }));
+    let _ = app.emit("aether:mute", serde_json::json!({ "target": "*" }));
     let _ = app.emit("aura:mute", serde_json::json!({ "target": "*" }));
     for (label, win) in app.webview_windows() {
         if label.starts_with("wallpaper_") {
+            let _ = win.emit_to(label.as_str(), "aether:pause", serde_json::json!({ "target": label }));
             let _ = win.emit_to(label.as_str(), "aura:pause", serde_json::json!({ "target": label }));
+            let _ = win.emit_to(label.as_str(), "aether:mute", serde_json::json!({ "target": label }));
             let _ = win.emit_to(label.as_str(), "aura:mute", serde_json::json!({ "target": label }));
         }
     }
@@ -2525,24 +2719,9 @@ fn do_dismiss_screensaver(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    // 2. ALWAYS resume desktop wallpapers and unmute audio
-    set_mpv_pause(None, false);
-    set_mpv_mute(app.clone(), None, false);
-    let _ = app.emit("aura:resume", serde_json::json!({ "target": "*" }));
-    let _ = app.emit("aura:unmute", serde_json::json!({ "target": "*" }));
-    for (label, win) in app.webview_windows() {
-        if label.starts_with("wallpaper_") {
-            #[cfg(windows)]
-            if let Ok(hwnd) = win.hwnd() {
-                unsafe {
-                    InvalidateRect(hwnd.0 as HWND, std::ptr::null(), 1);
-                    UpdateWindow(hwnd.0 as HWND);
-                }
-            }
-            let _ = win.emit_to(label.as_str(), "aura:resume", serde_json::json!({ "target": label }));
-            let _ = win.emit_to(label.as_str(), "aura:unmute", serde_json::json!({ "target": label }));
-        }
-    }
+    // 2. Request an immediate atomic monitor synchronization so the occlusion engine determines
+    // whether wallpapers should resume (if desktop is visible) or STAY paused (if an app is fullscreen/maximized)
+    MONITOR_SYNC_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
 
     if !was_active {
         return Ok(());
@@ -2896,8 +3075,10 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
             }
 
             let payload = serde_json::json!({ "config": win_config, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:update-config", payload.clone());
             let _ = win.emit_to(label.as_str(), "aura:update-config", payload.clone());
             if let Some(fps_val) = config.get("fps").and_then(|v| v.as_f64()) {
+                let _ = win.emit_to(label.as_str(), "aether:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
             }
         }
@@ -2917,6 +3098,7 @@ fn set_wallpaper_brightness(app: AppHandle, brightness: f64) {
     let windows = app.webview_windows();
     for (label, win) in windows {
         if label.starts_with("wallpaper_") {
+            let _ = win.emit_to(label.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": brightness }));
             let _ = win.emit_to(label.as_str(), "aura:set-brightness", serde_json::json!({ "brightness": brightness }));
         }
     }
@@ -2938,6 +3120,7 @@ fn set_wallpaper_opacity(app: AppHandle, opacity: f64) {
     let windows = app.webview_windows();
     for (label, win) in windows {
         if label.starts_with("wallpaper_") {
+            let _ = win.emit_to(label.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": opacity }));
             let _ = win.emit_to(label.as_str(), "aura:set-opacity", serde_json::json!({ "opacity": opacity }));
         }
     }
@@ -2999,8 +3182,10 @@ fn reassign_live_audio_output(app: &AppHandle) {
                 Some(ref t) => t == label,
                 None => true,
             };
-            let mute_event = if should_play { "aura:unmute" } else { "aura:mute" };
+            let mute_event = if should_play { "aether:unmute" } else { "aether:mute" };
+            let legacy_mute_event = if should_play { "aura:unmute" } else { "aura:mute" };
             let _ = win.emit_to(label.as_str(), mute_event, serde_json::json!({ "target": label }));
+            let _ = win.emit_to(label.as_str(), legacy_mute_event, serde_json::json!({ "target": label }));
         }
     }
 }
@@ -3596,9 +3781,12 @@ async fn start_oauth_listener(app: AppHandle) -> Result<u16, String> {
                     println!("[AetherFlow OAuth] SUCCESS: Intercepted OAuth token URL: {}", final_url);
 
                     if let Some(main_win) = app_clone.get_webview_window("main") {
+                        let _ = main_win.emit("aether:oauth-callback", &final_url);
+                        let _ = main_win.emit_to("main", "aether:oauth-callback", &final_url);
                         let _ = main_win.emit("aura:oauth-callback", &final_url);
                         let _ = main_win.emit_to("main", "aura:oauth-callback", &final_url);
                     }
+                    let _ = app_clone.emit("aether:oauth-callback", final_url.clone());
                     let _ = app_clone.emit("aura:oauth-callback", final_url);
                     focus_main_window(&app_clone);
 
@@ -4197,7 +4385,7 @@ fn main() {
             }
 
             let is_minimized = is_minimized_boot();
-            let start_log = format!("AuraOS: Creating main window (minimized/autostart={})...", is_minimized);
+            let start_log = format!("AetherFlow: Creating main window (minimized/autostart={})...", is_minimized);
             log_msg(&start_log);
             println!("{}", start_log);
             let win = tauri::WebviewWindowBuilder::new(
@@ -4216,8 +4404,8 @@ fn main() {
             
             match win {
                 Ok(w) => {
-                    log_msg("AuraOS: Main window created successfully.");
-                    println!("AuraOS: Main window created successfully.");
+                    log_msg("AetherFlow: Main window created successfully.");
+                    println!("AetherFlow: Main window created successfully.");
                     
                     #[cfg(windows)]
                     if let Ok(raw_h) = w.hwnd() {
@@ -4225,7 +4413,7 @@ fn main() {
                         set_main_hwnd(raw_hwnd);
                         unsafe {
                             let parent = GetParent(raw_hwnd);
-                            let msg = format!("[DIAG 1 & 4] Initial Main AuraOS HWND: 0x{:X}, parent: 0x{:X}", raw_hwnd as usize, parent as usize);
+                            let msg = format!("[DIAG 1 & 4] Initial Main AetherFlow HWND: 0x{:X}, parent: 0x{:X}", raw_hwnd as usize, parent as usize);
                             log_msg(&msg);
                             println!("{}", msg);
                         }
@@ -4264,7 +4452,7 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    let err = format!("AuraOS: ERROR creating main window - {}", e);
+                    let err = format!("AetherFlow: ERROR creating main window - {}", e);
                     log_msg(&err);
                     eprintln!("{}", err);
                 }
@@ -4357,10 +4545,12 @@ fn main() {
                         // Run the controlled reconciliation on the stabilized configuration
                         reconcile_wallpaper_windows(&app_handle);
 
-                        let _ = app_handle.emit("aura:monitors-changed", serde_json::json!({
+                        let monitors_payload = serde_json::json!({
                             "count": stable_candidate.len(),
                             "monitors": stable_candidate.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
-                        }));
+                        });
+                        let _ = app_handle.emit("aether:monitors-changed", monitors_payload.clone());
+                        let _ = app_handle.emit("aura:monitors-changed", monitors_payload);
 
                         last_stable_monitors = stable_candidate;
                     }
@@ -4414,6 +4604,7 @@ fn main() {
                             let windows = app.webview_windows();
                             for (label, win) in windows {
                                 if label.starts_with("wallpaper_") {
+                                    let _ = win.emit_to(label.clone(), "aether:pause", serde_json::json!({}));
                                     let _ = win.emit_to(label.clone(), "aura:pause", serde_json::json!({}));
                                 }
                             }
@@ -4423,6 +4614,7 @@ fn main() {
                             let windows = app.webview_windows();
                             for (label, win) in windows {
                                 if label.starts_with("wallpaper_") {
+                                    let _ = win.emit_to(label.clone(), "aether:resume", serde_json::json!({}));
                                     let _ = win.emit_to(label.clone(), "aura:resume", serde_json::json!({}));
                                 }
                             }

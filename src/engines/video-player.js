@@ -57,11 +57,11 @@ export default function createVideoPlayer(canvas, options) {
 
         videoEl.load();
         if (isRunning) {
-          videoEl.play().catch(e => console.error("AuraOS: Auto-play blocked", e));
+          videoEl.play().catch(e => console.error("AetherFlow: Auto-play blocked", e));
         }
       }
     } catch (err) {
-      console.error("AuraOS: Failed to load video", err);
+      console.error("AetherFlow: Failed to load video", err);
     }
   }
 

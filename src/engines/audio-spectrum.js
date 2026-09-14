@@ -83,7 +83,7 @@ export function createAudioSpectrum(canvas, options = {}) {
       dataArray = new Uint8Array(analyser.frequencyBinCount)
       return true
     } catch (e) {
-      console.warn('AuraOS Audio: microphone/device not available, using idle simulation', e)
+      console.warn('AetherFlow Audio: microphone/device not available, using idle simulation', e)
       return false
     }
   }
@@ -167,7 +167,7 @@ export function createAudioSpectrum(canvas, options = {}) {
     window.addEventListener('resize', resize)
     animId = requestAnimationFrame(frame)
     if (options.useMic && !preview) {
-      initAudio().catch(e => console.warn('AuraOS Audio init error:', e))
+      initAudio().catch(e => console.warn('AetherFlow Audio init error:', e))
     }
   }
 
@@ -221,7 +221,7 @@ export function createAudioSpectrum(canvas, options = {}) {
     const nextDevId = options.audioDeviceId || audioDeviceId || 'default'
     if (options.useMic && !preview) {
       if (!prevUseMic || nextDevId !== prevDevId || !stream) {
-        initAudio().catch(e => console.warn('AuraOS Audio init error:', e))
+        initAudio().catch(e => console.warn('AetherFlow Audio init error:', e))
       }
     } else if (prevUseMic && !options.useMic && stream) {
       stream.getTracks().forEach(t => t.stop())

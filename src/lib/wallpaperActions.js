@@ -134,7 +134,7 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
 
     return true
   } catch (err) {
-    console.error('[AuraOS] Failed to apply wallpaper to desktop:', err)
+    console.error('[AetherFlow] Failed to apply wallpaper to desktop:', err)
     return false
   }
 }
@@ -161,7 +161,7 @@ export async function stopDesktopWallpaper(targetMonitor = null) {
     }
     return true
   } catch (err) {
-    console.error('[AuraOS] Failed to stop wallpaper:', err)
+    console.error('[AetherFlow] Failed to stop wallpaper:', err)
     return false
   }
 }
