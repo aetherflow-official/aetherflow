@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Check, Pencil, Video, Image as ImageIcon, Pin } from 'lucide-react'
 
 /**
@@ -25,7 +26,7 @@ export function AddWallpaperModal({ isOpen, filePath, initialName, onClose, onCo
     onConfirm({ name: name.trim(), pinToHome })
   }
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -116,7 +117,8 @@ export function AddWallpaperModal({ isOpen, filePath, initialName, onClose, onCo
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -140,7 +142,7 @@ export function RenameWallpaperModal({ isOpen, currentName, onClose, onConfirm }
     onConfirm(name.trim())
   }
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -201,7 +203,8 @@ export function RenameWallpaperModal({ isOpen, currentName, onClose, onConfirm }
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -265,7 +268,7 @@ export function AddWebStreamModal({ isOpen, onClose, onConfirm }) {
     })
   }
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -411,7 +414,8 @@ export function AddWebStreamModal({ isOpen, onClose, onConfirm }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

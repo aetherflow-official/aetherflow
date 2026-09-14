@@ -2089,3 +2089,21 @@
      - Deployed updated `AetherFlow.exe` (7.52 MB, PID 21252) running with active desktop pinning.
 - **Build status:** ✅ `npm run build` (505ms) & `cargo build --release` (2m 12s) passing cleanly. Verified running.
 ---
+
+## Session: 2026-09-14 17:25 IST (Modal Viewport Portaling & Release Deployment)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Modal Viewport Portaling (`createPortal`)**:
+     - Diagnosed root cause of takedown modal vertical offset: `<div className="animate-fadeIn">` established a new containing block for `position: fixed` elements, causing modals to center relative to the 4,400px+ scroll height instead of the viewport.
+     - Portaled `takedownTarget`, `showAdminModal`, and `actionNotice` to `document.body` in `src/pages/Community.jsx`.
+     - Portaled `AddWallpaperModal`, `RenameWallpaperModal`, and `AddWebStreamModal` to `document.body` in `src/components/Modals/WallpaperModals.jsx`.
+  2. **Automated Testing & Verification**:
+     - Scrolled catalog container down 1,500px (`scrollTop = 1500`) and triggered takedown dialog.
+     - Verified bounding rect using Chrome DevTools: `isDeadCenterVertical: true`, `isDeadCenterHorizontal: true`.
+     - Visual screenshot confirmed perfect viewport centering regardless of scroll offset.
+  3. **Production Release Deployment**:
+     - Ran `npm run build` (passed in 463ms).
+     - Compiled release binary via `cargo build --release` (2m 10s).
+     - Deployed updated `AetherFlow.exe` (7.52 MB, PID 27820).
+- **Build status:** ✅ `npm run build` (463ms) & `cargo build --release` (2m 10s) passing cleanly. Deployed and verified.
+---

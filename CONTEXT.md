@@ -3,20 +3,15 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-14 17:15 IST — Community Hub Quick Takedown Superpowers & Production Release:
-1. **Instant Thumbnail Takedown Button**:
-   - Added a red `Take Down` overlay button directly on the top-left of each wallpaper card's thumbnail when Admin Mode is active.
-   - Admins can immediately click "Take Down" without scrolling down the card body past descriptions, tags, and apply buttons.
-2. **In-Modal Live Takedown Action**:
-   - Added a prominent red `Take Down` button directly inside the full-screen `CommunityPreviewModal` (both in the modal header and bottom actions bar).
-   - Enables reviewing the live animation and removing it in 1 click without closing the modal or hunting down cards.
-3. **Browse View Mode Toggle (Cards vs Compact List)**:
-   - Added a view switcher (`Cards` vs `Compact List`) on the Browse tab.
-   - Compact List view renders condensed 48px rows allowing 15+ wallpapers to be visible at once with direct "Take Down" buttons on the right edge.
-4. **Dedicated "Manage & Takedowns" Tab**:
-   - Added a dedicated Admin tab with high-density catalog table, instant search, and a "Fast Takedown by URL or ID" input for immediate 1-second removal without scrolling.
-5. **Production Binary Deployment**:
-   - Recompiled via `cargo build --release` (2m 12s) and deployed `AetherFlow.exe` (7.52 MB, PID 21252).
+2026-09-14 17:25 IST — Modal Viewport Portaling & Release Deployment:
+1. **Modal Viewport Centering (createPortal)**:
+   - Fixed containing block issue caused by `<div className="animate-fadeIn">` which previously stretched `position: fixed` modals across the 4,400px+ scroll height.
+   - Wrapped `takedownTarget`, `showAdminModal`, and `actionNotice` in `createPortal(..., document.body)` with `zIndex: 999999`.
+   - Also updated `src/components/Modals/WallpaperModals.jsx` (`AddWallpaperModal`, `RenameWallpaperModal`, `AddWebStreamModal`) to use `createPortal(..., document.body)`.
+   - Verified via DevTools at `scrollTop = 1500`: `isDeadCenterVertical: true`, `isDeadCenterHorizontal: true`.
+2. **Production Binary Deployment**:
+   - Recompiled via `cargo build --release` (2m 10s) with latest frontend assets.
+   - Deployed updated `AetherFlow.exe` (7.52 MB, PID 27820).
 
 
 

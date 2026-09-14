@@ -480,8 +480,8 @@ export default function CommunityPage() {
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
-      {/* ── Action Notice Toast ── */}
-      {actionNotice && (
+      {/* ── Action Notice Toast (Portaled to document.body for true viewport anchoring) ── */}
+      {actionNotice && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -503,7 +503,8 @@ export default function CommunityPage() {
         >
           {actionNotice.type === 'error' ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
           <span>{actionNotice.msg}</span>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Top Header with Stats & Admin Bar ── */}
@@ -1877,12 +1878,12 @@ export default function CommunityPage() {
       )}
 
       {/* ── ADMIN PASSCODE UNLOCK MODAL ── */}
-      {showAdminModal && (
+      {showAdminModal && createPortal(
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 99999,
+            zIndex: 999999,
             background: 'rgba(0, 0, 0, 0.7)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
@@ -1986,16 +1987,17 @@ export default function CommunityPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── TAKEDOWN CONFIRMATION MODAL ── */}
-      {takedownTarget && (
+      {takedownTarget && createPortal(
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 99999,
+            zIndex: 999999,
             background: 'rgba(0, 0, 0, 0.75)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
@@ -2013,6 +2015,7 @@ export default function CommunityPage() {
               padding: '24px 28px',
               borderRadius: 14,
               border: '1px solid color-mix(in srgb, var(--color-rose) 30%, var(--border-main))',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255,255,255,0.08)',
             }}
             onClick={e => e.stopPropagation()}
           >
@@ -2084,7 +2087,8 @@ export default function CommunityPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── ZERO-MEMORY-LEAK LIVE PREVIEW MODAL ── */}
