@@ -398,13 +398,13 @@ export default function SettingsPage() {
               </div>
 
               <div className="text-xs text-muted" style={{ lineHeight: 1.5 }}>
-                Your account synchronizes your liked wallpapers, community ratings, and published marketplace creations across devices.
+                Your account synchronizes your liked wallpapers, community ratings, and published creations across devices.
               </div>
             </div>
           ) : (
             <div>
               <div className="text-xs text-muted" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-                Sign in with your Google or GitHub account to publish creations to the Community Marketplace, sync liked wallpapers, and build your creator profile.
+                Sign in with your Google or GitHub account to publish creations to the Community Hub, sync liked wallpapers, and build your creator profile.
               </div>
               <button
                 type="button"
@@ -431,7 +431,7 @@ export default function SettingsPage() {
 
         <SettingRow
           label="Supabase Cloud Connectivity"
-          desc="Required for Community Marketplace browsing, publishing, and OAuth session synchronization"
+          desc="Required for Community Hub browsing, publishing, and OAuth session synchronization"
         >
           <span
             className={`badge ${isOnline() ? 'badge-emerald' : ''}`}

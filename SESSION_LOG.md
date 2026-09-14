@@ -2041,8 +2041,30 @@
      - Frontend build (`npm run build`): passed in 731ms.
      - Rust backend check (`cargo check`): passed in 3.06s.
      - Release binary `AetherFlow.exe` running (PID 22812), MPV video engine running (PIDs 32524 & 32536).
-- **Build status:** ✅ `npm run build` & `cargo check` passing with 0 errors. Verified running cleanly.
 ---
 
-
-
+## Session: 2026-09-14 16:55 IST (Community Hub Rebrand & In-App Admin Moderation System)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Git Commit & Push Pre-requisite**:
+     - Committed screensaver smart suppression fixes (`4ab577e`) and pushed to `origin/ui/ux`.
+  2. **Community Hub Rebranding**:
+     - Renamed "Marketplace" to "Community Hub" across app routing (`/community`), navigation (`Users` icon), Settings, and AuthModal.
+     - Preserved backwards compatibility via re-export bridges in `src/pages/Marketplace.jsx` and `src/lib/marketplace.js`.
+  3. **In-App Admin Moderation & Review Queue**:
+     - Created `src/lib/community.js` with hybrid catalog merging: pulls static GitHub catalog + approved Supabase submissions, filtering out taken-down entries.
+     - Implemented `approveSubmission(id)`, `rejectSubmission(id, reason)`, and `fetchPendingSubmissions()`.
+     - Built dedicated "Moderation Queue" tab in `src/pages/Community.jsx` with pending counter badge, submission details, live interactive preview, and one-click "Approve & Publish" and "Reject".
+     - Approving immediately publishes the wallpaper into the live Community feed without needing to open GitHub or create pull requests.
+  4. **In-App Takedown & Removal System**:
+     - Implemented `removeCommunityWallpaper(id, reason)` with instant local and cloud exclusion.
+     - Added card-level "Take Down" action with confirmation modal and reason logging when Admin Mode is active.
+     - Added "Feature / Unfeature" toggle on wallpaper cards for instant staff-pick highlighting.
+  5. **Admin Passcode & Role Security**:
+     - Added `checkIsAdmin(user, adminUnlocked)` checking user metadata role, admin emails, or in-app passcode.
+     - Added in-app "Admin Passcode Modal" (`aether-admin` / `VITE_COMMUNITY_ADMIN_KEY`) with Zustand persistence.
+  6. **End-to-End Verification**:
+     - Tested full workflow in browser subagent: verified UI, unlocked admin mode with passcode, submitted wallpaper, verified moderation queue, approved submission, verified instant publication in browse feed, and locked admin mode.
+     - `npm run build` compiled cleanly in 507ms.
+- **Build status:** ✅ `npm run build` passing with 0 errors. Verified end-to-end.
+---

@@ -227,7 +227,7 @@ export default function AuthModal() {
             textAlign: 'center',
           }}>
             <div className="text-xs" style={{ color: 'var(--color-amber)' }}>
-              Marketplace not configured yet. Add Supabase credentials to <code>.env</code> to enable sign-in.
+              Community Hub cloud sync not configured yet. Add Supabase credentials to <code>.env</code> to enable sign-in.
             </div>
           </div>
         )}

@@ -537,6 +537,12 @@ export const useStore = create(
       setCardOpacity: (v) => set({ cardOpacity: v }),
       setCardBlur: (v) => set({ cardBlur: v }),
       setSidebarOpacity: (v) => set({ sidebarOpacity: v }),
+
+      // ── Community Admin & Moderation ───────────────────────────────────────
+      communityAdminUnlocked: false,
+      communityAdminPasscode: '',
+      setCommunityAdminUnlocked: (v) => set({ communityAdminUnlocked: Boolean(v) }),
+      setCommunityAdminPasscode: (p) => set({ communityAdminPasscode: p || '' }),
     }),
     {
       name: 'aetherflow-state',
@@ -622,6 +628,8 @@ export const useStore = create(
           user_metadata: s.authUser.user_metadata || {},
         } : null,
         isAuthenticated: !!s.isAuthenticated,
+        communityAdminUnlocked: !!s.communityAdminUnlocked,
+        communityAdminPasscode: s.communityAdminPasscode || '',
       }),
     }
   )

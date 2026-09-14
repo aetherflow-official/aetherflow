@@ -3,18 +3,24 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-14 16:05 IST — Screensaver Smart Suppression & Fullscreen Wallpaper Pause Fixed:
-1. **Screensaver Smart Suppression & Media Awareness**:
-   - Implemented three configurable inhibition rules in `ScreensaverSettings`: `inhibit_fullscreen` (default true), `inhibit_maximized` (default true), and `inhibit_audio` (default true).
-   - Added native Win32 WASAPI endpoint peak meter query (`is_system_audio_active()`) detecting active audio/dialogue through speakers.
-   - Added shell notification & DirectX fullscreen detector (`is_presentation_or_d3d_fullscreen()`).
-   - Integrated inhibition checks into the idle loop so screensaver never triggers during anime, movies, YouTube, or gaming.
-2. **Wallpaper Fullscreen Pause Restoration on Screensaver Dismissal**:
-   - Eliminated unconditional `set_mpv_pause(None, false)` and `aura:resume` broadcasts in `do_dismiss_screensaver`.
-   - Replaced with atomic `MONITOR_SYNC_REQUESTED` reconciliation so the occlusion engine evaluates true display state: if an app is fullscreen or maximized, wallpaper remains paused and audio remains muted.
-3. **Frontend & Deployment**:
-   - Added "Smart Trigger & Media Suppression" setting card in Screensaver Studio with persisted Zustand toggles.
-   - Rebuilt frontend (`npm run build` 481ms) and backend (`cargo check` 2.96s), compiled release binary `AetherFlow.exe` (7.51 MB, PID 24216).
+2026-09-14 16:55 IST — Community Hub Rebrand & In-App Admin Moderation System:
+1. **Community Hub Rebranding**:
+   - Rebranded "Marketplace" to **Community Hub** across all navigation, headers, routes (`/community` primary, `/marketplace` fallback), and documentation to reflect that AetherFlow is 100% free and open-source.
+   - Updated sidebar icon from `Store` to `Users`.
+2. **In-App Admin Moderation & Approval System**:
+   - Built an in-app **Moderation Queue** tab allowing administrators/owners to review community wallpaper submissions directly in the app.
+   - Created zero-leak live preview capability so moderators can test animations before approving.
+   - One-click **Approve & Publish**: updates submission status, dynamically merges approved community submissions into the live catalog, and makes wallpapers live immediately for all users without touching GitHub or filing PRs!
+   - Built-in schema flexibility with automatic fallbacks for optional Supabase columns.
+3. **In-App Takedown & Removal System**:
+   - Admins can remove any published wallpaper directly in the app via the "Take Down" action with confirmation and reason tracking.
+   - Instant local and cloud exclusion filters ensure removed wallpapers disappear immediately from the public feed.
+4. **Admin Authorization & Passcode Unlock**:
+   - Supports automatic role/email admin detection (`authUser.email` / `user_metadata.role`).
+   - Added in-app **Admin Passcode Modal** (`aether-admin` / `VITE_COMMUNITY_ADMIN_KEY`) allowing the owner to unlock moderator powers on any installation.
+5. **Verification**:
+   - Verified end-to-end with automated browser subagent (unlocking admin mode, submitting a wallpaper, approving in moderation queue, verifying live feed appearance, and re-locking).
+   - Frontend build (`npm run build`) passing cleanly in 507ms.
 
 
 

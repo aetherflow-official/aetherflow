@@ -770,7 +770,52 @@ input:checked ~ .toggle-thumb {
   color: rgba(255, 255, 255, 0.7);
   margin-top: 8px;
   user-select: none;
+}/* ── Community Hub & Admin Moderation Styling ────────────────────────────── */
+.admin-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--color-amber) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-amber) 40%, transparent);
+  color: var(--color-amber);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--color-amber) 25%, transparent);
 }
 
+.mod-queue-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--color-rose);
+  color: #ffffff;
+  line-height: 1;
+}
 
+.admin-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
 
+.admin-action-btn:hover {
+  transform: translateY(-1px);
+}

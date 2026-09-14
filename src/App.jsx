@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { Home, Store, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2 } from 'lucide-react'
+import { Home, Users, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2 } from 'lucide-react'
 import { checkForUpdate } from './lib/updater.js'
 import { useStore, syncCustomWallpapersFromDisk } from './store/useStore.js'
 import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperActions.js'
@@ -9,7 +9,7 @@ import AuthModal from './components/AuthModal/index.jsx'
 import UserAvatar from './components/UserAvatar/index.jsx'
 import StatusBar from './components/StatusBar/index.jsx'
 import HomePage from './pages/Home.jsx'
-import MarketplacePage from './pages/Marketplace.jsx'
+import CommunityPage from './pages/Community.jsx'
 import LibraryPage from './pages/Library.jsx'
 import DisplaysPage from './pages/Displays.jsx'
 import PersonalizationPage from './pages/Personalization.jsx'
@@ -25,7 +25,7 @@ import SettingsPage from './pages/Settings.jsx'
 const NAV = [
   { to: '/',                icon: Home,        label: 'Home' },
   { to: '/library',         icon: Library,     label: 'Library' },
-  { to: '/marketplace',     icon: Store,       label: 'Marketplace' },
+  { to: '/community',       icon: Users,       label: 'Community' },
   { to: '/displays',        icon: Monitor,     label: 'Displays & Workspace' },
   { to: '/personalization', icon: Palette,     label: 'Personalization' },
   { to: '/audio',           icon: Volume2,     label: 'Audio' },
@@ -626,7 +626,8 @@ export default function App() {
           <Routes>
             <Route path="/"                element={<HomePage />} />
             <Route path="/library"         element={<LibraryPage />} />
-            <Route path="/marketplace"     element={<MarketplacePage />} />
+            <Route path="/community"       element={<CommunityPage />} />
+            <Route path="/marketplace"     element={<CommunityPage />} />
             <Route path="/displays"        element={<DisplaysPage />} />
             <Route path="/personalization" element={<PersonalizationPage />} />
             <Route path="/audio"           element={<AudioPage />} />
