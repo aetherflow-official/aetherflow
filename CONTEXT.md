@@ -3,15 +3,13 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-14 17:25 IST — Modal Viewport Portaling & Release Deployment:
-1. **Modal Viewport Centering (createPortal)**:
-   - Fixed containing block issue caused by `<div className="animate-fadeIn">` which previously stretched `position: fixed` modals across the 4,400px+ scroll height.
-   - Wrapped `takedownTarget`, `showAdminModal`, and `actionNotice` in `createPortal(..., document.body)` with `zIndex: 999999`.
-   - Also updated `src/components/Modals/WallpaperModals.jsx` (`AddWallpaperModal`, `RenameWallpaperModal`, `AddWebStreamModal`) to use `createPortal(..., document.body)`.
-   - Verified via DevTools at `scrollTop = 1500`: `isDeadCenterVertical: true`, `isDeadCenterHorizontal: true`.
+2026-09-14 17:33 IST — Community Card Takedown De-Duplication & Polish:
+1. **Clean Card Layout & De-Duplication**:
+   - Removed redundant duplicate `Take Down` overlays from the thumbnail and the icon trash button beside the author/like header.
+   - Unified admin actions cleanly in the dedicated `ADMIN ACTIONS` bottom footer bar (`[⭐ Feature]` and `[🗑️ Take Down]`).
+   - Thumbnail artwork and card title row are now completely uncluttered and professional.
 2. **Production Binary Deployment**:
-   - Recompiled via `cargo build --release` (2m 10s) with latest frontend assets.
-   - Deployed updated `AetherFlow.exe` (7.52 MB, PID 27820).
+   - Building release binary via `cargo build --release` with latest cleaned assets.
 
 
 

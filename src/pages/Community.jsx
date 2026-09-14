@@ -958,24 +958,6 @@ export default function CommunityPage() {
                         </div>
                       )}
 
-                      {/* Top-Left: Immediate Admin Quick Takedown button right on the thumbnail */}
-                      {isAdmin && (
-                        <div style={{ position: 'absolute', top: 10, left: item.featured ? 94 : 10, zIndex: 4 }}>
-                          <button
-                            type="button"
-                            className="mp-quick-takedown-btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setTakedownTarget(item)
-                              setTakedownReason('')
-                            }}
-                            title="Take down this wallpaper immediately"
-                          >
-                            <Trash2 size={11} />
-                            <span>Take Down</span>
-                          </button>
-                        </div>
-                      )}
 
                       {/* Top-Right: Media Type Badge */}
                       <div className="mp-badge-top-right">
@@ -1024,36 +1006,18 @@ export default function CommunityPage() {
                           </div>
                         </div>
 
-                        {/* Top Action Cluster: Quick Trash (Admin) + Like Button */}
-                        <div className="flex items-center gap-1.5">
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              className="admin-quick-trash"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setTakedownTarget(item)
-                                setTakedownReason('')
-                              }}
-                              title="Take down this wallpaper"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
-
-                          <button
-                            className={`mp-like-btn ${isLiked ? 'liked' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleLike(item.id)
-                            }}
-                            disabled={likingId === item.id}
-                            title={isLiked ? 'Unlike' : 'Like'}
-                          >
-                            <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
-                            <span>{currentLikes}</span>
-                          </button>
-                        </div>
+                        <button
+                          className={`mp-like-btn ${isLiked ? 'liked' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleLike(item.id)
+                          }}
+                          disabled={likingId === item.id}
+                          title={isLiked ? 'Unlike' : 'Like'}
+                        >
+                          <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
+                          <span>{currentLikes}</span>
+                        </button>
                       </div>
 
                       {item.description && (
