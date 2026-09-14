@@ -4,7 +4,8 @@ import {
   Search, Download, Globe, Image, MonitorPlay, Upload, Users, Palette,
   LogIn, Play, Check, Heart, Clock, CheckCircle, XCircle, FileText,
   Award, Eye, X, FolderPlus, Shield, ShieldCheck, ShieldAlert, Trash2,
-  Star, Lock, Unlock, AlertTriangle, RefreshCw, Filter, Sparkles
+  Star, Lock, Unlock, AlertTriangle, RefreshCw, Filter, Sparkles,
+  LayoutGrid, List, SlidersHorizontal, ShieldX
 } from 'lucide-react'
 import {
   searchCatalog,
@@ -54,6 +55,7 @@ const STATUS_BADGES = {
 
 export default function CommunityPage() {
   const [tab, setTab] = useState('browse')
+  const [browseView, setBrowseView] = useState('grid') // 'grid' | 'compact'
   const [query, setQuery] = useState('')
   const [selectedTags, setSelectedTags] = useState([])
   const [typeFilter, setTypeFilter] = useState('')
@@ -82,6 +84,10 @@ export default function CommunityPage() {
   const [loadingQueue, setLoadingQueue] = useState(false)
   const [moderatingId, setModeratingId] = useState(null)
   const [actionNotice, setActionNotice] = useState(null)
+
+  // Manage Catalog tab state
+  const [manageSearch, setManageSearch] = useState('')
+  const [quickTakedownInput, setQuickTakedownInput] = useState('')
 
   // Admin passcode modal & status
   const [showAdminModal, setShowAdminModal] = useState(false)
@@ -352,7 +358,6 @@ export default function CommunityPage() {
       await approveSubmission(sub.id)
       setPendingQueue(prev => prev.filter(item => item.id !== sub.id))
       showNotice(`Approved "${sub.title || 'wallpaper'}"! It is now live in the Community Hub.`)
-      // Refresh browse catalog in background
       doSearch(true)
       loadStatsAndCounts()
     } catch (err) {
@@ -392,6 +397,25 @@ export default function CommunityPage() {
     }
   }
 
+  const handleQuickTakedownByUrlOrId = () => {
+    if (!quickTakedownInput.trim()) return
+    const input = quickTakedownInput.trim()
+    const target = results.find(w =>
+      w.id === input ||
+      w.source === input ||
+      (w.source && input.includes(w.source)) ||
+      (parseYouTubeId(w.source) && input.includes(parseYouTubeId(w.source)))
+    )
+
+    if (target) {
+      setTakedownTarget(target)
+      setTakedownReason('Quick Takedown via URL/ID')
+      setQuickTakedownInput('')
+    } else {
+      showNotice('No published wallpaper matches that URL or ID.', 'error')
+    }
+  }
+
   const handleToggleFeature = async (wallpaper) => {
     try {
       const res = await toggleFeaturedWallpaper(wallpaper.id, wallpaper.featured)
@@ -420,7 +444,7 @@ export default function CommunityPage() {
   const handleLockAdmin = () => {
     setCommunityAdminUnlocked(false)
     showNotice('Admin Mode locked.')
-    if (tab === 'moderation') setTab('browse')
+    if (tab === 'moderation' || tab === 'manage') setTab('browse')
   }
 
   const handleSubmit = async (e) => {
@@ -434,7 +458,6 @@ export default function CommunityPage() {
       })
       setSubmitResult({ success: true, message: 'Submitted! Your wallpaper is queued for review and will appear once approved by moderators.' })
       setSubmitForm({ title: '', description: '', type: 'youtube', source: '', tags: [], authorName: '' })
-      // If admin, also refresh queue immediately
       if (isAdmin) loadPendingQueue()
     } catch (err) {
       setSubmitResult({ success: false, message: err.message })
@@ -442,6 +465,18 @@ export default function CommunityPage() {
       setSubmitting(false)
     }
   }
+
+  // Filter for Manage tab
+  const manageFilteredWallpapers = results.filter(w => {
+    if (!manageSearch) return true
+    const q = manageSearch.toLowerCase()
+    return (
+      w.name?.toLowerCase().includes(q) ||
+      w.author?.toLowerCase().includes(q) ||
+      w.id?.toLowerCase().includes(q) ||
+      w.source?.toLowerCase().includes(q)
+    )
+  })
 
   return (
     <div className="animate-fadeIn" style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
@@ -552,12 +587,19 @@ export default function CommunityPage() {
           { id: 'browse', label: 'Browse', icon: Search },
           { id: 'submit', label: 'Submit Wallpaper', icon: Upload },
           { id: 'submissions', label: 'My Submissions', icon: FileText },
-          ...(isAdmin ? [{
-            id: 'moderation',
-            label: 'Moderation Queue',
-            icon: ShieldAlert,
-            badge: pendingQueue.length,
-          }] : []),
+          ...(isAdmin ? [
+            {
+              id: 'moderation',
+              label: 'Moderation Queue',
+              icon: ShieldAlert,
+              badge: pendingQueue.length,
+            },
+            {
+              id: 'manage',
+              label: 'Manage & Takedowns',
+              icon: ShieldX,
+            },
+          ] : []),
         ].map(t => (
           <button
             key={t.id}
@@ -579,11 +621,11 @@ export default function CommunityPage() {
       {/* ── BROWSE TAB ── */}
       {tab === 'browse' && (
         <>
-          {/* Filter Toolbar: Search, Type, Quick Filter, Sort */}
+          {/* Filter Toolbar: Search, Type, Quick Filter, View Mode */}
           <div style={{ marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {/* Search input */}
-              <div style={{ position: 'relative', flex: '1 1 280px' }}>
+              <div style={{ position: 'relative', flex: '1 1 240px' }}>
                 <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   value={query}
@@ -638,6 +680,31 @@ export default function CommunityPage() {
                   </button>
                 ))}
               </div>
+
+              {/* View Mode Toggle: Grid vs Compact List */}
+              <div className="flex gap-1" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                <span className="text-xs text-subtle" style={{ marginRight: 2 }}>View:</span>
+                <button
+                  type="button"
+                  className={`btn ${browseView === 'grid' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ padding: '5px 8px', height: 28, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  onClick={() => setBrowseView('grid')}
+                  title="Grid Cards View"
+                >
+                  <LayoutGrid size={12} />
+                  <span>Cards</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${browseView === 'compact' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ padding: '5px 8px', height: 28, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  onClick={() => setBrowseView('compact')}
+                  title="Compact List View (Fast Takedowns & Scanning)"
+                >
+                  <List size={12} />
+                  <span>Compact List</span>
+                </button>
+              </div>
             </div>
 
             {/* Tag chips */}
@@ -665,7 +732,7 @@ export default function CommunityPage() {
             </div>
           </div>
 
-          {/* Results Grid */}
+          {/* Results Display */}
           {loading ? (
             <div className="flex items-center justify-center" style={{ height: 240, color: 'var(--text-muted)' }}>
               <div className="animate-spin" style={{ width: 28, height: 28, border: '2px solid var(--border-main)', borderTopColor: 'var(--color-brand)', borderRadius: '50%' }} />
@@ -694,7 +761,150 @@ export default function CommunityPage() {
                 Reset Filters
               </button>
             </div>
+          ) : browseView === 'compact' ? (
+            /* ── COMPACT LIST VIEW (Instant Takedowns, zero scrolling needed) ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {results.map(item => {
+                const badge = TYPE_BADGES[item.type] || {}
+                const isLiked = likedIds.has(item.id)
+                const currentDownloads = Math.max(item.downloads || 0, downloadCounts[item.id] ?? 0)
+                const currentLikes = likeCounts[item.id] ?? item.likes ?? 0
+                const targetId = `community-${item.id}`
+                const isInstalled = (installed || []).some(i => i?.id === targetId || i?.communityMeta?.originalId === item.id)
+                const isCurrentlyApplied = isWallpaperRunning && (currentDesktopWallpaper?.id === targetId || activeWallpaper?.id === targetId)
+                const isApplying = applyingId === item.id
+
+                return (
+                  <div key={item.id} className="community-list-row">
+                    {/* Thumbnail */}
+                    <div
+                      style={{
+                        width: 72,
+                        height: 44,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        background: '#000',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        position: 'relative',
+                      }}
+                      onClick={() => setPreviewItem(item)}
+                      title="Click to preview"
+                    >
+                      {item.preview ? (
+                        <img src={item.preview} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div className="flex items-center justify-center w-full h-full text-subtle text-xs">
+                          {item.type}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="font-semibold text-sm truncate"
+                          style={{ color: 'var(--text-main)', cursor: 'pointer' }}
+                          onClick={() => setPreviewItem(item)}
+                          title={item.name}
+                        >
+                          {item.name}
+                        </span>
+                        {item.featured && (
+                          <span className="badge badge-amber" style={{ fontSize: 9, padding: '1px 5px' }}>
+                            Featured
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: badge.color || 'var(--text-muted)',
+                            background: 'rgba(255,255,255,0.05)',
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                          }}
+                        >
+                          {badge.label || item.type}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted" style={{ marginTop: 2 }}>
+                        by <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
+                        <span style={{ marginLeft: 8, color: 'var(--text-subtle)' }}>
+                          • {currentDownloads} downloads • {currentLikes} likes
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5" style={{ flexShrink: 0 }}>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => setPreviewItem(item)}
+                        title="Live Preview"
+                      >
+                        <Eye size={12} />
+                        <span>Preview</span>
+                      </button>
+
+                      {isCurrentlyApplied ? (
+                        <span
+                          className="badge badge-emerald"
+                          style={{ padding: '5px 9px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
+                        >
+                          <Check size={11} /> Active
+                        </span>
+                      ) : (
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '5px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                          disabled={isApplying}
+                          onClick={() => handleInstall(item)}
+                        >
+                          <Play size={11} />
+                          <span>{isApplying ? 'Applying…' : 'Apply'}</span>
+                        </button>
+                      )}
+
+                      {/* Admin Superpowers in Compact Mode */}
+                      {isAdmin && (
+                        <>
+                          <button
+                            className="admin-action-btn"
+                            style={{
+                              background: item.featured ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)' : 'rgba(255,255,255,0.06)',
+                              color: item.featured ? 'var(--color-amber)' : 'var(--text-muted)',
+                              padding: '5px 7px',
+                            }}
+                            onClick={() => handleToggleFeature(item)}
+                            title={item.featured ? 'Unfeature' : 'Feature'}
+                          >
+                            <Star size={11} fill={item.featured ? 'currentColor' : 'none'} />
+                          </button>
+
+                          <button
+                            className="btn btn-danger"
+                            style={{ padding: '5px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                            onClick={() => {
+                              setTakedownTarget(item)
+                              setTakedownReason('')
+                            }}
+                            title="Immediately remove wallpaper"
+                          >
+                            <Trash2 size={11} />
+                            <span>Take Down</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           ) : (
+            /* ── GRID CARDS VIEW ── */
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 20 }}>
               {results.map(item => {
                 const badge = TYPE_BADGES[item.type] || {}
@@ -747,6 +957,25 @@ export default function CommunityPage() {
                         </div>
                       )}
 
+                      {/* Top-Left: Immediate Admin Quick Takedown button right on the thumbnail */}
+                      {isAdmin && (
+                        <div style={{ position: 'absolute', top: 10, left: item.featured ? 94 : 10, zIndex: 4 }}>
+                          <button
+                            type="button"
+                            className="mp-quick-takedown-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setTakedownTarget(item)
+                              setTakedownReason('')
+                            }}
+                            title="Take down this wallpaper immediately"
+                          >
+                            <Trash2 size={11} />
+                            <span>Take Down</span>
+                          </button>
+                        </div>
+                      )}
+
                       {/* Top-Right: Media Type Badge */}
                       <div className="mp-badge-top-right">
                         <div
@@ -794,19 +1023,36 @@ export default function CommunityPage() {
                           </div>
                         </div>
 
-                        {/* Like Button */}
-                        <button
-                          className={`mp-like-btn ${isLiked ? 'liked' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleLike(item.id)
-                          }}
-                          disabled={likingId === item.id}
-                          title={isLiked ? 'Unlike' : 'Like'}
-                        >
-                          <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
-                          <span>{currentLikes}</span>
-                        </button>
+                        {/* Top Action Cluster: Quick Trash (Admin) + Like Button */}
+                        <div className="flex items-center gap-1.5">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="admin-quick-trash"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setTakedownTarget(item)
+                                setTakedownReason('')
+                              }}
+                              title="Take down this wallpaper"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+
+                          <button
+                            className={`mp-like-btn ${isLiked ? 'liked' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleLike(item.id)
+                            }}
+                            disabled={likingId === item.id}
+                            title={isLiked ? 'Unlike' : 'Like'}
+                          >
+                            <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
+                            <span>{currentLikes}</span>
+                          </button>
+                        </div>
                       </div>
 
                       {item.description && (
@@ -892,7 +1138,7 @@ export default function CommunityPage() {
                         )}
                       </div>
 
-                      {/* ── Admin Superpowers Bar (When Admin Mode is active) ── */}
+                      {/* Admin Superpowers Footer */}
                       {isAdmin && (
                         <div
                           style={{
@@ -908,7 +1154,6 @@ export default function CommunityPage() {
                             Admin Actions
                           </span>
                           <div className="flex items-center gap-1.5">
-                            {/* Feature toggle */}
                             <button
                               className="admin-action-btn"
                               style={{
@@ -922,7 +1167,6 @@ export default function CommunityPage() {
                               <span>{item.featured ? 'Featured' : 'Feature'}</span>
                             </button>
 
-                            {/* Takedown / Remove button */}
                             <button
                               className="admin-action-btn"
                               style={{
@@ -949,6 +1193,192 @@ export default function CommunityPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── MANAGE & TAKEDOWNS TAB (Admin Only) ── */}
+      {tab === 'manage' && isAdmin && (
+        <div className="animate-fadeIn">
+          {/* Quick Takedown Input Banner */}
+          <div
+            className="card"
+            style={{
+              padding: '18px 22px',
+              borderRadius: 12,
+              background: 'color-mix(in srgb, var(--color-rose) 6%, var(--bg-card))',
+              border: '1px solid color-mix(in srgb, var(--color-rose) 25%, var(--border-main))',
+              marginBottom: 20,
+            }}
+          >
+            <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+              <ShieldX size={18} style={{ color: 'var(--color-rose)' }} />
+              <h2 className="font-semibold text-base" style={{ color: 'var(--text-main)' }}>
+                Fast Takedown by URL or Wallpaper ID
+              </h2>
+            </div>
+            <p className="text-xs text-muted" style={{ marginBottom: 12 }}>
+              Paste any YouTube URL, stream link, or wallpaper ID to locate and remove it instantly without scrolling through the catalog.
+            </p>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Paste YouTube link or ID (e.g. https://www.youtube.com/watch?v=... or sub_abc123)"
+                value={quickTakedownInput}
+                onChange={e => setQuickTakedownInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleQuickTakedownByUrlOrId()
+                }}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-main)',
+                  color: 'var(--text-main)',
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ padding: '8px 18px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                onClick={handleQuickTakedownByUrlOrId}
+              >
+                <Trash2 size={13} />
+                <span>Locate & Take Down</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Full Catalog Table with Search Filter */}
+          <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sm">Published Wallpapers Catalog</h3>
+              <span className="badge" style={{ fontSize: 11 }}>{manageFilteredWallpapers.length} total</span>
+            </div>
+
+            <div style={{ position: 'relative', width: 260 }}>
+              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Filter by title, author, ID…"
+                value={manageSearch}
+                onChange={e => setManageSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px 6px 30px',
+                  fontSize: 12,
+                  borderRadius: 6,
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-main)',
+                  color: 'var(--text-main)',
+                  outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {manageFilteredWallpapers.map(item => {
+              const badge = TYPE_BADGES[item.type] || {}
+              const currentDownloads = Math.max(item.downloads || 0, downloadCounts[item.id] ?? 0)
+              const currentLikes = likeCounts[item.id] ?? item.likes ?? 0
+
+              return (
+                <div key={item.id} className="community-list-row" style={{ padding: '8px 12px' }}>
+                  {/* Thumbnail */}
+                  <div
+                    style={{
+                      width: 58,
+                      height: 36,
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                      background: '#000',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                    onClick={() => setPreviewItem(item)}
+                    title="Preview wallpaper"
+                  >
+                    {item.preview ? (
+                      <img src={item.preview} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full text-subtle text-xs">
+                        {item.type}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name, Author, Type */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="font-semibold text-sm truncate"
+                        style={{ color: 'var(--text-main)', cursor: 'pointer' }}
+                        onClick={() => setPreviewItem(item)}
+                        title={item.name}
+                      >
+                        {item.name}
+                      </span>
+                      {item.featured && <span className="badge badge-amber" style={{ fontSize: 9 }}>Featured</span>}
+                      <span style={{ fontSize: 10, color: badge.color, fontWeight: 600 }}>{badge.label || item.type}</span>
+                    </div>
+                    <div className="text-xs text-muted" style={{ fontSize: 11 }}>
+                      by {item.author || 'Anonymous'} • <span className="text-subtle font-mono">{item.id}</span>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="text-xs text-muted" style={{ minWidth: 120, textAlign: 'right', fontSize: 11 }}>
+                    {currentDownloads} dl • {currentLikes} likes
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1.5" style={{ flexShrink: 0 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => setPreviewItem(item)}
+                      title="Preview"
+                    >
+                      <Eye size={12} />
+                      <span>Preview</span>
+                    </button>
+
+                    <button
+                      className="admin-action-btn"
+                      style={{
+                        background: item.featured ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)' : 'rgba(255,255,255,0.06)',
+                        color: item.featured ? 'var(--color-amber)' : 'var(--text-muted)',
+                        padding: '5px 8px',
+                        fontSize: 11,
+                      }}
+                      onClick={() => handleToggleFeature(item)}
+                      title={item.featured ? 'Remove from Featured' : 'Feature this wallpaper'}
+                    >
+                      <Star size={11} fill={item.featured ? 'currentColor' : 'none'} />
+                      <span>{item.featured ? 'Featured' : 'Feature'}</span>
+                    </button>
+
+                    <button
+                      className="btn btn-danger"
+                      style={{ padding: '5px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => {
+                        setTakedownTarget(item)
+                        setTakedownReason('')
+                      }}
+                      title="Take Down this wallpaper"
+                    >
+                      <Trash2 size={11} />
+                      <span>Take Down</span>
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {/* ── MODERATION QUEUE TAB (Admin Only) ── */}
@@ -1661,10 +2091,15 @@ export default function CommunityPage() {
       {previewItem && (
         <CommunityPreviewModal
           item={previewItem}
+          isAdmin={isAdmin}
           onClose={() => setPreviewItem(null)}
           onAddToLibrary={(item) => handleAddToLibrary(item)}
           onApply={(item) => handleInstall(item)}
           onLike={(id) => handleLike(id)}
+          onTakedown={(item) => {
+            setTakedownTarget(item)
+            setTakedownReason('')
+          }}
           isLiked={likedIds.has(previewItem.id)}
           likeCount={likeCounts[previewItem.id] ?? previewItem.likes ?? 0}
           liking={likingId === previewItem.id}
@@ -1802,14 +2237,16 @@ function CleanImagePreview({ source, title }) {
 }
 
 /**
- * Full Live Preview Modal Window
+ * Full Live Preview Modal Window with Admin Takedown Button
  */
 function CommunityPreviewModal({
   item,
+  isAdmin,
   onClose,
   onAddToLibrary,
   onApply,
   onLike,
+  onTakedown,
   isLiked,
   likeCount,
   liking,
@@ -1910,24 +2347,43 @@ function CommunityPreviewModal({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid var(--border-main)',
-              borderRadius: 8,
-              padding: 6,
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.15s',
-            }}
-            title="Close preview (Esc)"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Quick Takedown in modal header */}
+            {isAdmin && onTakedown && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ padding: '4px 10px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => {
+                  onClose()
+                  onTakedown(item)
+                }}
+                title="Take down this wallpaper"
+              >
+                <Trash2 size={12} />
+                <span>Take Down</span>
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border-main)',
+                borderRadius: 8,
+                padding: 6,
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+              title="Close preview (Esc)"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Live Media Preview (Zero-Leak) */}
@@ -2007,8 +2463,24 @@ function CommunityPreviewModal({
             </div>
           </div>
 
-          {/* Right Buttons: Add to Library & Apply */}
+          {/* Right Buttons: Add to Library & Apply & Take Down */}
           <div className="flex items-center gap-2">
+            {isAdmin && onTakedown && (
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                onClick={() => {
+                  onClose()
+                  onTakedown(item)
+                }}
+                title="Immediately remove wallpaper from community feed"
+              >
+                <Trash2 size={13} />
+                <span>Take Down</span>
+              </button>
+            )}
+
             {isCurrentlyApplied ? (
               <span
                 className="btn btn-success"

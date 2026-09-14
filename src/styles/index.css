@@ -819,3 +819,59 @@ input:checked ~ .toggle-thumb {
 .admin-action-btn:hover {
   transform: translateY(-1px);
 }
+
+.mp-quick-takedown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(225, 29, 72, 0.88);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: all 0.15s ease;
+  z-index: 4;
+}
+.mp-quick-takedown-btn:hover {
+  background: rgb(225, 29, 72);
+  transform: scale(1.05);
+}
+
+.admin-quick-trash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-rose) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-rose) 30%, transparent);
+  color: var(--color-rose);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.admin-quick-trash:hover {
+  background: var(--color-rose);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.community-list-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-main);
+  transition: all 0.15s ease;
+}
+.community-list-row:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 40%, var(--border-main));
+  transform: translateY(-1px);
+}
