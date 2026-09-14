@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const autoStart = useStore(s => s.autoStart) || false
   const hideDesktopIcons = useStore(s => s.hideDesktopIcons) || false
   const toggleHideDesktopIcons = useStore(s => s.toggleHideDesktopIcons)
+  const youtubeBackend = useStore(s => s.youtubeBackend) || 'mpv'
+  const setYoutubeBackend = useStore(s => s.setYoutubeBackend)
   const authUser = useStore(s => s.authUser)
   const isAuthenticated = useStore(s => s.isAuthenticated)
   const setShowAuthModal = useStore(s => s.setShowAuthModal)
@@ -234,6 +236,30 @@ export default function SettingsPage() {
             <div className="toggle-track" />
             <div className="toggle-thumb" />
           </label>
+        </SettingRow>
+
+        <SettingRow
+          label="YouTube Wallpaper Playback Engine"
+          desc="Choose between native MPV hardware decoding (Zero YouTube UI, no Windows SMTC) or legacy WebView2 browser player"
+        >
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-main)', gap: 4 }}>
+            <button
+              type="button"
+              className={`btn ${youtubeBackend === 'mpv' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: 11, padding: '4px 10px', height: 'auto', borderRadius: '6px' }}
+              onClick={() => setYoutubeBackend('mpv')}
+            >
+              Native MPV (Zero UI)
+            </button>
+            <button
+              type="button"
+              className={`btn ${youtubeBackend === 'webview2' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: 11, padding: '4px 10px', height: 'auto', borderRadius: '6px' }}
+              onClick={() => setYoutubeBackend('webview2')}
+            >
+              WebView2 (Fallback)
+            </button>
+          </div>
         </SettingRow>
 
         {wallpaperDirectory && (

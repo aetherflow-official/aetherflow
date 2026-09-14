@@ -122,6 +122,7 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
         volume,
         muted,
         fps,
+        youtubeBackend: state.youtubeBackend || 'mpv',
       },
       opacity,
       brightness,

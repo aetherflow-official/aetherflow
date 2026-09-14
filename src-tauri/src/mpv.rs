@@ -282,6 +282,82 @@ pub fn find_mpv_binary() -> Result<PathBuf, String> {
     Err("MPV executable not found on disk or PATH".to_string())
 }
 
+/// Find the yt-dlp executable path for streaming YouTube through MPV
+pub fn find_ytdl_binary() -> Result<PathBuf, String> {
+    // 1. Try bundled relative to the running executable
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            let candidates = [
+                exe_dir.join("resources").join("bin").join("mpv").join("yt-dlp.exe"),
+                exe_dir.join("resources").join("bin").join("yt-dlp.exe"),
+                exe_dir.join("bin").join("mpv").join("yt-dlp.exe"),
+                exe_dir.join("src-tauri").join("bin").join("mpv").join("yt-dlp.exe"),
+                exe_dir.join("bin").join("yt-dlp.exe"),
+                exe_dir.join("yt-dlp.exe"),
+                exe_dir.join("..").join("..").join("src-tauri").join("bin").join("mpv").join("yt-dlp.exe"),
+                exe_dir.join("..").join("..").join("bin").join("mpv").join("yt-dlp.exe"),
+            ];
+            for candidate in &candidates {
+                if candidate.exists() {
+                    return Ok(candidate.canonicalize().unwrap_or_else(|_| candidate.clone()));
+                }
+            }
+        }
+    }
+
+    // 2. Try development path in project root
+    let dev_paths = [
+        PathBuf::from("bin/mpv/yt-dlp.exe"),
+        PathBuf::from("src-tauri/bin/mpv/yt-dlp.exe"),
+        PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\bin\mpv\yt-dlp.exe"),
+        PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\src-tauri\bin\mpv\yt-dlp.exe"),
+    ];
+    for p in &dev_paths {
+        if p.exists() {
+            return Ok(p.canonicalize().unwrap_or_else(|_| p.clone()));
+        }
+    }
+
+    // 3. Try LocalAppData locations
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let lad = PathBuf::from(local_app_data);
+        let appdata_paths = [
+            lad.join("AetherFlow").join("bin").join("mpv").join("yt-dlp.exe"),
+            lad.join("Programs").join("AetherFlow").join("bin").join("mpv").join("yt-dlp.exe"),
+            lad.join("Programs").join("AetherFlow").join("resources").join("bin").join("mpv").join("yt-dlp.exe"),
+        ];
+        for p in &appdata_paths {
+            if p.exists() {
+                return Ok(p.canonicalize().unwrap_or_else(|_| p.clone()));
+            }
+        }
+    }
+
+    // 4. Fall back to system PATH if installed globally
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let candidate = dir.join("yt-dlp.exe");
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err("yt-dlp executable not found on disk or PATH".to_string())
+}
+
+/// Check if a URL points to YouTube
+pub fn is_youtube_url(url: &str) -> bool {
+    let u = url.trim().to_lowercase();
+    u.contains("youtube.com/") || u.contains("youtu.be/") || u.contains("youtube-nocookie.com/")
+}
+
+/// Check if a string represents an HTTP/HTTPS network stream URL
+pub fn is_network_url(url: &str) -> bool {
+    let u = url.trim().to_lowercase();
+    u.starts_with("http://") || u.starts_with("https://")
+}
+
 /// Check if a given wallpaper configuration represents a video wallpaper
 pub fn is_video_wallpaper(engine_id: &str, video_path: Option<&str>) -> bool {
     if engine_id == "video-player" {
@@ -326,8 +402,8 @@ fn find_mpv_hwnd(pid: u32) -> Option<HWND> {
         1
     }
 
-    // Poll for up to 2.5 seconds (50 iterations x 50ms)
-    for _ in 0..50 {
+    // Poll for up to 5 seconds (100 iterations x 50ms)
+    for _ in 0..100 {
         let mut data = SearchData { pid, hwnd: None };
         unsafe {
             EnumWindows(Some(enum_cb), &mut data as *mut _ as LPARAM);
@@ -358,11 +434,26 @@ pub fn spawn_mpv_wallpaper(
     let safe_label = monitor_label.replace("\\", "").replace(".", "_").replace(" ", "_");
     let pipe_name = format!(r"\\.\pipe\aetherflow-mpv-{}", safe_label);
 
+    let is_network = is_network_url(video_path);
+    let is_yt = is_youtube_url(video_path);
+
+    let mut script_opts = vec!["osc-visibility=never".to_string()];
+    if is_yt {
+        if let Ok(ytdl_path) = find_ytdl_binary() {
+            let path_str = ytdl_path.to_string_lossy().replace('\\', "/");
+            script_opts.push(format!("ytdl_hook-ytdl_path={}", path_str));
+            log_mpv_msg(&format!("[MPV] Using bundled yt-dlp at: {}", path_str));
+        } else {
+            log_mpv_msg("[MPV WARN] yt-dlp binary not found; relying on system PATH for MPV ytdl hook");
+        }
+    }
+
     let mut cmd = Command::new(&mpv_exe);
 
     // Lively-style standalone borderless window flags:
     // MPV initializes its own Direct3D 11 swapchain without cross-process --wid restrictions.
     cmd.arg("--no-config")
+        .arg("--force-window=immediate")
         .arg("--show-in-taskbar=no")
         .arg("--taskbar-progress=no")
         .arg("--title-bar=no")
@@ -388,7 +479,7 @@ pub fn spawn_mpv_wallpaper(
         .arg("--osd-msg3=")
         .arg("--osd-status-msg=")
         .arg("--osd-playing-msg=")
-        .arg("--script-opts=osc-visibility=never")
+        .arg(format!("--script-opts={}", script_opts.join(",")))
         .arg("--loop-file=inf")
         .arg("--keep-open=yes")
         .arg("--media-controls=no")
@@ -399,11 +490,23 @@ pub fn spawn_mpv_wallpaper(
         .arg("--panscan=1.0")
         .arg(format!("--geometry={:+}{:+}", mon_x, mon_y))
         .arg(format!("--autofit={}x{}", mon_w, mon_h))
-        .arg("--background-color=#000000")
-        .arg("--cache=no")
-        .arg("--demuxer-max-bytes=16M")
-        .arg("--demuxer-max-back-bytes=4M")
-        .arg(format!("--input-ipc-server={}", pipe_name));
+        .arg("--background-color=#000000");
+
+    if is_network {
+        cmd.arg("--cache=yes")
+            .arg("--demuxer-max-bytes=64M")
+            .arg("--demuxer-max-back-bytes=16M");
+        if is_yt {
+            cmd.arg("--ytdl=yes")
+                .arg("--ytdl-format=bestvideo[height<=1080]+bestaudio/best");
+        }
+    } else {
+        cmd.arg("--cache=no")
+            .arg("--demuxer-max-bytes=16M")
+            .arg("--demuxer-max-back-bytes=4M");
+    }
+
+    cmd.arg(format!("--input-ipc-server={}", pipe_name));
 
     // Speed handling
     if let Some(spd) = speed {

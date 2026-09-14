@@ -105,6 +105,10 @@ export const useStore = create(
       audioVolume: 50,                // 0 to 100
       audioMuted: false,
 
+      // YouTube Playback Backend: 'mpv' (Experimental) | 'webview2' (Fallback)
+      youtubeBackend: 'mpv',
+      setYoutubeBackend: (backend) => set({ youtubeBackend: backend }),
+
       // ── Screensaver Settings (Lively v2.1 Enhancements) ───────────────────
       screensaverEnabled: false,
       screensaverTimeoutMins: 5,
@@ -622,6 +626,7 @@ export const useStore = create(
         screensaverInhibitFullscreen: s.screensaverInhibitFullscreen ?? true,
         screensaverInhibitMaximized: s.screensaverInhibitMaximized ?? true,
         screensaverInhibitMediaPlayback: s.screensaverInhibitMediaPlayback ?? true,
+        youtubeBackend: s.youtubeBackend || 'mpv',
         authUser: s.authUser ? {
           id: s.authUser.id,
           email: s.authUser.email,

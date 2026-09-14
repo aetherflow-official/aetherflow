@@ -2046,8 +2046,20 @@ async fn apply_wallpaper(
         println!("{}", msg);
     }
 
-    let video_path_opt = config.get("videoPath").and_then(|v| v.as_str()).map(|s| s.to_string());
-    let wants_video = mpv::is_video_wallpaper(&resolved_engine_id, video_path_opt.as_deref());
+    let stream_url_opt = config.get("streamUrl").and_then(|v| v.as_str()).or_else(|| config.get("url").and_then(|v| v.as_str())).map(|s| s.to_string());
+    let youtube_backend = config.get("youtubeBackend").and_then(|v| v.as_str()).unwrap_or("mpv");
+
+    let is_youtube_stream = stream_url_opt.as_deref().map(mpv::is_youtube_url).unwrap_or(false);
+    let use_mpv_for_youtube = is_youtube_stream && youtube_backend == "mpv";
+
+    let local_video_path_opt = config.get("videoPath").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let video_path_opt = if use_mpv_for_youtube {
+        stream_url_opt.clone()
+    } else {
+        local_video_path_opt.clone()
+    };
+
+    let wants_video = use_mpv_for_youtube || mpv::is_video_wallpaper(&resolved_engine_id, video_path_opt.as_deref());
     let is_video = wants_video && mpv::find_mpv_binary().is_ok();
 
     let mut monitors = app.available_monitors().unwrap_or_default();
@@ -2069,7 +2081,7 @@ async fn apply_wallpaper(
         let vpath = match video_path_opt {
             Some(p) => p,
             None => {
-                eprintln!("[MPV ERROR] Video wallpaper requested but videoPath is missing in config");
+                eprintln!("[MPV ERROR] Video or stream wallpaper requested but path/URL is missing in config");
                 return;
             }
         };
@@ -3057,12 +3069,25 @@ fn get_monitor_active_wallpaper(app: AppHandle, label: String) -> Option<serde_j
 #[tauri::command]
 fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_label: Option<String>) {
     let target = monitor_label.clone().unwrap_or_else(|| "*".to_string());
-    if let Some(new_vpath) = config.get("videoPath").and_then(|v| v.as_str()) {
+    let stream_url = config.get("streamUrl").and_then(|v| v.as_str()).or_else(|| config.get("url").and_then(|v| v.as_str()));
+    let new_media_path = config.get("videoPath").and_then(|v| v.as_str()).or(stream_url);
+    if let Some(new_vpath) = new_media_path {
         if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref mut map) = *mpv_guard {
                 for (label, proc) in map.iter_mut() {
                     if target == "*" || target == *label {
                         let _ = proc.load_file(new_vpath);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(paused) = config.get("paused").and_then(|v| v.as_bool()) {
+        if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+            if let Some(ref map) = *mpv_guard {
+                for (label, proc) in map {
+                    if target == "*" || target == *label {
+                        let _ = proc.set_pause(paused);
                     }
                 }
             }
