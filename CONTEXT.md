@@ -18,9 +18,10 @@
 4. **Admin Authorization & Passcode Unlock**:
    - Supports automatic role/email admin detection (`authUser.email` / `user_metadata.role`).
    - Added in-app **Admin Passcode Modal** (`aether-admin` / `VITE_COMMUNITY_ADMIN_KEY`) allowing the owner to unlock moderator powers on any installation.
-5. **Verification**:
-   - Verified end-to-end with automated browser subagent (unlocking admin mode, submitting a wallpaper, approving in moderation queue, verifying live feed appearance, and re-locking).
-   - Frontend build (`npm run build`) passing cleanly in 507ms.
+5. **Production Binary Deployment & Verification**:
+   - Built fresh frontend bundle (`npm run build` in 621ms).
+   - Compiled optimized release binary via `cargo build --release` (2m 23s).
+   - Deployed updated `AetherFlow.exe` (7.52 MB, PID 13316) running with active WorkerW desktop pinning.
 
 
 
