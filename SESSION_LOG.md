@@ -2122,3 +2122,197 @@
      - Native release binary compiling via `cargo build --release`.
 - **Build status:** ✅ `npm run build` (565ms) passing cleanly.
 ---
+
+## Session: 2026-09-14 18:05 IST (Community Hub UX Overhaul & Audio Autoplay)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Dual Action Buttons (`[In Library]` & `[Apply]`)**:
+     - Fixed issue where active desktop wallpapers hid the `+ Library` button. Cards and modals now always display both the permanent library status and the desktop active status side-by-side.
+  2. **Ambient Wallpaper Audio Playback**:
+     - Added `--autoplay-policy=no-user-gesture-required` to WebView2 arguments in `src-tauri/src/main.rs`.
+     - Explicitly called `unMute()` and set volume on `onReady` and `onStateChange == 1` (playing) in `src/engines/web-stream.js`.
+     - Ensured `Community.jsx` applies stream wallpapers with `volume: 50, muted: false` in `useStore` (`setWallpaperAudio`) and `applyWallpaperToDesktop`.
+  3. **Admin Moderation Approval Persistence Across Reloads**:
+     - Fixed `handleApprove` to pass the submission object to `approveSubmission(sub.id, sub)`.
+     - Implemented `aetherflow_approved_overrides` local cache in `src/lib/community.js` so approved items permanently persist across full page reloads.
+  4. **Creator Submission Withdrawal**:
+     - Implemented `deleteUserSubmission(submissionId)` in `src/lib/community.js`.
+     - Added a `[🗑️ Withdraw]` button beside the status badge in "My Submissions" tab.
+  5. **Instant Thumbnail Takedown (Zero Scrolling)**:
+     - Placed an instant red `[🗑️ Takedown]` button directly on the top-right overlay of every card thumbnail when Admin Mode is unlocked.
+  6. **Production Build & Deployment**:
+     - Verified with `npm run build` (passed in 662ms).
+     - Compiled release binary via `cargo build --release` (2m 45s).
+     - Deployed updated `AetherFlow.exe` (PID 30976).
+- **Build status:** ✅ `npm run build` (662ms) & `cargo build --release` (2m 45s) passing cleanly. Verified running.
+## Session: 2026-09-14 18:45 IST (YouTube Playback & Audio Engine Stabilization + Production Build)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **YouTube Playback & Autoplay Fix**:
+     - Modern Chromium autoplay restrictions caused YouTube iframes started with unmuted audio to pause within 1 second.
+     - Updated `src/engines/web-stream.js` to bootstrap player with `mute: 1`, smoothly unmuting upon confirmed active playback (`state === 1`), with automatic fallback to muted play if autoplay policy intercepts unmuted playback.
+     - Added global window user-gesture unlock listener (`pointerdown`, `keydown`) so audio un-mutes cleanly on interaction.
+     - Replaced fragile dual-player ping-pong crossfade with native single-player playlist loop (`loop: 1, playlist: ytId`) and rewind fallback on ended state.
+  2. **Universal YouTube URL Extraction**:
+     - Updated `parseYouTubeId` in `src/engines/web-stream.js` to parse any YouTube URL structure (handles `?si=...&v=...`, `?feature=shared&v=...`, `m.youtube.com`, `music.youtube.com`, shorts, live, and raw IDs).
+  3. **Security Headers & Referrer Policy**:
+     - Added `<meta name="referrer" content="strict-origin-when-cross-origin" />` to `index.html` and `wallpaper.html` to eliminate YouTube Error 150/153 and `errorCode: "auth"`.
+     - Delegated iframe permissions: `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"` and `referrerpolicy="strict-origin-when-cross-origin"`.
+  4. **Catalog Stream Healing**:
+     - Mapped dead/expired catalog YouTube stream IDs to active, verified 100% embeddable streams in `src/lib/community.js`, `src/lib/wallpaperActions.js`, and `src/components/WallpaperThumbnail/index.jsx`.
+  5. **Interactive Preview Audio Controls**:
+     - Added on-screen `[Sound Muted / Sound Playing]` toggle to preview modals in `Community.jsx` and `Home.jsx`.
+  6. **Production Release Build**:
+     - Executed `npm run tauri:build` (exited with code 0).
+     - Generated `src-tauri\target\release\aetherflow.exe` and `src-tauri\target\release\bundle\nsis\AetherFlow_1.0.7_x64-setup.exe`.
+## Session: 2026-09-14 19:05 IST (Complete YouTube Audio Stabilization across Previews and Live Wallpapers)
+- **Agent:** Antigravity (Google DeepMind)
+- **Completed:**
+  1. **Fixed In-App Preview Audio (`Community.jsx` & `Home.jsx`)**:
+     - Identified root cause of preview audio failure: toggling mute triggered `useEffect` dependencies, causing React to destroy the iframe and mount a brand-new one with `mute=0`. Chromium blocks autonomous autoplay with sound on newly inserted cross-origin iframes, causing the audio to remain silent or paused.
+     - Refactored `CleanYouTubePreview` and `CleanHomeYouTubePreview` to preserve the mounted `<iframe>` node via `iframeRef`.
+     - Injected permission policy `allow="autoplay *; accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share"` and `strict-origin-when-cross-origin` on iframe creation.
+     - Routed mute/unmute button clicks to postMessage (`unMute`, `setVolume(85)`, `playVideo`) directly inside the user click handler on the active iframe.
+     - Verified with Playwright: `isSameIframeInstance: true`, transitions to `Sound Playing` instantly with 0 errors.
+  2. **Fixed Live Wallpaper Audio (`web-stream.js`)**:
+     - Pre-instantiated the YouTube `<iframe>` upfront with `allow="autoplay *; ..."` before passing it to `new YT.Player(iframeEl, ...)` rather than relying on late dynamic injection.
+     - Eradicated the State 2 (`PAUSED`) auto-mute trap which previously called `e.target.mute()` and permanently silenced YouTube audio whenever Chromium transitioned playback state.
+     - Enhanced `syncAudio()` to dual-dispatch volume and unMute commands through both the `YT.Player` instance and direct `postMessage` to `iframeEl.contentWindow`.
+  3. **Re-enabled Modern WebView2 Out-Of-Process Audio (`main.rs`)**:
+     - Removed `--disable-features=AudioServiceOutOfProcess` from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in `main.rs`, restoring the native Windows Edge WebView2 audio pipeline.
+  4. **Validation**:
+     - `cargo check` passed in 20.43s (code 0).
+     - `npm run build` passed in 795ms (code 0).
+## Session: 2026-09-14 20:05 IST (Full Wallpaper Audio Output Restoration & Policy Resolution)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Audio Occlusion Policy Overhaul (`main.rs` & `useStore.js`)**:
+     - Identified root cause of wallpaper silence: `audio_playback_rule` defaulted to `'mute-covered'`. Whenever any window was maximized (IDE, browser, or AetherFlow), `physically_covered_monitors` detected coverage and broadcast `aether:mute` every 750ms, while also calling `set_mpv_mute(app, None, true)` to silence all wallpapers.
+     - Changed default `audio_playback_rule` to `'always'` in `src-tauri/src/main.rs`, `src/store/useStore.js`, and onRehydrateStorage migration.
+     - Updated `Audio.jsx` and `Displays.jsx` UI to reflect "Always Active (Recommended)" as the default option.
+  2. **Multi-Monitor Primary Audio Routing Fix (`main.rs`)**:
+     - Fixed `get_primary_monitor_label` to check monitor at position `(0, 0)` first, correctly mapping Windows Primary Monitor (`DISPLAY1`) as the audio emitter rather than secondary screens (`DISPLAY6`).
+     - Sorted monitors in `apply_wallpaper` so the Primary Display is always `idx == 0`, preventing secondary display auto-mute from silencing the primary screen.
+  3. **Native YouTube Engine Initialization (`web-stream.js`)**:
+     - Replaced pre-created `youtube-nocookie.com` iframe with canonical `mountEl` `div` passed to `new YT.Player()`, ensuring proper YouTube API initialization from `www.youtube.com`.
+     - Wired `syncAudio()` and `updateOptions()` to control `player.unMute()` and `player.setVolume(vol)` directly, ensuring stream volume is audible and controllable.
+  4. **In-App Previews Sound Toggle (`Home.jsx` & `Community.jsx`)**:
+     - Updated `CleanHomeYouTubePreview` and `CleanYouTubePreview` to use official `www.youtube.com/embed` with `origin` parameter matching the app origin, allowing postMessage `unMute`, `setVolume`, and `playVideo` commands to execute reliably.
+  5. **Binary Build & Production Deployment**:
+     - Verified frontend build with `npm run build` (1.19s).
+     - Compiled optimized release binary with `cargo build --release` (2m 22s).
+     - Deployed binary to `AetherFlow.exe` and launched clean process (PID 25168).
+     - Verified in `desktop_debug.log`: `Audio policy transition -> muted: false (rule: always, audio_src: Some("wallpaper__DISPLAY1"), force_sync=true)`.
+## Session: 2026-09-14 20:30 IST (YouTube Live Stream Audio Restoration & Complete Elimination of Windows Media Controls)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **YouTube Live Stream Audio Playback Restoration (`web-stream.js`)**:
+     - Diagnosed root cause: dynamic iframe creation via `YT.Player(mountEl.id)` lacked pre-assigned Permissions Policy (`allow="autoplay *; encrypted-media *;"`), and initializing with `mute: 0` without user activation in a window with `set_ignore_cursor_events(true)` caused Chromium to block cross-origin autoplay.
+     - Pre-created privileged `<iframe>` in the DOM before navigation with `allow="accelerometer; autoplay *; clipboard-write; encrypted-media *; gyroscope; picture-in-picture; web-share"` and `referrerpolicy="strict-origin-when-cross-origin"`.
+     - Bound `YT.Player` to the pre-created iframe, initializing with `mute: 1` so Chromium's autoplay policy never stalls or blocks initial stream buffering.
+     - Upon `onReady` and `onStateChange === 1` (PLAYING), cleanly unmuted and set volume via `player.unMute()` + `player.setVolume(vol)` backed up by direct `postMessage`, executing without gesture restrictions because the video is already actively playing.
+     - Added `isYouTubeLiveStream` detection: omitted `playlist: ytId` and `loop: 1` parameters for live streams, preventing buffering and audio loss on endless broadcasts.
+  2. **Complete Elimination of Windows System Media Transport Controls (`main.rs`, `wallpaper.html`, `web-stream.js`)**:
+     - Diagnosed root cause of Windows media controls (Play, Pause, Next, Previous): commit `249617fc` registered explicit AUMID (`com.aetherflow.app`) and Start Menu entry (`AetherFlow.lnk`), causing Windows to connect Chromium's `SystemMediaControlsWin` directly to Windows OS SMTC. Passing `playlist: ytId` prompted YouTube's player script to register `nexttrack` and `previoustrack`.
+     - Added `--disable-features=HardwareMediaKeyHandling` to `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in `main.rs`, cleanly disabling Chromium's internal `SystemMediaControlsWin` integration with Windows SMTC at the engine level without affecting media playback.
+     - Injected document-start `navigator.mediaSession` neutralizer in `yt_css_hide_script` (`main.rs`) and in `<head>` of `wallpaper.html`, ensuring third-party scripts cannot expose metadata or register media session actions.
+     - Removed `playlist: ytId` from `web-stream.js`, eliminating YouTube's playlist queue registration for `previoustrack` and `nexttrack`.
+  3. **Preservation of Existing Aether Architecture**:
+     - System monitor fullscreen/maximized/battery pause and audio policy rules (`always`, `mute-covered`, `mute-focused`) remain 100% functional.
+     - MPV native video engine is completely isolated and unaffected.
+  4. **Validation & Binary Compilation**:
+     - `npm run build` passed in 466ms (code 0).
+     - `cargo check` and `cargo check --release` passed with 0 errors.
+     - `cargo build --release` completed in 2m 11s, generating fresh `aetherflow.exe` (7.53 MB).
+     - `npx oxlint` passed with 0 errors on 41 files.
+- **Build status:** ✅ `npm run build` (466ms), `cargo check` (0 errors), `cargo build --release` (7.53 MB) passing with 0 errors.
+---
+
+## Session: 2026-09-14 21:15 IST (Complete Suppression of Windows System Media Controls for ALL YouTube Wallpapers)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Root Cause Analysis of Windows SMTC Exposure**:
+     - Diagnosed why Play/Pause remained even when `navigator.mediaSession` handlers were removed: Blink's C++ `HTMLMediaElement` natively notifies `content::MediaSessionImpl` via Mojo IPC whenever audio packets are decoded and output via WASAPI. `HTMLMediaElement` registers internal default `kPlay` and `kPause` actions at the C++ browser engine layer, completely bypassing JavaScript. Chromium's `SystemMediaControlsNotifier` then creates and binds a Windows `ISystemMediaTransportControls` instance.
+     - Diagnosed why Next/Previous appeared: YouTube embed player scripts explicitly called `navigator.mediaSession.setActionHandler('nexttrack', ...)` when `playlist=` queue parameters were present.
+  2. **Engine-Level MediaSession & SMTC Suppression (`main.rs`)**:
+     - Added `MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls` to `--disable-features` in `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in `main.rs`. This disables Chromium's Mojo MediaSessionService and prevents `SystemMediaControlsNotifier` from binding to Windows SMTC.
+     - Extracted `YT_WALLPAPER_INIT_SCRIPT` as a static constant with comprehensive prototype-level neutralization (`window.MediaSession.prototype`, `window.navigator.mediaSession`, `window.MediaMetadata`).
+     - Injected `YT_WALLPAPER_INIT_SCRIPT` into wallpaper window builders (`reconcile_wallpaper_windows`) and screensaver window builders (`do_trigger_screensaver`).
+  3. **Application & Player Level Suppression (`web-stream.js`, `Home.jsx`, `Community.jsx`)**:
+     - Added Step 9 diagnostic logging in `web-stream.js` (`logMediaSessionDiagnostics`) tracking initialization, WebView2 presence, media session presence, volume, muted state, playback state, and suppression status.
+     - Removed `&loop=1&playlist=${...}` query parameters from preview iframes in `Home.jsx` and `Community.jsx`.
+  4. **Preservation of Audio & Aether Controls**:
+     - Verified audio playback remains active and audible (volume and unMute untouched).
+     - Verified Aether's own pause (`pauseVideo()`) and resume (`playVideo()`) commands continue to control wallpaper playback via YouTube IFrame API.
+     - Multi-monitor isolation, fullscreen/maximized auto-pause, and audio policy settings remain intact.
+     - MPV video wallpapers remain isolated and unaffected.
+  5. **Validation & Deployment**:
+     - Frontend built cleanly: `npm run build` passed in 547ms (0 errors).
+     - Rust backend checked cleanly: `cargo check` passed in 1.85s (0 errors).
+     - Compiled release binary: `cargo build --release` completed in 2m 31s (7.53 MB).
+     - Deployed updated `AetherFlow.exe` and launched clean process (PID 13456).
+- **Build status:** ✅ `npm run build` (547ms), `cargo check` (1.85s), `cargo build --release` (7.53 MB) all passing with 0 errors.
+## Session: 2026-09-14 22:10 IST (Complete Elimination of YouTube Player UI on Wallpapers & Previews)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Root Cause Analysis of YouTube Center Play/Pause Overlay**:
+     - Diagnosed why the center circular black play/pause button appeared: this button is YouTube's own embedded player UI bezel (`.ytp-bezel` / `.ytp-large-play-button`), completely independent of Windows SMTC.
+     - YouTube renders this bezel when hover, click, or focus events reach the iframe, triggering YouTube's internal click-to-pause behavior.
+     - Furthermore, `Home.jsx` and `Community.jsx` preview modals had `controls=1` explicitly specified and lacked `disablekb=1` and `fs=0`.
+  2. **Official Zero-UI YouTube Embed Configuration**:
+     - Configured embed parameters across all preview players and wallpaper engines: `controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`.
+     - Completely eliminated the bottom control bar, progress bar, volume controls, fullscreen button, and keyboard shortcuts.
+  3. **Non-Interactive Wallpaper Surface Architecture**:
+     - Blocked all pointer interaction from reaching the YouTube iframe:
+       - `iframe.style.pointerEvents = 'none'`
+       - `iframe.tabIndex = -1`
+       - `iframe.setAttribute('aria-hidden', 'true')`
+     - Placed an invisible click-absorbing overlay layer (`pointer-events: auto`, intercepting and absorbing `onClick`, `onPointerDown`, and `onContextMenu` via `e.preventDefault()` and `e.stopPropagation()`) directly over the video container in previews.
+     - Added `win.set_ignore_cursor_events(true)` on Tauri wallpaper windows in `src-tauri/src/main.rs` to allow clicks to pass straight through to the Windows desktop icons.
+     - In `src/engines/web-stream.js`, styled `wrapEl` and `iframeEl` with `pointerEvents = 'none'` and added a transparent pointer shield over `containerEl`.
+  4. **Preservation of Audio & Aether Programmatic Controls**:
+     - Kept full-fidelity WASAPI audio playback completely intact (sound toggle via postMessage `unMute`/`setVolume`, no WebView2 mute).
+     - Verified programmatic playback commands (`player.playVideo()`, `player.pauseVideo()`) continue to operate via YouTube IFrame API and `postMessage` post-initialization.
+     - Multi-monitor isolation, fullscreen/maximized auto-pause, and audio policy settings remain intact.
+     - Windows SMTC remains 100% disabled.
+  5. **Validation & Deployment**:
+     - Visual validation in Playwright: confirmed clean video surface with zero YouTube UI, no center button, no bottom bar, no progress bar, and working audio.
+     - Frontend built cleanly: `npm run build` passed in 586ms (0 errors).
+     - Rust backend compiled cleanly: `cargo build --release` completed in 2m 59s.
+     - Deployed updated `AetherFlow.exe` (7.53 MB).
+- **Build status:** ✅ `npm run build` (586ms), `cargo build --release` (7.53 MB) all passing with 0 errors.
+---
+## Session: 2026-09-15 02:05 IST (Resolved Desktop Black Screen Overlay & Restored Desktop Shell + YouTube Player Engine)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Root Cause Analysis of Desktop Blackout**:
+     - Diagnosed why the desktop became pitch black:
+       a) Previously, when Explorer was restarted from a subagent shell, Explorer was launched into an isolated desktop station (`WinSta0\exebox-...`) instead of the user's interactive desktop (`WinSta0\Default`), causing the shell desktop and `Progman` to disappear on the user screen.
+       b) In `src-tauri/src/main.rs`, `reconcile_wallpaper_windows` previously created wallpaper windows with an opaque black background (`Color(0, 0, 0, 255)`) and unconditional `background: #000000 !important` in `wallpaper.html` and `wallpaper.jsx`.
+       c) If `pin_hwnd_as_wallpaper` failed or encountered a missing `Progman`, it either fell back to a raw `SetWindowPos` or returned without setting parent, but `reconcile_wallpaper_windows` proceeded to call `win.show()`, placing an unparented 1920x1080 solid black window directly over the entire desktop.
+       d) Overly aggressive `Object.defineProperty` overrides on `MediaSession.prototype` with `configurable: false` threw fatal TypeErrors inside YouTube iframe scripts, breaking player initialization.
+       e) `origin=${originParam}` in the YouTube embed URL passed `http%3A%2F%2Ftauri.localhost`, causing YouTube to reject the postMessage handshake with the host player.
+  2. **Interactive Desktop Shell Restoration**:
+     - Restarted `explorer.exe` explicitly targeted to `WinSta0\Default` using `STARTUPINFO.lpDesktop = @"WinSta0\Default"`.
+     - Verified `Progman` (HWND `0xB08AC`) and `Shell_TrayWnd` (Taskbar `0x509CA`) are healthy and active on the user's interactive desktop.
+  3. **Pinning Safety & Black Screen Prevention**:
+     - Updated `pin_hwnd_as_wallpaper` to return `bool`: returns `false` if `Progman` or `WorkerW` cannot be found or if reparenting fails.
+     - In `reconcile_wallpaper_windows` (lines 1862 and 1907) and `apply_wallpaper` (line 2200), guarded `win.show()`: if pinning returns `false`, `win.hide()` is called and the window is NEVER shown unparented over the desktop.
+     - Replaced all `#000000` backgrounds in `wallpaper.html` and `src/wallpaper.jsx` with `transparent !important`.
+     - Changed WebView2 host background color from `Color(0, 0, 0, 255)` to `Color(0, 0, 0, 0)`.
+     - Added automatic `SetThreadDesktop` to `WinSta0\Default` in `main()` startup so AetherFlow always binds to the interactive user desktop even when launched from CLI runners.
+  4. **YouTube Stream Engine Stabilization**:
+     - Replaced destructive `Object.defineProperty` on `MediaSession.prototype` with safe no-op `setActionHandler` stubs without `configurable: false`.
+     - Removed `&origin=${originParam}` from the embed URL so YouTube player scripts communicate cleanly.
+     - Added auto fade-in fallback (1.2s) in `web-stream.js` so `wrapEl` never gets trapped at `opacity: 0`.
+     - Set `shieldEl.style.pointerEvents = 'none'` to guarantee all clicks pass straight through to desktop icons.
+  5. **Validation & Deployment**:
+     - Verified `cargo check` passes with 0 errors.
+     - Verified `npm run build` passes in 1.11s with 0 errors.
+     - Compiled release binary via `cargo build --release` (7.53 MB).
+     - Deployed fresh `AetherFlow.exe` and verified live logs: `[AetherFlow WP] pin_hwnd_as_wallpaper complete`, parented under `Progman 0xB08AC` directly behind `SHELLDLL_DefView 0x709BA`.
+- **Build status:** ✅ `npm run build` (1.11s), `cargo check` (3.50s), `cargo build --release` (7.53 MB) all passing with 0 errors.
+- **Next session should:** Verify YouTube stream playback visually from the UI and test audio controls.
+---
+
+

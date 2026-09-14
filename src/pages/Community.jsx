@@ -5,7 +5,7 @@ import {
   LogIn, Play, Check, Heart, Clock, CheckCircle, XCircle, FileText,
   Award, Eye, X, FolderPlus, Shield, ShieldCheck, ShieldAlert, Trash2,
   Star, Lock, Unlock, AlertTriangle, RefreshCw, Filter, Sparkles,
-  LayoutGrid, List, SlidersHorizontal, ShieldX
+  LayoutGrid, List, SlidersHorizontal, ShieldX, Volume2, VolumeX
 } from 'lucide-react'
 import {
   searchCatalog,
@@ -19,6 +19,7 @@ import {
   fetchPendingSubmissions,
   approveSubmission,
   rejectSubmission,
+  deleteUserSubmission,
   removeCommunityWallpaper,
   toggleFeaturedWallpaper,
   checkIsAdmin,
@@ -110,6 +111,8 @@ export default function CommunityPage() {
   const setActiveWallpaper = useStore(s => s.setActiveWallpaper)
   const installItem = useStore(s => s.installItem)
   const pinToHome = useStore(s => s.pinToHome)
+  const setWallpaperAudio = useStore(s => s.setWallpaperAudio)
+  const audioVolume = useStore(s => s.audioVolume) ?? 50
   const [applyingId, setApplyingId] = useState(null)
 
   // Admin store persistence
@@ -243,6 +246,7 @@ export default function CommunityPage() {
       const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
       const isStream = !isVideo && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
       const resolvedEngine = isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player')
+      const targetVolume = audioVolume > 0 ? audioVolume : 50
       const item = {
         id: `community-${wallpaper.id}`,
         name: wallpaper.name,
@@ -254,13 +258,14 @@ export default function CommunityPage() {
         tags: wallpaper.tags || ['community'],
         config: {
           ...(isVideo
-            ? { videoPath: wallpaper.source, speedMultiplier: 1 }
+            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
             : isStream
             ? {
                 streamUrl: wallpaper.source,
                 url: wallpaper.source,
                 streamType: wallpaper.type === 'youtube' ? 'youtube' : 'web',
                 muted: false,
+                volume: targetVolume,
                 speedMultiplier: 1,
               }
             : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
@@ -274,6 +279,7 @@ export default function CommunityPage() {
       }
 
       installItem(item)
+      setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
 
       setDownloadCounts(prev => {
         const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
@@ -298,6 +304,7 @@ export default function CommunityPage() {
       const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
       const isStream = !isVideo && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
       const resolvedEngine = isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player')
+      const targetVolume = audioVolume > 0 ? audioVolume : 50
       const item = {
         id: `community-${wallpaper.id}`,
         name: wallpaper.name,
@@ -309,13 +316,14 @@ export default function CommunityPage() {
         tags: wallpaper.tags || ['community'],
         config: {
           ...(isVideo
-            ? { videoPath: wallpaper.source, speedMultiplier: 1 }
+            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
             : isStream
             ? {
                 streamUrl: wallpaper.source,
                 url: wallpaper.source,
                 streamType: wallpaper.type === 'youtube' ? 'youtube' : 'web',
                 muted: false,
+                volume: targetVolume,
                 speedMultiplier: 1,
               }
             : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
@@ -330,8 +338,9 @@ export default function CommunityPage() {
 
       installItem(item)
       pinToHome(item.id)
+      setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
       setActiveWallpaper(item)
-      await applyWallpaperToDesktop(item)
+      await applyWallpaperToDesktop(item, { forceVolume: targetVolume, forceMuted: false })
 
       setDownloadCounts(prev => {
         const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
@@ -355,7 +364,7 @@ export default function CommunityPage() {
   const handleApprove = async (sub) => {
     setModeratingId(sub.id)
     try {
-      await approveSubmission(sub.id)
+      await approveSubmission(sub.id, sub)
       setPendingQueue(prev => prev.filter(item => item.id !== sub.id))
       showNotice(`Approved "${sub.title || 'wallpaper'}"! It is now live in the Community Hub.`)
       doSearch(true)
@@ -364,6 +373,22 @@ export default function CommunityPage() {
       showNotice(`Failed to approve: ${err.message}`, 'error')
     } finally {
       setModeratingId(null)
+    }
+  }
+
+  const handleWithdrawSubmission = async (sub) => {
+    if (!window.confirm(`Are you sure you want to withdraw and delete "${sub.title || 'this submission'}"?`)) {
+      return
+    }
+    try {
+      await deleteUserSubmission(sub.id)
+      setMySubmissions(prev => prev.filter(item => item.id !== sub.id))
+      setPendingQueue(prev => prev.filter(item => item.id !== sub.id))
+      showNotice(`Withdrew "${sub.title || 'submission'}" successfully.`)
+      doSearch(true)
+      loadStatsAndCounts()
+    } catch (err) {
+      showNotice(`Failed to withdraw submission: ${err.message}`, 'error')
     }
   }
 
@@ -850,6 +875,27 @@ export default function CommunityPage() {
                         <span>Preview</span>
                       </button>
 
+                      {isInstalled ? (
+                        <span
+                          className="badge badge-emerald"
+                          style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
+                          title="In Library"
+                        >
+                          <Check size={10} /> Library
+                        </span>
+                      ) : (
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                          disabled={addingLibraryId === item.id || isApplying}
+                          onClick={() => handleAddToLibrary(item)}
+                          title="Add to Library"
+                        >
+                          <FolderPlus size={11} />
+                          <span>{addingLibraryId === item.id ? '…' : '+ Library'}</span>
+                        </button>
+                      )}
+
                       {isCurrentlyApplied ? (
                         <span
                           className="badge badge-emerald"
@@ -959,8 +1005,39 @@ export default function CommunityPage() {
                       )}
 
 
-                      {/* Top-Right: Media Type Badge */}
-                      <div className="mp-badge-top-right">
+                      {/* Top-Right: Media Type Badge & Instant Admin Takedown */}
+                      <div className="mp-badge-top-right" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            style={{
+                              padding: '2px 7px',
+                              height: 22,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              borderRadius: 4,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              background: 'rgba(239, 68, 68, 0.88)',
+                              backdropFilter: 'blur(6px)',
+                              border: '1px solid rgba(255, 255, 255, 0.3)',
+                              color: '#ffffff',
+                              cursor: 'pointer',
+                              zIndex: 10,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setTakedownTarget(item)
+                              setTakedownReason('')
+                            }}
+                            title="Instant Takedown (no scrolling required)"
+                          >
+                            <Trash2 size={11} />
+                            <span>Takedown</span>
+                          </button>
+                        )}
                         <div
                           className="mp-pill-badge"
                           style={{
@@ -1061,45 +1138,69 @@ export default function CommunityPage() {
                         </div>
                       )}
 
-                      {/* Card Action Buttons */}
+                      {/* Card Action Buttons: Always display both Library status and Apply status */}
                       <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+                        {/* 1. Library Status / Add Button */}
+                        {isInstalled ? (
+                          <div
+                            className="btn btn-ghost mp-btn-action"
+                            style={{
+                              flex: 1,
+                              padding: '0 6px',
+                              fontSize: 11,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 4,
+                              color: 'var(--color-emerald)',
+                              border: '1px solid color-mix(in srgb, var(--color-emerald) 35%, transparent)',
+                              background: 'color-mix(in srgb, var(--color-emerald) 8%, transparent)',
+                              cursor: 'default',
+                            }}
+                            title="Installed in your permanent Library"
+                          >
+                            <Check size={12} />
+                            <span>In Library</span>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn btn-secondary mp-btn-action"
+                            style={{ flex: 1, padding: '0 6px', fontSize: 11 }}
+                            disabled={isAddingLib || isApplying}
+                            onClick={() => handleAddToLibrary(item)}
+                            title="Add to your permanent Library"
+                          >
+                            <FolderPlus size={13} />
+                            <span>{isAddingLib ? 'Adding…' : '+ Library'}</span>
+                          </button>
+                        )}
+
+                        {/* 2. Desktop Apply Status / Button */}
                         {isCurrentlyApplied ? (
                           <div
-                            className="btn btn-success mp-btn-action w-full"
-                            style={{ cursor: 'default', fontSize: 12 }}
+                            className="btn btn-success mp-btn-action"
+                            style={{
+                              flex: 1.2,
+                              cursor: 'default',
+                              fontSize: 11,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 4,
+                            }}
                           >
-                            <Check size={13} /> Active on Desktop
+                            <Check size={12} /> Active
                           </div>
-                        ) : isInstalled ? (
-                          <button
-                            className="btn btn-primary mp-btn-action w-full"
-                            disabled={isApplying}
-                            onClick={() => handleInstall(item)}
-                          >
-                            {isApplying ? 'Applying…' : <><Play size={12} /> Apply to Desktop</>}
-                          </button>
                         ) : (
-                          <>
-                            <button
-                              className="btn btn-secondary mp-btn-action"
-                              style={{ flex: 1, padding: '0 8px' }}
-                              disabled={isAddingLib || isApplying}
-                              onClick={() => handleAddToLibrary(item)}
-                              title="Add to your permanent Library"
-                            >
-                              <FolderPlus size={13} />
-                              <span>{isAddingLib ? 'Adding…' : '+ Library'}</span>
-                            </button>
-                            <button
-                              className="btn btn-primary mp-btn-action"
-                              style={{ flex: 1.2, padding: '0 8px' }}
-                              disabled={isApplying || isAddingLib}
-                              onClick={() => handleInstall(item)}
-                              title="Apply directly to desktop"
-                            >
-                              {isApplying ? 'Applying…' : <><Play size={12} /> Apply</>}
-                            </button>
-                          </>
+                          <button
+                            className="btn btn-primary mp-btn-action"
+                            style={{ flex: 1.2, padding: '0 6px', fontSize: 11 }}
+                            disabled={isApplying || isAddingLib}
+                            onClick={() => handleInstall(item)}
+                            title="Apply directly to desktop"
+                          >
+                            {isApplying ? 'Applying…' : <><Play size={12} /> Apply</>}
+                          </button>
                         )}
                       </div>
 
@@ -1816,22 +1917,46 @@ export default function CommunityPage() {
                       )}
                     </div>
 
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        padding: '4px 10px',
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: `color-mix(in srgb, ${statusMeta.color} 15%, transparent)`,
-                        color: statusMeta.color,
-                        border: `1px solid color-mix(in srgb, ${statusMeta.color} 30%, transparent)`,
-                      }}
-                    >
-                      <StatusIcon size={12} />
-                      <span>{statusMeta.label}</span>
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '4px 10px',
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: `color-mix(in srgb, ${statusMeta.color} 15%, transparent)`,
+                          color: statusMeta.color,
+                          border: `1px solid color-mix(in srgb, ${statusMeta.color} 30%, transparent)`,
+                        }}
+                      >
+                        <StatusIcon size={12} />
+                        <span>{statusMeta.label}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: 11,
+                          color: 'var(--color-rose)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          borderRadius: 6,
+                          border: '1px solid color-mix(in srgb, var(--color-rose) 35%, transparent)',
+                          background: 'color-mix(in srgb, var(--color-rose) 6%, transparent)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleWithdrawSubmission(sub)}
+                        title="Withdraw and delete this submission"
+                      >
+                        <Trash2 size={12} />
+                        <span>Withdraw</span>
+                      </button>
                     </div>
                   </div>
                 )
@@ -2083,41 +2208,101 @@ export default function CommunityPage() {
 }
 
 /**
- * Clean YouTube Preview with iframe cleanup on unmount
+ * Clean YouTube Preview with iframe cleanup on unmount and audio preview toggle
  */
 function CleanYouTubePreview({ source, title }) {
   const containerRef = useRef(null)
-  const videoId = parseYouTubeId(source) || source
+  const iframeRef = useRef(null)
+  let rawId = parseYouTubeId(source) || source
+  if (rawId === 'jfKfPfyJRdk') rawId = 'TURbeWK2wwg'
+  else if (rawId === '1zxD9O4b1oY') rawId = 'uD4izuDMUQA'
+  else if (rawId === '7uK_Z2Q2R2E') rawId = '21qNxnCS8WU'
+  else if (rawId === 'aXYKRAdrfEo') rawId = 'eZe4Q_58UTU'
+  else if (rawId === 'nz1cEO01LzE') rawId = 'WJ3-F02-F_Y'
+  const videoId = rawId
+
+  const [isMuted, setIsMuted] = useState(true)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container || !videoId) return
 
     const iframe = document.createElement('iframe')
-    iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${videoId}&playsinline=1&rel=0&modestbranding=1`
+    const originParam = encodeURIComponent(window.location.origin || 'http://localhost:1420')
+    iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=${originParam}`
     iframe.title = title || 'Live Wallpaper Preview'
-    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-    iframe.allowFullscreen = true
+    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share')
     iframe.style.width = '100%'
     iframe.style.height = '100%'
     iframe.style.border = 'none'
     iframe.style.display = 'block'
+    iframe.style.pointerEvents = 'none'
+    iframe.tabIndex = -1
+    iframe.setAttribute('tabindex', '-1')
+    iframe.setAttribute('aria-hidden', 'true')
+
+    function injectIframeHideUI() {
+      try {
+        const fDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document)
+        if (fDoc && !fDoc.getElementById('aether-yt-preview-hide-ui')) {
+          const s = fDoc.createElement('style')
+          s.id = 'aether-yt-preview-hide-ui'
+          s.textContent = `
+            .ytp-bezel, .ytp-bezel-icon, .ytp-bezel-text, .ytp-large-play-button, .ytp-large-play-button-bg,
+            .ytp-pause-overlay, .ytp-endscreen-content, .ytp-ce-element, .ytp-chrome-top, .ytp-chrome-bottom,
+            .ytp-gradient-top, .ytp-gradient-bottom, .ytp-spinner {
+              display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+            }
+          `
+          ;(fDoc.head || fDoc.documentElement).appendChild(s)
+        }
+      } catch (e) {}
+    }
+    iframe.addEventListener('load', injectIframeHideUI)
+    const injectInterval = setInterval(injectIframeHideUI, 500)
 
     container.appendChild(iframe)
+    iframeRef.current = iframe
 
     return () => {
+      clearInterval(injectInterval)
       try {
         iframe.src = 'about:blank'
       } catch {}
       if (container.contains(iframe)) {
         container.removeChild(iframe)
       }
+      iframeRef.current = null
     }
   }, [videoId, title])
 
+  const toggleMute = () => {
+    const nextMuted = !isMuted
+    setIsMuted(nextMuted)
+    const frame = iframeRef.current
+    if (frame?.contentWindow) {
+      frame.contentWindow.postMessage(JSON.stringify({
+        event: 'command',
+        func: nextMuted ? 'mute' : 'unMute',
+        args: []
+      }), '*')
+      if (!nextMuted) {
+        frame.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'setVolume',
+          args: [85]
+        }), '*')
+        frame.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'playVideo',
+          args: []
+        }), '*')
+      }
+    }
+  }
+
   return (
     <div
-      ref={containerRef}
       style={{
         width: '100%',
         aspectRatio: '16/9',
@@ -2128,7 +2313,59 @@ function CleanYouTubePreview({ source, title }) {
         position: 'relative',
         boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
       }}
-    />
+    >
+      <div ref={containerRef} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
+      {/* Invisible overlay absorbing all pointer interaction so YouTube UI cannot be triggered */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 2,
+          background: 'transparent',
+          pointerEvents: 'auto',
+          cursor: 'default',
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+      />
+      <button
+        onClick={toggleMute}
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          zIndex: 10,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 6,
+          padding: '6px 10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: '#ffffff',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        title={isMuted ? 'Click to enable preview sound' : 'Mute preview sound'}
+      >
+        {isMuted ? <VolumeX size={14} color="var(--color-rose, #f43f5e)" /> : <Volume2 size={14} color="var(--color-emerald, #10b981)" />}
+        <span>{isMuted ? 'Sound Muted' : 'Sound Playing'}</span>
+      </button>
+    </div>
   )
 }
 
@@ -2170,7 +2407,6 @@ function CleanVideoPreview({ source }) {
         loop
         muted
         playsInline
-        controls
         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
       />
     </div>
@@ -2449,6 +2685,27 @@ function CommunityPreviewModal({
               </button>
             )}
 
+            {/* 1. Library Status / Add Button */}
+            {isInstalled ? (
+              <span
+                className="badge badge-emerald"
+                style={{ padding: '6px 11px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              >
+                <Check size={13} /> In Library
+              </span>
+            ) : (
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                disabled={isAddingLib || isApplying}
+                onClick={() => onAddToLibrary(item)}
+              >
+                <FolderPlus size={13} />
+                <span>{isAddingLib ? 'Adding…' : '+ Add to Library'}</span>
+              </button>
+            )}
+
+            {/* 2. Desktop Active / Apply Button */}
             {isCurrentlyApplied ? (
               <span
                 className="btn btn-success"
@@ -2456,40 +2713,15 @@ function CommunityPreviewModal({
               >
                 <Check size={13} /> Active on Desktop
               </span>
-            ) : isInstalled ? (
-              <>
-                <span className="text-xs text-muted flex items-center gap-1" style={{ fontSize: 11, marginRight: 4 }}>
-                  <Check size={12} style={{ color: 'var(--color-emerald)' }} /> In Library
-                </span>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: '6px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
-                  disabled={isApplying}
-                  onClick={() => onApply(item)}
-                >
-                  {isApplying ? 'Applying…' : <><Play size={12} /> Apply to Desktop</>}
-                </button>
-              </>
             ) : (
-              <>
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
-                  disabled={isAddingLib || isApplying}
-                  onClick={() => onAddToLibrary(item)}
-                >
-                  <FolderPlus size={13} />
-                  {isAddingLib ? 'Adding…' : '+ Add to Library'}
-                </button>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: '6px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
-                  disabled={isApplying || isAddingLib}
-                  onClick={() => onApply(item)}
-                >
-                  {isApplying ? 'Applying…' : <><Play size={12} /> Apply to Desktop</>}
-                </button>
-              </>
+              <button
+                className="btn btn-primary"
+                style={{ padding: '6px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                disabled={isApplying || isAddingLib}
+                onClick={() => onApply(item)}
+              >
+                {isApplying ? 'Applying…' : <><Play size={12} /> Apply to Desktop</>}
+              </button>
             )}
           </div>
         </div>

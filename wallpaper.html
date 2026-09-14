@@ -1,9 +1,27 @@
 <!doctype html>
-<html lang="en" data-theme="sovereign-onyx" style="margin: 0; padding: 0; overflow: hidden; background: #000000 !important;">
+<html lang="en" data-theme="sovereign-onyx" style="margin: 0; padding: 0; overflow: hidden; background: transparent !important;">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <script>
+      // Safe neutralization of MediaSession API actions to suppress Windows SMTC
+      try {
+        if (typeof window !== 'undefined') {
+          if (window.MediaSession && window.MediaSession.prototype) {
+            try {
+              window.MediaSession.prototype.setActionHandler = function() {};
+            } catch (eProto) {}
+          }
+          if (window.navigator && window.navigator.mediaSession) {
+            try {
+              window.navigator.mediaSession.setActionHandler = function() {};
+            } catch (eNav) {}
+          }
+        }
+      } catch (e) {}
+    </script>
     <title>AetherFlow Wallpaper Engine</title>
     <style>
       html, body, #root {
@@ -12,8 +30,8 @@
         width: 100% !important;
         height: 100% !important;
         overflow: hidden !important;
-        background: #000000 !important;
-        background-color: #000000 !important;
+        background: transparent !important;
+        background-color: transparent !important;
         color: #ffffff !important;
         transition: none !important;
         border: none !important;
@@ -22,8 +40,8 @@
       }
     </style>
   </head>
-  <body style="margin: 0; padding: 0; overflow: hidden; background: #000000 !important; background-color: #000000 !important; border: none !important; outline: none !important;">
-    <div id="root" style="width: 100%; height: 100%; background: #000000 !important; border: none !important; outline: none !important;"></div>
+  <body style="margin: 0; padding: 0; overflow: hidden; background: transparent !important; background-color: transparent !important; border: none !important; outline: none !important;">
+    <div id="root" style="width: 100%; height: 100%; background: transparent !important; border: none !important; outline: none !important;"></div>
     <script type="module" src="/src/wallpaper.jsx"></script>
   </body>
 </html>

@@ -25,6 +25,40 @@ export function clearCatalogCache() {
   lastFetchTime = 0
 }
 
+// ── Verified Working Stream Healing Map ───────────────────────────────────────
+export const YOUTUBE_HEAL_MAP = {
+  'jfKfPfyJRdk': {
+    id: 'TURbeWK2wwg',
+    name: 'Lofi Cafe & Gentle Rain',
+    source: 'https://www.youtube.com/watch?v=TURbeWK2wwg',
+    preview: 'https://img.youtube.com/vi/TURbeWK2wwg/hqdefault.jpg'
+  },
+  '1zxD9O4b1oY': {
+    id: 'uD4izuDMUQA',
+    name: 'Deep Space Cosmic Nebula',
+    source: 'https://www.youtube.com/watch?v=uD4izuDMUQA',
+    preview: 'https://img.youtube.com/vi/uD4izuDMUQA/hqdefault.jpg'
+  },
+  '7uK_Z2Q2R2E': {
+    id: '21qNxnCS8WU',
+    name: 'Synthwave Sunset Highway',
+    source: 'https://www.youtube.com/watch?v=21qNxnCS8WU',
+    preview: 'https://img.youtube.com/vi/21qNxnCS8WU/hqdefault.jpg'
+  },
+  'aXYKRAdrfEo': {
+    id: 'eZe4Q_58UTU',
+    name: 'Tokyo Night Drive POV',
+    source: 'https://www.youtube.com/watch?v=eZe4Q_58UTU',
+    preview: 'https://img.youtube.com/vi/eZe4Q_58UTU/hqdefault.jpg'
+  },
+  'nz1cEO01LzE': {
+    id: 'WJ3-F02-F_Y',
+    name: 'Milky Way Timelapse',
+    source: 'https://www.youtube.com/watch?v=WJ3-F02-F_Y',
+    preview: 'https://img.youtube.com/vi/WJ3-F02-F_Y/hqdefault.jpg'
+  }
+}
+
 // ── Local Storage Helpers for Instant Admin Takedowns & Feature Overrides ─────
 
 const TAKEDOWN_STORAGE_KEY = 'aetherflow_takedowns'
@@ -93,6 +127,68 @@ function saveLocalSubmissions(list) {
     localStorage.setItem(LOCAL_SUBMISSIONS_KEY, JSON.stringify(list))
   } catch (e) {
     console.warn('[Community] Failed to save local submissions:', e)
+  }
+}
+
+const APPROVED_STORAGE_KEY = 'aetherflow_approved_overrides'
+const REJECTED_STORAGE_KEY = 'aetherflow_rejected_overrides'
+
+export function getLocalApprovedMap() {
+  try {
+    const raw = localStorage.getItem(APPROVED_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveLocalApprovedMap(map) {
+  try {
+    localStorage.setItem(APPROVED_STORAGE_KEY, JSON.stringify(map))
+  } catch (e) {
+    console.warn('[Community] Failed to save approved map:', e)
+  }
+}
+
+export function removeLocalApprovedOverride(id) {
+  try {
+    const map = getLocalApprovedMap()
+    if (map[id]) {
+      delete map[id]
+      saveLocalApprovedMap(map)
+    }
+  } catch (e) {
+    console.warn('[Community] Failed to remove approved override:', e)
+  }
+}
+
+export function getLocalRejectedOverrides() {
+  try {
+    const raw = localStorage.getItem(REJECTED_STORAGE_KEY)
+    return new Set(raw ? JSON.parse(raw) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export function addLocalRejectedOverride(id) {
+  try {
+    const current = getLocalRejectedOverrides()
+    current.add(id)
+    localStorage.setItem(REJECTED_STORAGE_KEY, JSON.stringify(Array.from(current)))
+    removeLocalApprovedOverride(id)
+  } catch (e) {
+    console.warn('[Community] Failed to save rejected override:', e)
+  }
+}
+
+export function removeLocalRejectedOverride(id) {
+  try {
+    const current = getLocalRejectedOverrides()
+    current.delete(id)
+    localStorage.setItem(REJECTED_STORAGE_KEY, JSON.stringify(Array.from(current)))
+  } catch (e) {
+    console.warn('[Community] Failed to remove rejected override:', e)
   }
 }
 
@@ -240,10 +336,27 @@ export async function fetchCatalog(forceRefresh = false) {
     }
   }
 
-  // 3. Merge local mock submissions (for offline testing & local approvals)
+  // 3. Merge local mock submissions and approved map overrides
+  const approvedMap = getLocalApprovedMap()
+  const localApprovedFromMap = Object.values(approvedMap).map(sub => ({
+    id: sub.id,
+    name: sub.name || sub.title || 'Community Wallpaper',
+    description: sub.description || '',
+    author: sub.author || 'Community Creator',
+    type: sub.type || 'youtube',
+    source: sub.source,
+    preview: sub.preview || sub.source,
+    tags: Array.isArray(sub.tags) ? sub.tags : ['community'],
+    downloads: sub.downloads || 0,
+    likes: sub.likes || 0,
+    featured: Boolean(sub.featured),
+    isCommunitySubmission: true,
+    createdAt: sub.createdAt || sub.reviewed_at || new Date().toISOString(),
+  }))
+
   const localSubs = getLocalSubmissions()
   const localApproved = localSubs
-    .filter(s => s.status === 'approved' && !approvedSubmissions.some(a => a.id === s.id))
+    .filter(s => s.status === 'approved' && !approvedSubmissions.some(a => a.id === s.id) && !localApprovedFromMap.some(a => a.id === s.id))
     .map(sub => ({
       id: sub.id,
       name: sub.title,
@@ -265,9 +378,21 @@ export async function fetchCatalog(forceRefresh = false) {
   const combined = []
 
   // Put community approved submissions first for fresh engagement
-  for (const item of [...approvedSubmissions, ...localApproved, ...baseWallpapers]) {
-    if (!item?.id || seenIds.has(item.id)) continue
-    if (takedowns.has(item.id)) continue // Exclude taken down items!
+  for (const rawItem of [...localApprovedFromMap, ...approvedSubmissions, ...localApproved, ...baseWallpapers]) {
+    if (!rawItem?.id || seenIds.has(rawItem.id)) continue
+    if (takedowns.has(rawItem.id)) continue // Exclude taken down items!
+
+    const item = { ...rawItem }
+    if (item.type === 'youtube' || item.source?.includes('youtube') || item.source?.includes('youtu.be')) {
+      const parsedYt = parseYouTubeId(item.source)
+      if (parsedYt && YOUTUBE_HEAL_MAP[parsedYt]) {
+        const healed = YOUTUBE_HEAL_MAP[parsedYt]
+        item.source = healed.source
+        item.preview = healed.preview
+      } else if (parsedYt && (!item.preview || item.preview.includes(parsedYt) || item.preview.includes('hqdefault.jpg'))) {
+        item.preview = `https://img.youtube.com/vi/${parsedYt}/hqdefault.jpg`
+      }
+    }
 
     seenIds.add(item.id)
 
@@ -500,42 +625,86 @@ export async function submitWallpaper({ title, description, tags, type, source, 
  */
 export async function getUserSubmissions() {
   const localList = getLocalSubmissions()
+  const approvedMap = getLocalApprovedMap()
+  const rejectedSet = getLocalRejectedOverrides()
+  const takedowns = getLocalTakedowns()
 
-  if (!isOnline()) return localList
+  let merged = [...localList]
 
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return localList
+  if (isOnline()) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data, error } = await supabase
+          .from('submissions')
+          .select('*')
+          .eq('author_id', user.id)
+          .order('created_at', { ascending: false })
 
-    const { data, error } = await supabase
-      .from('submissions')
-      .select('*')
-      .eq('author_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    const serverList = (data || []).map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      type: row.type,
-      source: row.source,
-      tags: row.tags || [],
-      author: row.author_name || 'You',
-      status: row.status || 'pending',
-      created_at: row.created_at,
-      rejection_reason: row.rejection_reason,
-    }))
-
-    // Merge server and local list
-    const serverIds = new Set(serverList.map(s => s.id))
-    const merged = [...serverList, ...localList.filter(l => !serverIds.has(l.id))]
-    return merged
-  } catch (err) {
-    console.warn('[Community] Failed to fetch submissions from Supabase:', err.message)
-    return localList
+        if (!error && data) {
+          const serverList = data.map(row => ({
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            type: row.type,
+            source: row.source,
+            tags: row.tags || [],
+            author: row.author_name || 'You',
+            status: row.status || 'pending',
+            created_at: row.created_at,
+            rejection_reason: row.rejection_reason,
+          }))
+          const serverIds = new Set(serverList.map(s => s.id))
+          merged = [...serverList, ...localList.filter(l => !serverIds.has(l.id))]
+        }
+      }
+    } catch (err) {
+      console.warn('[Community] Failed to fetch submissions from Supabase:', err.message)
+    }
   }
+
+  return merged
+    .map(s => {
+      if (approvedMap[s.id]) return { ...s, status: 'approved' }
+      if (rejectedSet.has(s.id)) return { ...s, status: 'rejected' }
+      return s
+    })
+    .filter(s => s.status !== 'removed' && !takedowns.has(s.id))
+}
+
+/**
+ * Allow a creator to withdraw / delete their own submission.
+ */
+export async function deleteUserSubmission(submissionId) {
+  // 1. Remove from local storage submissions
+  const localList = getLocalSubmissions()
+  saveLocalSubmissions(localList.filter(s => s.id !== submissionId))
+
+  // 2. Remove from approved map and add to takedowns so it disappears from community feed
+  removeLocalApprovedOverride(submissionId)
+  addLocalTakedown(submissionId)
+
+  // 3. Delete from Supabase if online
+  if (isOnline()) {
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('id', submissionId)
+
+      if (error) {
+        await supabase
+          .from('submissions')
+          .update({ status: 'removed', rejection_reason: 'Withdrawn by creator' })
+          .eq('id', submissionId)
+      }
+    } catch (e) {
+      console.warn('[Community] Supabase delete submission error:', e)
+    }
+  }
+
+  clearCatalogCache()
+  return { success: true }
 }
 
 // ── Admin Moderation APIs ─────────────────────────────────────────────────────
@@ -545,7 +714,13 @@ export async function getUserSubmissions() {
  * Only accessible to admins.
  */
 export async function fetchPendingSubmissions() {
-  const localSubs = getLocalSubmissions().filter(s => s.status === 'pending')
+  const approvedMap = getLocalApprovedMap()
+  const rejectedSet = getLocalRejectedOverrides()
+  const takedowns = getLocalTakedowns()
+
+  const isExcluded = (id) => Boolean(approvedMap[id] || rejectedSet.has(id) || takedowns.has(id))
+
+  const localSubs = getLocalSubmissions().filter(s => s.status === 'pending' && !isExcluded(s.id))
 
   if (!isOnline()) return localSubs
 
@@ -561,28 +736,30 @@ export async function fetchPendingSubmissions() {
       return localSubs
     }
 
-    const serverSubs = (data || []).map(row => {
-      let preview = row.preview_url || row.preview || ''
-      if (!preview && row.type === 'youtube') {
-        const ytid = parseYouTubeId(row.source)
-        if (ytid) preview = `https://img.youtube.com/vi/${ytid}/hqdefault.jpg`
-      } else if (!preview && row.type === 'image') {
-        preview = row.source
-      }
+    const serverSubs = (data || [])
+      .filter(row => !isExcluded(row.id))
+      .map(row => {
+        let preview = row.preview_url || row.preview || ''
+        if (!preview && row.type === 'youtube') {
+          const ytid = parseYouTubeId(row.source)
+          if (ytid) preview = `https://img.youtube.com/vi/${ytid}/hqdefault.jpg`
+        } else if (!preview && row.type === 'image') {
+          preview = row.source
+        }
 
-      return {
-        id: row.id,
-        title: row.title,
-        description: row.description,
-        type: row.type,
-        source: row.source,
-        preview,
-        tags: row.tags || [],
-        author: row.author_name || 'Community Member',
-        status: 'pending',
-        created_at: row.created_at,
-      }
-    })
+        return {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          type: row.type,
+          source: row.source,
+          preview,
+          tags: row.tags || [],
+          author: row.author_name || 'Community Member',
+          status: 'pending',
+          created_at: row.created_at,
+        }
+      })
 
     const serverIds = new Set(serverSubs.map(s => s.id))
     return [...serverSubs, ...localSubs.filter(l => !serverIds.has(l.id))]
@@ -596,9 +773,39 @@ export async function fetchPendingSubmissions() {
  * Approve a pending submission.
  * Immediately marks status = 'approved' and clears cache so it becomes visible to all users.
  */
-export async function approveSubmission(submissionId) {
-  // Update local storage if present
+export async function approveSubmission(submissionId, submissionObj = null) {
+  // 1. Store in local approved overrides map with full metadata
+  const existingMap = getLocalApprovedMap()
   const localList = getLocalSubmissions()
+  const localItem = localList.find(s => s.id === submissionId)
+  const meta = submissionObj || localItem || {}
+
+  let preview = meta.preview || meta.preview_url || meta.source || ''
+  if (!preview && meta.type === 'youtube') {
+    const ytid = parseYouTubeId(meta.source)
+    if (ytid) preview = `https://img.youtube.com/vi/${ytid}/hqdefault.jpg`
+  }
+
+  existingMap[submissionId] = {
+    id: submissionId,
+    name: meta.title || meta.name || 'Community Wallpaper',
+    description: meta.description || '',
+    author: meta.author || meta.author_name || 'Community Creator',
+    type: meta.type || 'youtube',
+    source: meta.source || '',
+    preview,
+    tags: Array.isArray(meta.tags) ? meta.tags : ['community'],
+    status: 'approved',
+    reviewed_at: new Date().toISOString(),
+    isCommunitySubmission: true,
+  }
+  saveLocalApprovedMap(existingMap)
+
+  // 2. Remove from rejected & takedowns
+  removeLocalRejectedOverride(submissionId)
+  removeLocalTakedown(submissionId)
+
+  // 3. Update local storage submissions if present
   const localIndex = localList.findIndex(s => s.id === submissionId)
   if (localIndex !== -1) {
     localList[localIndex].status = 'approved'
@@ -606,7 +813,7 @@ export async function approveSubmission(submissionId) {
     saveLocalSubmissions(localList)
   }
 
-  // Update Supabase
+  // 4. Update Supabase
   if (isOnline()) {
     try {
       let { error } = await supabase
@@ -618,7 +825,6 @@ export async function approveSubmission(submissionId) {
         .eq('id', submissionId)
 
       if (error && error.message?.includes('column')) {
-        // Fallback: update status without reviewed_at column
         const fallback = await supabase
           .from('submissions')
           .update({ status: 'approved' })
@@ -632,10 +838,7 @@ export async function approveSubmission(submissionId) {
     }
   }
 
-  // Remove from takedowns if it was previously there
-  removeLocalTakedown(submissionId)
-
-  // Clear cache so it appears immediately
+  // Clear cache so it appears immediately in the Browse feed
   clearCatalogCache()
   return { success: true }
 }
@@ -644,7 +847,11 @@ export async function approveSubmission(submissionId) {
  * Reject a pending submission with an optional reason.
  */
 export async function rejectSubmission(submissionId, reason = '') {
-  // Update local storage if present
+  // 1. Store in rejected overrides map
+  addLocalRejectedOverride(submissionId)
+  removeLocalApprovedOverride(submissionId)
+
+  // 2. Update local storage if present
   const localList = getLocalSubmissions()
   const localIndex = localList.findIndex(s => s.id === submissionId)
   if (localIndex !== -1) {
@@ -654,7 +861,7 @@ export async function rejectSubmission(submissionId, reason = '') {
     saveLocalSubmissions(localList)
   }
 
-  // Update Supabase
+  // 3. Update Supabase
   if (isOnline()) {
     try {
       let { error } = await supabase
@@ -667,7 +874,6 @@ export async function rejectSubmission(submissionId, reason = '') {
         .eq('id', submissionId)
 
       if (error && error.message?.includes('column')) {
-        // Fallback: update status without extra columns
         const fallback = await supabase
           .from('submissions')
           .update({ status: 'rejected' })

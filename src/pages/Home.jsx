@@ -113,7 +113,6 @@ function CleanHomeVideoPreview({ videoSrc }) {
       autoPlay
       loop
       muted
-      controls
       playsInline
       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
     />
@@ -121,42 +120,155 @@ function CleanHomeVideoPreview({ videoSrc }) {
 }
 
 /**
- * CleanHomeYouTubePreview — Zero-leak YouTube IFrame preview with about:blank navigation teardown.
+ * CleanHomeYouTubePreview — Zero-leak YouTube IFrame preview with about:blank navigation teardown and sound toggle.
  */
 function CleanHomeYouTubePreview({ ytId, title }) {
   const containerRef = useRef(null)
+  const iframeRef = useRef(null)
+  let finalId = ytId
+  if (finalId === 'jfKfPfyJRdk') finalId = 'TURbeWK2wwg'
+  else if (finalId === '1zxD9O4b1oY') finalId = 'uD4izuDMUQA'
+  else if (finalId === '7uK_Z2Q2R2E') finalId = '21qNxnCS8WU'
+  else if (finalId === 'aXYKRAdrfEo') finalId = 'eZe4Q_58UTU'
+  else if (finalId === 'nz1cEO01LzE') finalId = 'WJ3-F02-F_Y'
+
+  const [isMuted, setIsMuted] = useState(true)
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container || !ytId) return
+    if (!container || !finalId) return
 
     const iframe = document.createElement('iframe')
-    iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=1&loop=1&playlist=${ytId}&playsinline=1&rel=0`
+    const originParam = encodeURIComponent(window.location.origin || 'http://localhost:1420')
+    iframe.src = `https://www.youtube-nocookie.com/embed/${finalId}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1&origin=${originParam}`
     iframe.title = title || 'YouTube Preview'
-    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-    iframe.allowFullscreen = true
+    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share')
     iframe.style.width = '100%'
     iframe.style.height = '100%'
     iframe.style.border = 'none'
     iframe.style.display = 'block'
+    iframe.style.pointerEvents = 'none'
+    iframe.tabIndex = -1
+    iframe.setAttribute('tabindex', '-1')
+    iframe.setAttribute('aria-hidden', 'true')
+
+    function injectIframeHideUI() {
+      try {
+        const fDoc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document)
+        if (fDoc && !fDoc.getElementById('aether-yt-preview-hide-ui')) {
+          const s = fDoc.createElement('style')
+          s.id = 'aether-yt-preview-hide-ui'
+          s.textContent = `
+            .ytp-bezel, .ytp-bezel-icon, .ytp-bezel-text, .ytp-large-play-button, .ytp-large-play-button-bg,
+            .ytp-pause-overlay, .ytp-endscreen-content, .ytp-ce-element, .ytp-chrome-top, .ytp-chrome-bottom,
+            .ytp-gradient-top, .ytp-gradient-bottom, .ytp-spinner {
+              display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+            }
+          `
+          ;(fDoc.head || fDoc.documentElement).appendChild(s)
+        }
+      } catch (e) {}
+    }
+    iframe.addEventListener('load', injectIframeHideUI)
+    const injectInterval = setInterval(injectIframeHideUI, 500)
 
     container.appendChild(iframe)
+    iframeRef.current = iframe
 
     return () => {
+      clearInterval(injectInterval)
       try {
         iframe.src = 'about:blank'
       } catch {}
       if (container.contains(iframe)) {
         container.removeChild(iframe)
       }
+      iframeRef.current = null
     }
-  }, [ytId, title])
+  }, [finalId, title])
+
+  const toggleMute = () => {
+    const nextMuted = !isMuted
+    setIsMuted(nextMuted)
+    const frame = iframeRef.current
+    if (frame?.contentWindow) {
+      frame.contentWindow.postMessage(JSON.stringify({
+        event: 'command',
+        func: nextMuted ? 'mute' : 'unMute',
+        args: []
+      }), '*')
+      if (!nextMuted) {
+        frame.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'setVolume',
+          args: [85]
+        }), '*')
+        frame.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'playVideo',
+          args: []
+        }), '*')
+      }
+    }
+  }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%', position: 'relative' }}
-    />
+    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      <div
+        ref={containerRef}
+        style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
+      />
+      {/* Invisible overlay absorbing all pointer interaction so YouTube UI cannot be triggered */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 2,
+          background: 'transparent',
+          pointerEvents: 'auto',
+          cursor: 'default',
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+      />
+      <button
+        onClick={toggleMute}
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          zIndex: 10,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 6,
+          padding: '6px 10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: '#ffffff',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        title={isMuted ? 'Click to enable preview sound' : 'Mute preview sound'}
+      >
+        {isMuted ? <VolumeX size={14} color="var(--color-rose, #f43f5e)" /> : <Volume2 size={14} color="var(--color-emerald, #10b981)" />}
+        <span>{isMuted ? 'Sound Muted' : 'Sound Playing'}</span>
+      </button>
+    </div>
   )
 }
 

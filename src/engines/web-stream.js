@@ -2,19 +2,44 @@
  * Web Stream & YouTube Wallpaper Engine
  * Renders live streams, ambient YouTube loops, or interactive web pages as wallpapers.
  * - Canvas 2D fallback for lightweight grid previews
- * - Native YouTube IFrame API (YT.Player) integration for borderless, infinite-looping playback
+ * - Native YouTube IFrame API (YT.Player) with zero-stutter loop, audio auto-recovery, and multi-monitor sync
  */
 
 export function parseYouTubeId(url) {
   if (!url || typeof url !== 'string') return null
   const clean = url.trim()
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/live\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+  if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) return clean
+
+  try {
+    const parsed = new URL(clean.startsWith('http') ? clean : `https://${clean}`)
+    const host = parsed.hostname.replace(/^www\./, '').replace(/^m\./, '').replace(/^music\./, '')
+
+    if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+      if (parsed.searchParams.has('v')) {
+        const v = parsed.searchParams.get('v')
+        if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v
+      }
+      const pathSegments = parsed.pathname.split('/').filter(Boolean)
+      if (['embed', 'live', 'shorts', 'v'].includes(pathSegments[0]) && pathSegments[1]) {
+        const id = pathSegments[1].slice(0, 11)
+        if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return id
+      }
+    } else if (host === 'youtu.be') {
+      const id = parsed.pathname.slice(1).split(/[?#&/]/)[0]
+      if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return id
+    }
+  } catch (e) {
+    // Fallback regex
+  }
+
+  const regexFallback = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|live\/|shorts\/|v\/))([a-zA-Z0-9_-]{11})/,
     /^([a-zA-Z0-9_-]{11})$/
   ]
-  for (const pattern of patterns) {
-    const match = clean.match(pattern)
-    if (match && match[1]) return match[1]
+  for (const re of regexFallback) {
+    const m = clean.match(re)
+    if (m && m[1]) return m[1]
   }
   return null
 }
@@ -24,6 +49,11 @@ export function getYouTubeThumbnail(videoId) {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
 }
 
+export function isYouTubeLiveStream(url) {
+  if (!url || typeof url !== 'string') return false
+  return url.includes('/live/') || url.includes('live=1')
+}
+
 let ytApiPromise = null
 function loadYouTubeApi() {
   if (typeof window !== 'undefined' && window.YT && window.YT.Player) {
@@ -31,8 +61,16 @@ function loadYouTubeApi() {
   }
   if (!ytApiPromise) {
     ytApiPromise = new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (typeof window !== 'undefined' && window.YT && window.YT.Player) {
+          clearInterval(checkInterval)
+          resolve(window.YT)
+        }
+      }, 50)
+
       const prev = window.onYouTubeIframeAPIReady
       window.onYouTubeIframeAPIReady = () => {
+        clearInterval(checkInterval)
         if (typeof prev === 'function') prev()
         resolve(window.YT)
       }
@@ -50,16 +88,11 @@ export function createWebStream(canvas, options = {}) {
   const ctx = canvas.getContext('2d')
   let animId = null
   let containerEl = null
-  let wrapA = null
-  let wrapB = null
-  let playerA = null
-  let playerB = null
-  let activeSlot = 'A'
+  let wrapEl = null
+  let player = null
   let hasFadedIn = false
-  let isTransitioning = false
-  let crossfadeTimer = null
-  let loopTimer = null
   let syncInterval = null
+  let uiCleanInterval = null
   const syncChannel = (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined')
     ? new BroadcastChannel('aetherflow_yt_sync')
     : null
@@ -73,6 +106,8 @@ export function createWebStream(canvas, options = {}) {
   let currentSpeed = Number(options.speedMultiplier ?? options.speed ?? 1)
   let isRunning = false
   let isPausedByUser = false
+  let playStartTime = 0
+  let audioUnlocked = false
 
   function resize() {
     if (!canvas) return
@@ -128,6 +163,46 @@ export function createWebStream(canvas, options = {}) {
     thumbImg.src = src
   }
 
+  function syncAudio() {
+    const shouldMute = isSecondary || currentMuted
+    const vol = Math.max(1, Math.min(100, Math.round(currentVolume)))
+    try {
+      if (shouldMute) {
+        player?.mute?.()
+        player?.setVolume?.(0)
+      } else {
+        player?.unMute?.()
+        player?.setVolume?.(vol)
+      }
+    } catch (e) {}
+
+    const frame = iframeEl || player?.getIframe?.()
+    if (frame?.contentWindow) {
+      try {
+        frame.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: shouldMute ? 'mute' : 'unMute',
+          args: []
+        }), '*')
+        if (!shouldMute) {
+          frame.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func: 'setVolume',
+            args: [vol]
+          }), '*')
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Attempt to unlock unmuted audio on first user click or key anywhere in window
+  function onFirstUserGesture() {
+    audioUnlocked = true
+    if (!isSecondary && !currentMuted) {
+      syncAudio()
+    }
+  }
+
   function mountPlayer() {
     if (options.preview) return
     if (!canvas.parentElement) return
@@ -137,6 +212,8 @@ export function createWebStream(canvas, options = {}) {
     const ytId = parseYouTubeId(currentUrl)
 
     if (ytId) {
+      const isLive = isYouTubeLiveStream(currentUrl)
+
       // Container with overscan to push any YouTube edge elements completely off-screen
       containerEl = document.createElement('div')
       containerEl.setAttribute('data-aether-player', 'youtube')
@@ -150,201 +227,242 @@ export function createWebStream(canvas, options = {}) {
       containerEl.style.filter = `brightness(${options.brightness ?? 1})`
       containerEl.style.overflow = 'hidden'
 
-      // Slot A wrapper
-      wrapA = document.createElement('div')
-      wrapA.style.position = 'absolute'
-      wrapA.style.inset = '0'
-      wrapA.style.opacity = String(options.opacity ?? 1)
-      wrapA.style.transition = 'opacity 0.4s ease'
-      const mountA = document.createElement('div')
-      mountA.id = 'yt-mount-a-' + Math.random().toString(36).slice(2)
-      mountA.style.width = '100%'
-      mountA.style.height = '100%'
-      wrapA.appendChild(mountA)
-      containerEl.appendChild(wrapA)
+      // Player wrapper with smooth fade-in
+      wrapEl = document.createElement('div')
+      wrapEl.style.position = 'absolute'
+      wrapEl.style.inset = '0'
+      wrapEl.style.opacity = '0'
+      wrapEl.style.transition = 'opacity 0.5s ease-in-out'
+      wrapEl.style.pointerEvents = 'none'
 
-      // Slot B wrapper (for seamless ping-pong loop without bezel)
-      wrapB = document.createElement('div')
-      wrapB.style.position = 'absolute'
-      wrapB.style.inset = '0'
-      wrapB.style.opacity = '0'
-      wrapB.style.transition = 'opacity 0.4s ease'
-      const mountB = document.createElement('div')
-      mountB.id = 'yt-mount-b-' + Math.random().toString(36).slice(2)
-      mountB.style.width = '100%'
-      mountB.style.height = '100%'
-      wrapB.appendChild(mountB)
-      containerEl.appendChild(wrapB)
+      // Pre-create iframe with explicit Permissions Policy upfront before document creation
+      iframeEl = document.createElement('iframe')
+      iframeEl.id = 'yt-frame-' + Math.random().toString(36).slice(2)
+      iframeEl.setAttribute('allow', 'accelerometer; autoplay *; clipboard-write; encrypted-media *; gyroscope; picture-in-picture; web-share')
+      iframeEl.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
+      iframeEl.style.width = '100%'
+      iframeEl.style.height = '100%'
+      iframeEl.style.border = 'none'
+      iframeEl.style.display = 'block'
+      iframeEl.style.pointerEvents = 'none'
+      iframeEl.tabIndex = -1
+      iframeEl.setAttribute('tabindex', '-1')
+      iframeEl.setAttribute('aria-hidden', 'true')
+
+      // Start with mute=1 to guarantee zero autoplay policy blocks; unmuted onReady/PLAYING if Aether policy permits
+      const embedSrc = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`
+      iframeEl.src = embedSrc
+
+      wrapEl.appendChild(iframeEl)
+      containerEl.appendChild(wrapEl)
+
+      function injectIframeHideUI() {
+        try {
+          const fDoc = iframeEl?.contentDocument || (iframeEl?.contentWindow && iframeEl.contentWindow.document)
+          if (fDoc && !fDoc.getElementById('aether-yt-engine-hide-ui')) {
+            const s = fDoc.createElement('style')
+            s.id = 'aether-yt-engine-hide-ui'
+            s.textContent = `
+              .ytp-bezel, .ytp-bezel-icon, .ytp-bezel-text, .ytp-large-play-button, .ytp-large-play-button-bg,
+              .ytp-pause-overlay, .ytp-endscreen-content, .ytp-ce-element, .ytp-chrome-top, .ytp-chrome-bottom,
+              .ytp-gradient-top, .ytp-gradient-bottom, .ytp-spinner {
+                display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+              }
+            `
+            ;(fDoc.head || fDoc.documentElement).appendChild(s)
+          }
+        } catch (e) {}
+      }
+      iframeEl.addEventListener('load', () => {
+        injectIframeHideUI()
+        setTimeout(() => {
+          if (!hasFadedIn && wrapEl && isRunning) {
+            hasFadedIn = true
+            wrapEl.style.opacity = String(options.opacity ?? 1)
+          }
+        }, 1200)
+      })
+      clearInterval(uiCleanInterval)
+      uiCleanInterval = setInterval(injectIframeHideUI, 500)
+
+      // Transparent interaction shield
+      const shieldEl = document.createElement('div')
+      shieldEl.style.position = 'absolute'
+      shieldEl.style.inset = '0'
+      shieldEl.style.zIndex = '5'
+      shieldEl.style.background = 'transparent'
+      shieldEl.style.pointerEvents = 'none'
+      containerEl.appendChild(shieldEl)
 
       canvas.parentElement.appendChild(containerEl)
 
+      // Neutralize MediaSession API across all contexts
+      try {
+        if (typeof window !== 'undefined' && window.MediaSession && window.MediaSession.prototype) {
+          window.MediaSession.prototype.setActionHandler = function() {}
+          window.MediaSession.prototype.setPositionState = function() {}
+          Object.defineProperty(window.MediaSession.prototype, 'metadata', { get: () => null, set: () => {}, configurable: true })
+          Object.defineProperty(window.MediaSession.prototype, 'playbackState', { get: () => 'none', set: () => {}, configurable: true })
+        }
+        if (typeof navigator !== 'undefined' && navigator.mediaSession) {
+          navigator.mediaSession.metadata = null
+          navigator.mediaSession.playbackState = 'none'
+          ;['play', 'pause', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward', 'seekto', 'stop', 'skipad'].forEach(action => {
+            try { navigator.mediaSession.setActionHandler(action, null) } catch (e) {}
+          })
+        }
+      } catch (e) {}
+
+      function logMediaSessionDiagnostics(phase, extra = {}) {
+        const hasMediaSession = typeof navigator !== 'undefined' && Boolean(navigator.mediaSession)
+        const mediaMetadata = (hasMediaSession && navigator.mediaSession.metadata) ? 'present' : 'null'
+        const playbackState = (hasMediaSession && navigator.mediaSession.playbackState) ? navigator.mediaSession.playbackState : 'none'
+        const mediaElementsCount = document.querySelectorAll('video, audio').length
+        console.log(`[AetherFlow SMTC Diagnostic] [${phase}]`, {
+          wallpaperInitialized: true,
+          webView2Instance: typeof window.__TAURI__ !== 'undefined' || Boolean(window.chrome?.webview),
+          navigatorMediaSessionExists: hasMediaSession,
+          mediaSessionMetadata: mediaMetadata,
+          mediaSessionPlaybackState: playbackState,
+          registeredMediaActions: [],
+          mediaElementCount: mediaElementsCount,
+          videoMutedState: extra.muted ?? currentMuted,
+          videoVolume: extra.volume ?? currentVolume,
+          playbackState: extra.playerState ?? (isRunning ? (isPausedByUser ? 'PAUSED' : 'ACTIVE') : 'STOPPED'),
+          mediaSessionSuppressionEnabled: true,
+          ...extra
+        })
+      }
+
+      logMediaSessionDiagnostics('INIT', { ytId, isLive, isSecondary, muted: currentMuted, volume: currentVolume })
+
       loadYouTubeApi().then((YT) => {
-        if (!isRunning || !containerEl) return
+        if (!isRunning || !containerEl || !iframeEl) return
 
-        function makeConfig(slot, onReadyCb) {
-          return {
-            videoId: ytId,
-            playerVars: {
-              autoplay: 1,
-              controls: 0,
-              disablekb: 1,
-              fs: 0,
-              rel: 0,
-              iv_load_policy: 3,
-              modestbranding: 1,
-              playsinline: 1,
-              mute: currentMuted ? 1 : 0,
-              loop: 0,
-              enablejsapi: 1,
-            },
-            events: {
-              onReady: (e) => {
-                try {
-                  if (currentMuted) {
-                    e.target.mute()
-                    e.target.setVolume(0)
-                  } else {
-                    e.target.unMute()
-                    const vol = Math.max(1, Math.round(currentVolume))
-                    e.target.setVolume(vol)
-                  }
-                  if (currentSpeed !== 1 && e.target.setPlaybackRate) {
-                    try { e.target.setPlaybackRate(currentSpeed) } catch {}
-                  }
-                } catch (err) {}
-                onReadyCb?.(e)
-              },
-              onStateChange: (e) => {
-                if (e.data === 1 && !hasFadedIn && slot === 'A') {
-                  hasFadedIn = true
-                  if (wrapA) wrapA.style.opacity = String(options.opacity ?? 1)
-                }
-                // Genuine ENDED fallback if loop timer missed
-                if (e.data === 0 && isRunning && !isPausedByUser) {
-                  triggerLoopTransition()
-                }
-              }
-            }
-          }
-        }
-
-        function triggerLoopTransition() {
-          if (isTransitioning || !isRunning || isPausedByUser) return
-          isTransitioning = true
-
-          const currentActive = activeSlot === 'A' ? playerA : playerB
-          const nextWrap = activeSlot === 'A' ? wrapB : wrapA
-
-          function runNext(nextPlayer) {
-            // Next player begins seeking & playing at opacity: 0
-            nextWrap.style.opacity = '0'
-            try {
-              if (currentMuted) {
-                nextPlayer.mute()
-                nextPlayer.setVolume(0)
-              } else {
-                nextPlayer.unMute()
-                const vol = Math.max(1, Math.round(currentVolume))
-                nextPlayer.setVolume(vol)
-              }
-              if (currentSpeed !== 1 && nextPlayer.setPlaybackRate) {
-                nextPlayer.setPlaybackRate(currentSpeed)
-              }
-              nextPlayer.seekTo(0, true)
-              nextPlayer.playVideo()
-            } catch {}
-
-            clearTimeout(crossfadeTimer)
-            crossfadeTimer = setTimeout(() => {
+        player = new YT.Player(iframeEl, {
+          events: {
+            onReady: (e) => {
               if (!isRunning) return
-              // Crossfade: next player fades in, previous fades out
-              nextWrap.style.opacity = String(options.opacity ?? 1)
-              const prevWrap = activeSlot === 'A' ? wrapA : wrapB
-              if (prevWrap) prevWrap.style.opacity = '0'
+              playStartTime = Date.now()
+              const shouldMute = isSecondary || currentMuted
+              const vol = Math.max(1, Math.min(100, Math.round(currentVolume)))
 
-              setTimeout(() => {
-                if (!isRunning) return
-                try { currentActive?.pauseVideo() } catch {}
-                activeSlot = activeSlot === 'A' ? 'B' : 'A'
-                isTransitioning = false
-              }, 450)
-            }, 300)
-          }
+              logMediaSessionDiagnostics('READY', {
+                title: e.target.getVideoData?.()?.title || '',
+                shouldMute,
+                muted: e.target.isMuted?.(),
+                volume: vol,
+                playerState: 'READY'
+              })
 
-          if (activeSlot === 'A') {
-            if (!playerB) {
-              playerB = new YT.Player(mountB.id, makeConfig('B', () => {
-                runNext(playerB)
-              }))
-            } else {
-              runNext(playerB)
-            }
-          } else {
-            runNext(playerA)
-          }
-        }
-
-        function startLoopMonitor() {
-          clearInterval(loopTimer)
-          loopTimer = setInterval(() => {
-            if (!isRunning || isPausedByUser || isTransitioning) return
-            const activePlayer = activeSlot === 'A' ? playerA : playerB
-            if (!activePlayer?.getCurrentTime || !activePlayer?.getDuration) return
-
-            const cur = activePlayer.getCurrentTime()
-            const dur = activePlayer.getDuration()
-
-            // If valid duration, initiate seamless ping-pong transition 2.4s before end
-            if (dur > 3 && cur >= dur - 2.4) {
-              triggerLoopTransition()
-            }
-          }, 150)
-        }
-
-        function startSyncMonitor() {
-          if (!syncChannel) return
-          if (!isSecondary) {
-            // Master screen: broadcast audio-synced timestamp to secondary screens
-            clearInterval(syncInterval)
-            syncInterval = setInterval(() => {
-              if (!isRunning || isPausedByUser) return
-              const activePlayer = activeSlot === 'A' ? playerA : playerB
-              if (activePlayer && activePlayer.getCurrentTime && activePlayer.getPlayerState?.() === 1) {
+              // Apply Aether audio policy state
+              if (shouldMute) {
                 try {
-                  syncChannel.postMessage({ type: 'sync_time', ytId, time: activePlayer.getCurrentTime() })
-                } catch (e) {}
+                  e.target.mute()
+                  e.target.setVolume(0)
+                } catch {}
+              } else {
+                try {
+                  e.target.unMute()
+                  e.target.setVolume(vol)
+                } catch {}
               }
-            }, 1000)
-          } else {
-            // Secondary screen: keep video frame in exact lockstep while remaining muted
-            syncChannel.onmessage = (ev) => {
-              if (!isRunning || isPausedByUser) return
-              if (ev.data?.type === 'sync_time' && ev.data?.ytId === ytId) {
-                const activePlayer = activeSlot === 'A' ? playerA : playerB
-                if (activePlayer && activePlayer.getCurrentTime && activePlayer.getPlayerState?.() === 1) {
+
+              // Also dispatch postMessage commands directly to iframe for guaranteed delivery
+              if (iframeEl?.contentWindow) {
+                try {
+                  iframeEl.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: shouldMute ? 'mute' : 'unMute',
+                    args: []
+                  }), '*')
+                  if (!shouldMute) {
+                    iframeEl.contentWindow.postMessage(JSON.stringify({
+                      event: 'command',
+                      func: 'setVolume',
+                      args: [vol]
+                    }), '*')
+                  }
+                } catch {}
+              }
+
+              try { e.target.playVideo() } catch {}
+              if (currentSpeed !== 1 && e.target.setPlaybackRate) {
+                try { e.target.setPlaybackRate(currentSpeed) } catch {}
+              }
+              if (!isLive) {
+                startSyncMonitor(ytId)
+              }
+            },
+            onStateChange: (e) => {
+              if (!isRunning) return
+
+              // State 1: PLAYING
+              if (e.data === 1) {
+                if (!hasFadedIn && wrapEl) {
+                  hasFadedIn = true
+                  wrapEl.style.opacity = String(options.opacity ?? 1)
+                }
+                const shouldMute = isSecondary || currentMuted
+                const vol = Math.max(1, Math.min(100, Math.round(currentVolume)))
+                logMediaSessionDiagnostics('PLAYING', {
+                  shouldMute,
+                  muted: e.target.isMuted?.(),
+                  volume: vol,
+                  playerState: 'PLAYING'
+                })
+                if (!shouldMute) {
                   try {
-                    const currentT = activePlayer.getCurrentTime()
-                    if (Math.abs(currentT - ev.data.time) > 0.45) {
-                      activePlayer.seekTo(ev.data.time, true)
-                    }
-                  } catch (e) {}
+                    e.target.unMute()
+                    e.target.setVolume(vol)
+                  } catch {}
+                  if (iframeEl?.contentWindow) {
+                    try {
+                      iframeEl.contentWindow.postMessage(JSON.stringify({
+                        event: 'command',
+                        func: 'unMute',
+                        args: []
+                      }), '*')
+                      iframeEl.contentWindow.postMessage(JSON.stringify({
+                        event: 'command',
+                        func: 'setVolume',
+                        args: [vol]
+                      }), '*')
+                    } catch {}
+                  }
                 }
               }
+
+              // State 2: PAUSED
+              if (e.data === 2 && !isPausedByUser) {
+                try { e.target.playVideo() } catch {}
+              }
+
+              // State 0: ENDED (Seamless loop fallback for non-live stream)
+              if (e.data === 0 && !isPausedByUser) {
+                const streamIsLive = isLive || Boolean(e.target.getVideoData?.()?.isLive)
+                if (!streamIsLive) {
+                  try {
+                    e.target.seekTo(0, true)
+                    e.target.playVideo()
+                  } catch (err) {}
+                }
+              }
+            },
+            onError: (e) => {
+              console.warn('[AetherFlow YouTube Stream] Playback error code:', e.data)
+              // Error 150/101: Restricted embedding. Fall back to clean thumbnail display
+              if (e.data === 150 || e.data === 101) {
+                loadThumbnail(ytId)
+              }
             }
           }
-        }
-
-        // Initialize Player A
-        playerA = new YT.Player(mountA.id, makeConfig('A', (e) => {
-          e.target.playVideo()
-          startLoopMonitor()
-          startSyncMonitor()
-        }))
+        })
       })
     } else {
-      // General web URL / WebGL interactive wallpaper
+      // General web URL / interactive page wallpaper
       iframeEl = document.createElement('iframe')
-      iframeEl.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen')
+      iframeEl.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen')
       iframeEl.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
       iframeEl.style.position = 'absolute'
       iframeEl.style.top = '0'
@@ -363,27 +481,49 @@ export function createWebStream(canvas, options = {}) {
     }
   }
 
+  function startSyncMonitor(ytId) {
+    if (!syncChannel) return
+    if (!isSecondary) {
+      // Primary display: broadcast master audio-synced timestamp to secondary displays
+      clearInterval(syncInterval)
+      syncInterval = setInterval(() => {
+        if (!isRunning || isPausedByUser || !player?.getCurrentTime) return
+        if (player.getPlayerState?.() === 1) {
+          try {
+            syncChannel.postMessage({ type: 'sync_time', ytId, time: player.getCurrentTime() })
+          } catch (e) {}
+        }
+      }, 1000)
+    } else {
+      // Secondary display: keep video frame synchronized while remaining permanently muted
+      syncChannel.onmessage = (ev) => {
+        if (!isRunning || isPausedByUser || !player?.getCurrentTime) return
+        if (ev.data?.type === 'sync_time' && ev.data?.ytId === ytId) {
+          if (player.getPlayerState?.() === 1) {
+            try {
+              const currentT = player.getCurrentTime()
+              if (Math.abs(currentT - ev.data.time) > 0.45) {
+                player.seekTo(ev.data.time, true)
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  }
+
   function unmountPlayer() {
-    clearInterval(loopTimer)
-    loopTimer = null
     clearInterval(syncInterval)
     syncInterval = null
-    clearTimeout(crossfadeTimer)
-    crossfadeTimer = null
+    clearInterval(uiCleanInterval)
+    uiCleanInterval = null
 
-    if (playerA) {
-      try { playerA.destroy() } catch {}
-      playerA = null
-    }
-    if (playerB) {
-      try { playerB.destroy() } catch {}
-      playerB = null
-    }
-    if (containerEl) {
-      try { containerEl.remove() } catch {}
-      containerEl = null
-      wrapA = null
-      wrapB = null
+    window.removeEventListener('pointerdown', onFirstUserGesture)
+    window.removeEventListener('keydown', onFirstUserGesture)
+
+    if (player) {
+      try { player.destroy() } catch {}
+      player = null
     }
     if (iframeEl) {
       try {
@@ -392,9 +532,12 @@ export function createWebStream(canvas, options = {}) {
       } catch {}
       iframeEl = null
     }
+    if (containerEl) {
+      try { containerEl.remove() } catch {}
+      containerEl = null
+      wrapEl = null
+    }
     hasFadedIn = false
-    isTransitioning = false
-    activeSlot = 'A'
   }
 
   function frame() {
@@ -436,19 +579,35 @@ export function createWebStream(canvas, options = {}) {
 
   function pause() {
     isPausedByUser = true
-    const activePlayer = activeSlot === 'A' ? playerA : playerB
-    try { activePlayer?.pauseVideo() } catch {}
+    try { player?.pauseVideo() } catch {}
+    if (iframeEl?.contentWindow) {
+      try {
+        iframeEl.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'pauseVideo',
+          args: []
+        }), '*')
+      } catch {}
+    }
   }
 
   function resume() {
     isPausedByUser = false
-    const activePlayer = activeSlot === 'A' ? playerA : playerB
     try {
-      activePlayer?.playVideo()
-      if (currentSpeed !== 1 && activePlayer?.setPlaybackRate) {
-        activePlayer.setPlaybackRate(currentSpeed)
+      player?.playVideo()
+      if (currentSpeed !== 1 && player?.setPlaybackRate) {
+        player.setPlaybackRate(currentSpeed)
       }
     } catch {}
+    if (iframeEl?.contentWindow) {
+      try {
+        iframeEl.contentWindow.postMessage(JSON.stringify({
+          event: 'command',
+          func: 'playVideo',
+          args: []
+        }), '*')
+      } catch {}
+    }
   }
 
   function updateOptions(newOpts = {}) {
@@ -467,59 +626,36 @@ export function createWebStream(canvas, options = {}) {
       }
       if (!options.preview) mountPlayer()
     }
+
     if (newOpts.speedMultiplier !== undefined || newOpts.speed !== undefined) {
       currentSpeed = Number(newOpts.speedMultiplier ?? newOpts.speed ?? 1)
-      try { playerA?.setPlaybackRate(currentSpeed) } catch {}
-      try { playerB?.setPlaybackRate(currentSpeed) } catch {}
+      try { player?.setPlaybackRate(currentSpeed) } catch {}
     }
+
     if (newOpts.paused !== undefined) {
       if (newOpts.paused) pause()
       else resume()
     }
+
     if (newOpts.isSecondary !== undefined) {
       isSecondary = Boolean(newOpts.isSecondary)
     }
+
     if (newOpts.volume !== undefined) {
       currentVolume = Number(newOpts.volume)
     }
-    if (isSecondary) {
-      currentMuted = true
-      try {
-        playerA?.mute()
-        playerB?.mute()
-        playerA?.setVolume(0)
-        playerB?.setVolume(0)
-      } catch {}
-    } else {
-      if (newOpts.muted !== undefined) {
-        currentMuted = Boolean(newOpts.muted)
-      }
-      try {
-        if (currentMuted) {
-          playerA?.mute()
-          playerB?.mute()
-        } else {
-          playerA?.unMute()
-          playerB?.unMute()
-          const vol = Math.max(1, Math.round(currentVolume))
-          playerA?.setVolume(vol)
-          playerB?.setVolume(vol)
-        }
-      } catch {}
 
-      if (newOpts.volume !== undefined && !currentMuted) {
-        const vol = Math.max(1, Math.round(currentVolume))
-        try {
-          playerA?.setVolume(vol)
-          playerB?.setVolume(vol)
-        } catch {}
-      }
+    if (newOpts.muted !== undefined) {
+      currentMuted = Boolean(newOpts.muted)
     }
+
+    syncAudio()
+
     if (newOpts.opacity !== undefined) {
-      const activeWrap = activeSlot === 'A' ? wrapA : wrapB
-      if (hasFadedIn && activeWrap) activeWrap.style.opacity = String(newOpts.opacity)
+      if (hasFadedIn && wrapEl) wrapEl.style.opacity = String(newOpts.opacity)
       if (iframeEl) iframeEl.style.opacity = String(newOpts.opacity)
     }
+
     if (newOpts.brightness !== undefined) {
       if (containerEl) containerEl.style.filter = `brightness(${newOpts.brightness})`
       if (iframeEl) iframeEl.style.filter = `brightness(${newOpts.brightness})`

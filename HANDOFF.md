@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-12 22:20 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Option A Task Manager Search Surfacing active: searching "aether" surfaces AetherFlow, WebView2 Manager, and MPV video engine with branded titles without standalone taskbar leakage. User confirmed active Microsoft Developer Account for future Desktop-Bridge Full-Trust MSIX store publishing.
+> **Updated:** 2026-09-15 02:08 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Resolved desktop blackout overlay, restored interactive desktop shell (Progman & Taskbar), stabilized YouTube web-stream player engine without player UI or SMTC controls, and added strict unparented window display guards.
 
 ---
 
@@ -13,7 +13,7 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
 - **Active Git Branch:** `ui/ux` (synced with `origin/ui/ux`)
 - **Release Page:** [github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7](https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7)
 - **Older Releases:** All releases (v1.0.0 through v1.0.7) are preserved on GitHub.
-- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.50 MB, PID 27000)
+- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.53 MB, PID 13456)
 - **Local Dev Server:** Active in background on port `1420` (`http://localhost:1420/`).
 - **User Validation:** User tested the latest build and confirmed: *"i am very happy with the app"*.
 
@@ -35,9 +35,9 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
    - **Multi-Monitor Isolated (Per-Display) Pausing**: Fullscreen on Monitor 1 pauses Monitor 1, while Monitor 2 continues running smoothly without focus amnesia.
    - **Multi-Monitor Global (All Displays) Pausing**: Pauses all monitors whenever any single monitor is covered.
    - **Wallpaper Audio Playback Policies**:
-     - `Mute When Covered` (Default): Automatically mutes wallpaper sound when active screens are covered by maximized or fullscreen windows.
+     - `Always Active` (Default): Keeps wallpaper audio playing continuously even when browsing or multitasking.
+     - `Mute When Covered`: Automatically mutes wallpaper sound when active screens are covered by maximized or fullscreen windows.
      - `Mute When Focused`: Mutes wallpaper audio whenever any non-desktop application has focus.
-     - `Always Active`: Keeps wallpaper audio playing continuously even when browsing or multitasking.
 4. **Theme Studio & Import/Export System**:
    - 6 Sovereign built-in themes (Onyx, Slate, Studio, Obsidian, Manifesto, Light).
    - **Custom Theme Studio**: Non-intrusive Draft Mode with live preview, token tweaking (HEX/RGB), starter presets, and persistent saving.

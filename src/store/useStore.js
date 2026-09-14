@@ -399,7 +399,7 @@ export const useStore = create(
       pauseOnFullscreen: true,
       pauseOnMaximized: true,
       multiMonitorPauseMode: 'per-display', // 'per-display' | 'all-displays'
-      audioPlaybackRule: 'mute-covered',    // 'mute-covered' | 'mute-focused' | 'always'
+      audioPlaybackRule: 'always',          // 'always' | 'mute-covered' | 'mute-focused'
       preferredAudioMonitor: 'auto',        // 'auto' | specific monitor label (e.g. 'wallpaper_DISPLAY1')
       audioReactive: false,
       audioSource: 'mic',             // 'mic' | 'system'
@@ -561,8 +561,8 @@ export const useStore = create(
             if (!persistedState.multiMonitorPauseMode) {
               persistedState.multiMonitorPauseMode = 'per-display'
             }
-            if (!persistedState.audioPlaybackRule) {
-              persistedState.audioPlaybackRule = 'mute-covered'
+            if (!persistedState.audioPlaybackRule || persistedState.audioPlaybackRule === 'mute-covered') {
+              persistedState.audioPlaybackRule = 'always'
             }
           }
         }

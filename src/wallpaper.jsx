@@ -50,7 +50,7 @@ function WallpaperCanvas() {
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-theme', 'sovereign-onyx')
-      document.body.style.backgroundColor = '#000000'
+      document.body.style.backgroundColor = 'transparent'
     }
   }, [])
 
@@ -400,7 +400,7 @@ function WallpaperCanvas() {
       width: '100vw',
       height: '100vh',
       overflow: 'hidden',
-      background: '#000000',
+      background: 'transparent',
       border: 'none',
       outline: 'none',
       boxShadow: 'none',
@@ -418,7 +418,7 @@ function WallpaperCanvas() {
           filter: `brightness(${brightness})`,
           transition: isScreensaver ? `opacity ${fadeInSecs}s cubic-bezier(0.16, 1, 0.3, 1)` : undefined,
           pointerEvents: 'none',
-          background: '#000000',
+          background: 'transparent',
           border: 'none',
           outline: 'none',
           boxShadow: 'none',

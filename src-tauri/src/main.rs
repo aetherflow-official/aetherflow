@@ -868,7 +868,7 @@ pub fn start_system_state_monitor(app: AppHandle) {
                         guard.multi_monitor_pause_mode.clone()
                     };
                     let rule = if guard.audio_playback_rule.is_empty() {
-                        "mute-covered".to_string()
+                        "always".to_string()
                     } else {
                         guard.audio_playback_rule.clone()
                     };
@@ -880,7 +880,7 @@ pub fn start_system_state_monitor(app: AppHandle) {
                         rule,
                     )
                 } else {
-                    (true, true, true, "per-display".to_string(), "mute-covered".to_string())
+                    (true, true, true, "per-display".to_string(), "always".to_string())
                 }
             };
 
@@ -1226,12 +1226,12 @@ fn log_msg(msg: &str) {
 /// (virtual-desktop origin, DPI scaling, primary-monitor bias) that caused the
 /// left-gap / second-monitor spill in earlier attempts.
 #[cfg(windows)]
-fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>) {
+fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>) -> bool {
     if is_main_hwnd(hwnd) {
         let err = format!("[DIAG 10 CRITICAL REJECT] pin_hwnd_as_wallpaper was called with MAIN_HWND 0x{:X}! Aborting!", hwnd as usize);
         log_msg(&err);
         eprintln!("{}", err);
-        return;
+        return false;
     }
 
     unsafe {
@@ -1298,8 +1298,8 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
 
         if progman.is_null() {
             log_msg("[AetherFlow WP] Progman not ready on first attempt (cold boot / reboot). Waiting for Explorer...");
-            for attempt in 0..30 {
-                std::thread::sleep(std::time::Duration::from_millis(200));
+            for attempt in 0..10 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
                 progman = FindWindowW(progman_class.as_ptr(), progman_title.as_ptr());
                 if progman.is_null() {
                     progman = FindWindowW(progman_class.as_ptr(), std::ptr::null());
@@ -1308,7 +1308,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
                     progman = GetShellWindow();
                 }
                 if !progman.is_null() {
-                    log_msg(&format!("[AetherFlow WP] Found Progman on cold boot retry #{} ({}ms): 0x{:X}", attempt + 1, (attempt + 1) * 200, progman as usize));
+                    log_msg(&format!("[AetherFlow WP] Found Progman on retry #{} ({}ms): 0x{:X}", attempt + 1, (attempt + 1) * 100, progman as usize));
                     break;
                 }
             }
@@ -1317,18 +1317,9 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let progman = if !progman.is_null() {
             progman
         } else {
-            log_msg("[AetherFlow WP] CRITICAL: Cannot find Progman or ShellWindow after retry timeout!");
-            
-            // HWND_BOTTOM fallback — use exact monitor screen coords directly
-            // (no SetParent, so screen coordinates apply as-is).
-            log_msg(&format!("[AetherFlow WP] HWND_BOTTOM fallback: pos=({},{}) size={}x{}",
-                mon_screen_x, mon_screen_y, mon_w, mon_h));
-            let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-            let new_style = (style | WS_VISIBLE) & !(WS_CAPTION | WS_THICKFRAME | WS_BORDER);
-            SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
-            SetWindowPos(hwnd, 1 as HWND, mon_screen_x, mon_screen_y, mon_w, mon_h,
-                SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            return;
+            log_msg("[AetherFlow WP] CRITICAL: Cannot find Progman or ShellWindow! Hiding window to prevent black desktop overlay.");
+            ShowWindow(hwnd, 0); // SW_HIDE
+            return false;
         };
         
         log_msg(&format!("[AetherFlow WP] Using progman HWND = 0x{:X}", progman as usize));
@@ -1587,6 +1578,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
                 SetWindowPos(main_h, 0 as HWND, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
+        true
     }
 }
 
@@ -1598,14 +1590,18 @@ fn get_monitor_label(name: &str) -> String {
 
 fn get_primary_monitor_label(app: &AppHandle) -> Option<String> {
     let monitors = app.available_monitors().unwrap_or_default();
-    app.primary_monitor().ok().flatten().and_then(|m| {
-        m.name().map(|n| get_monitor_label(n))
-    }).or_else(|| {
-        monitors.iter().find(|m| m.position().x == 0 && m.position().y == 0)
-            .and_then(|m| m.name().map(|n| get_monitor_label(n)))
-    }).or_else(|| {
-        monitors.first().and_then(|m| m.name().map(|n| get_monitor_label(n)))
-    })
+    // 1. Position (0, 0) is always the Win32 Primary Display
+    if let Some(pm) = monitors.iter().find(|m| m.position().x == 0 && m.position().y == 0) {
+        if let Some(name) = pm.name() {
+            return Some(get_monitor_label(name));
+        }
+    }
+    // 2. Tauri primary_monitor query fallback
+    if let Some(name) = app.primary_monitor().ok().flatten().and_then(|m| m.name().map(|n| n.to_string())) {
+        return Some(get_monitor_label(&name));
+    }
+    // 3. First available monitor fallback
+    monitors.first().and_then(|m| m.name().map(|n| get_monitor_label(n)))
 }
 
 fn get_target_audio_monitor_label(app: &AppHandle) -> Option<String> {
@@ -1697,6 +1693,87 @@ fn log_wallpaper_state(app: &AppHandle, monitor_count: usize) {
     }
 }
 
+static YT_WALLPAPER_INIT_SCRIPT: &str = r#"
+(function() {
+    // 1. Safe neutralization of MediaSession actions to suppress Windows SMTC
+    try {
+        if (typeof window !== 'undefined') {
+            if (window.MediaSession && window.MediaSession.prototype) {
+                try {
+                    window.MediaSession.prototype.setActionHandler = function() {};
+                } catch(eProto) {}
+            }
+            if (window.navigator && window.navigator.mediaSession) {
+                try {
+                    window.navigator.mediaSession.setActionHandler = function() {};
+                } catch(eNav) {}
+            }
+        }
+    } catch (e) {}
+
+    // 2. Hide YouTube edge controls / overlays & center play/pause bezel
+    function applyHideStyles(doc) {
+        if (!doc) return;
+        try {
+            var styleId = 'aetherflow-yt-hide-ui';
+            if (!doc.getElementById(styleId)) {
+                var s = doc.createElement('style');
+                s.id = styleId;
+                s.textContent = `
+                    .ytp-bezel,
+                    .ytp-bezel-icon,
+                    .ytp-bezel-text,
+                    .ytp-large-play-button,
+                    .ytp-large-play-button-bg,
+                    .ytp-pause-overlay,
+                    .ytp-endscreen-content,
+                    .ytp-ce-element,
+                    .ytp-chrome-top,
+                    .ytp-chrome-bottom,
+                    .ytp-gradient-top,
+                    .ytp-gradient-bottom,
+                    .ytp-spinner,
+                    .ytp-paid-content-overlay,
+                    .ytp-ad-overlay-container,
+                    .ytp-contextmenu {
+                        display: none !important;
+                        opacity: 0 !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                (doc.head || doc.documentElement).appendChild(s);
+            }
+        } catch(e) {}
+    }
+
+    function hideElements() {
+        try {
+            var host = window.location.hostname || '';
+            if (host.includes('youtube.com') || host.includes('youtube-nocookie.com')) {
+                applyHideStyles(document);
+            }
+            var frames = document.querySelectorAll('iframe');
+            for (var i = 0; i < frames.length; i++) {
+                try {
+                    var fDoc = frames[i].contentDocument || (frames[i].contentWindow && frames[i].contentWindow.document);
+                    if (fDoc) {
+                        applyHideStyles(fDoc);
+                    }
+                } catch(eFrame) {}
+            }
+        } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', hideElements);
+    } else {
+        hideElements();
+    }
+    window.addEventListener('load', hideElements);
+    setInterval(hideElements, 500);
+})();
+"#;
+
 fn reconcile_wallpaper_windows(app: &AppHandle) {
     let monitors = app.available_monitors().unwrap_or_default();
     let current_count = monitors.len();
@@ -1783,7 +1860,10 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                         std::thread::sleep(std::time::Duration::from_millis(40));
                     }
                     if let Some(raw_hwnd) = raw_hwnd_opt {
-                        pin_hwnd_as_wallpaper(raw_hwnd, Some((pos.x, pos.y, size.width as i32, size.height as i32)));
+                        let pinned = pin_hwnd_as_wallpaper(raw_hwnd, Some((pos.x, pos.y, size.width as i32, size.height as i32)));
+                        if !pinned {
+                            let _ = win.hide();
+                        }
                     }
                 }
             } else {
@@ -1795,60 +1875,17 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                 log_msg(&new_mon_log);
                 println!("{}", new_mon_log);
 
-                let yt_css_hide_script = r#"
-(function() {
-    function hideElements() {
-        try {
-            var host = window.location.hostname || '';
-            if (host.includes('youtube.com') || host.includes('youtube-nocookie.com')) {
-                var styleId = 'aetherflow-yt-hide-ui';
-                if (!document.getElementById(styleId)) {
-                    var s = document.createElement('style');
-                    s.id = styleId;
-                    s.textContent = `
-                        .ytp-bezel,
-                        .ytp-bezel-icon,
-                        .ytp-bezel-text,
-                        .ytp-large-play-button,
-                        .ytp-pause-overlay,
-                        .ytp-endscreen-content,
-                        .ytp-ce-element,
-                        .ytp-chrome-top,
-                        .ytp-chrome-bottom,
-                        .ytp-gradient-top,
-                        .ytp-gradient-bottom,
-                        .ytp-spinner {
-                            display: none !important;
-                            opacity: 0 !important;
-                            visibility: hidden !important;
-                            pointer-events: none !important;
-                        }
-                    `;
-                    (document.head || document.documentElement).appendChild(s);
-                }
-            }
-        } catch (e) {}
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hideElements);
-    } else {
-        hideElements();
-    }
-    setInterval(hideElements, 1000);
-})();
-"#;
-
                 let win_res = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("wallpaper.html".into()))
                     .title(&format!("AetherFlow Wallpaper - {}", name))
                     .decorations(false)
                     .transparent(true)
                     .visible(false)
-                    .background_color(Color(0, 0, 0, 255))
+                    .background_color(Color(0, 0, 0, 0))
                     .skip_taskbar(true)
                     .resizable(false)
                     .inner_size(logical_w, logical_h)
                     .position(logical_x, logical_y)
-                    .initialization_script(yt_css_hide_script)
+                    .initialization_script(YT_WALLPAPER_INIT_SCRIPT)
                     .build();
 
                 match win_res {
@@ -1871,8 +1908,14 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                                 log_msg(&host_log);
                                 println!("{}", host_log);
 
-                                pin_hwnd_as_wallpaper(raw_hwnd, Some((pos.x, pos.y, size.width as i32, size.height as i32)));
-                                let _ = win.show();
+                                let pinned = pin_hwnd_as_wallpaper(raw_hwnd, Some((pos.x, pos.y, size.width as i32, size.height as i32)));
+                                if pinned {
+                                    let _ = win.set_ignore_cursor_events(true);
+                                    let _ = win.show();
+                                } else {
+                                    log_msg(&format!("[WALLPAPER HOST] Window 0x{:X} failed to pin; keeping hidden.", raw_hwnd as usize));
+                                    let _ = win.hide();
+                                }
                             }
                         }
                     }
@@ -2007,7 +2050,18 @@ async fn apply_wallpaper(
     let wants_video = mpv::is_video_wallpaper(&resolved_engine_id, video_path_opt.as_deref());
     let is_video = wants_video && mpv::find_mpv_binary().is_ok();
 
-    let monitors = app.available_monitors().unwrap_or_default();
+    let mut monitors = app.available_monitors().unwrap_or_default();
+    monitors.sort_by(|a, b| {
+        let a_is_prim = a.position().x == 0 && a.position().y == 0;
+        let b_is_prim = b.position().x == 0 && b.position().y == 0;
+        if a_is_prim != b_is_prim {
+            b_is_prim.cmp(&a_is_prim)
+        } else if a.position().x != b.position().x {
+            a.position().x.cmp(&b.position().x)
+        } else {
+            a.position().y.cmp(&b.position().y)
+        }
+    });
     let global_muted = config.get("muted").and_then(|v| v.as_bool()).unwrap_or(false);
     let global_volume = config.get("volume").and_then(|v| v.as_f64()).unwrap_or(50.0);
 
@@ -2106,7 +2160,13 @@ async fn apply_wallpaper(
                             Ok(proc) => {
                                 let hwnd = proc.hwnd as HWND;
                                 if !hwnd.is_null() {
-                                    pin_hwnd_as_wallpaper(hwnd, Some((mon_x, mon_y, mon_w, mon_h)));
+                                    let pinned = pin_hwnd_as_wallpaper(hwnd, Some((mon_x, mon_y, mon_w, mon_h)));
+                                    if !pinned {
+                                        log_msg("[MPV] Failed to pin MPV to desktop; hiding MPV window.");
+                                        unsafe {
+                                            ShowWindow(hwnd, 0);
+                                        }
+                                    }
                                 }
                                 let _ = proc.set_volume(screen_volume);
                                 let _ = proc.set_mute(screen_muted);
@@ -2155,9 +2215,8 @@ async fn apply_wallpaper(
         let mut audio_assigned = false;
         for (label, win) in windows {
             if label.starts_with("wallpaper_") && (target == "*" || target == label) {
-                let _ = win.set_ignore_cursor_events(true);
-                let _ = win.show();
-
+                #[cfg(windows)]
+                let mut pinned = true;
                 #[cfg(windows)]
                 if let Ok(raw_hwnd) = win.hwnd() {
                     let hwnd = raw_hwnd.0 as HWND;
@@ -2172,10 +2231,17 @@ async fn apply_wallpaper(
                         None
                     });
                     log_msg(&format!(
-                        "[AetherFlow WP] Re-pinning and clipping wallpaper window {} (HWND=0x{:X}) after unhide: {:?}",
+                        "[AetherFlow WP] Re-pinning and clipping wallpaper window {} (HWND=0x{:X}) for engine: {:?}",
                         label, hwnd as usize, mon_bounds
                     ));
-                    pin_hwnd_as_wallpaper(hwnd, mon_bounds);
+                    pinned = pin_hwnd_as_wallpaper(hwnd, mon_bounds);
+                }
+
+                if pinned {
+                    let _ = win.set_ignore_cursor_events(true);
+                    let _ = win.show();
+                } else {
+                    let _ = win.hide();
                 }
 
                 // In duplicated / all screens mode, or per-screen mode with selected audio display,
@@ -2605,6 +2671,7 @@ fn do_trigger_screensaver(app: AppHandle, is_preview_val: bool) -> Result<(), St
                 .skip_taskbar(true)
                 .resizable(false)
                 .fullscreen(true)
+                .initialization_script(YT_WALLPAPER_INIT_SCRIPT)
                 .build();
 
             match win_res {
@@ -4218,6 +4285,18 @@ fn ensure_canonical_start_menu_shortcut() {
 fn main() {
     #[cfg(windows)]
     {
+        // 0. Ensure thread desktop is WinSta0\Default if opened from a non-interactive runner
+        unsafe {
+            use windows_sys::Win32::System::StationsAndDesktops::{OpenDesktopW, SetThreadDesktop};
+            const DESKTOP_ALL_ACCESS: u32 = 0x01FF;
+            let default_name: Vec<u16> = "Default\0".encode_utf16().collect();
+            let hdesk = OpenDesktopW(default_name.as_ptr(), 0, 0, DESKTOP_ALL_ACCESS);
+            if !hdesk.is_null() {
+                let ok = SetThreadDesktop(hdesk);
+                log_msg(&format!("[STARTUP] SetThreadDesktop to Default: {}", ok != 0));
+            }
+        }
+
         // 1. Set explicit Application User Model ID (AUMID) so Windows groups all windows,
         // notifications, taskbar entries, and inherited WebView2 instances under a single canonical AetherFlow identity.
         unsafe {
@@ -4260,7 +4339,8 @@ fn main() {
         // DO NOT choke the V8 heap with --max-old-space-size=64!
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-            "--disable-features=AudioServiceOutOfProcess,MediaFoundationD3D11VideoCapture,Translate,OptimizationHints,MediaRouter \
+            "--autoplay-policy=no-user-gesture-required \
+             --disable-features=MediaFoundationD3D11VideoCapture,Translate,OptimizationHints,MediaRouter,HardwareMediaKeyHandling,MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls \
              --enable-features=TrimOnMemoryPressure \
              --disk-cache-size=16777216 \
              --media-cache-size=16777216 \

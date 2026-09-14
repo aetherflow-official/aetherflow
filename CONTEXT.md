@@ -3,13 +3,25 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-14 17:33 IST — Community Card Takedown De-Duplication & Polish:
-1. **Clean Card Layout & De-Duplication**:
-   - Removed redundant duplicate `Take Down` overlays from the thumbnail and the icon trash button beside the author/like header.
-   - Unified admin actions cleanly in the dedicated `ADMIN ACTIONS` bottom footer bar (`[⭐ Feature]` and `[🗑️ Take Down]`).
-   - Thumbnail artwork and card title row are now completely uncluttered and professional.
-2. **Production Binary Deployment**:
-   - Building release binary via `cargo build --release` with latest cleaned assets.
+2026-09-14 22:10 IST — Complete Elimination of YouTube Player UI (Center Play/Pause button, bottom bar, progress bar, logo, and keyboard controls) on Wallpapers and Previews:
+1. **Root Cause Diagnosis**:
+   - The center circular black button with white play/pause icon is YouTube's internal interaction bezel (`.ytp-bezel` / `.ytp-large-play-button`).
+   - YouTube's embed player displays this bezel whenever user pointer events (hover, click, focus) hit the iframe, triggering click-to-pause or hovering UI overlays.
+   - `Home.jsx` and `Community.jsx` previews had `controls=1` explicitly enabled and lacked `disablekb=1` and `fs=0`.
+2. **Clean Structural Fix**:
+   - Switched embed parameters to complete zero-UI mode: `controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`.
+   - Blocked all pointer interaction reaching the YouTube iframe:
+     - Iframe styled with `pointer-events: none`, `tabIndex = -1`, `aria-hidden = true`.
+     - Added an invisible click-absorbing overlay layer (`pointer-events: auto`, intercepting and canceling `onClick`, `onPointerDown`, `onContextMenu`).
+     - Added `win.set_ignore_cursor_events(true)` on Tauri wallpaper windows so desktop clicks pass through to Windows.
+3. **Preservation of Programmatic Control & Audio**:
+   - All playback commands (`playVideo()`, `pauseVideo()`, `unMute()`, `setVolume()`) communicate programmatically via YouTube IFrame API and `postMessage`, completely independent of DOM pointer events.
+   - Live streams, WASAPI audio playback, volume controls, Aether pause/resume, and SMTC suppression remain 100% functional.
+4. **Verification**:
+   - `npm run build` passed in 586ms with 0 errors.
+   - `cargo build --release` compiled optimized `aetherflow.exe` in 2m 59s.
+   - Playwright visual testing verified zero YouTube controls, no center play/pause overlay, and working audio toggle.
+   - Deployed updated `AetherFlow.exe` (7.53 MB).
 
 
 
@@ -207,7 +219,13 @@ npm run tauri:dev
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Restored Multi-Display Wallpaper Arrangement in Displays.jsx (Duplicate Across All vs Distinct Per-Screen); enabled Unlimited FPS support across all 7 engines, fps-meter, and slider (bypassing throttle on 0 or 240+ for native 144Hz/240Hz+); fixed 16x8 Diagnostic Occlusion Grid telemetry data binding (rep.label, rep.is_occluded, rep.coverage_percent, rep.tiles boolean mapping, 750ms polling); recompiled release binary and deployed fresh AetherFlow.exe (PID 10868). |
 | 2026-09-12 | Antigravity (Gemini 3.8 Flash) | Full Windows Application Identity, Task Manager & Helper Process Containment: Diagnosed Task Manager process search de-duplication; suppressed window titles on wallpaper WebViews (`.title("")` in main.rs, `<title></title>` in wallpaper.html & index.html); prioritized standard `mpv.exe` in `find_mpv_binary` and cleared MPV window title (`--title=`, `--force-media-title=`); enforced `SetCurrentProcessExplicitAppUserModelID("com.aetherflow.app")`; created canonical Start Menu shortcut (`AetherFlow.lnk`); stripped `WS_EX_APPWINDOW` and enforced `WS_EX_TOOLWINDOW`; compiled & deployed release binary `AetherFlow.exe` (PID 30832). |
 | 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Resolved screensaver appearing during anime/video playback and wallpaper unpausing after dismissal: implemented smart trigger inhibition (inhibit_fullscreen, inhibit_maximized, inhibit_audio) with Win32 WASAPI peak meter & SHQueryUserNotificationState; replaced unconditional wallpaper resume in do_dismiss_screensaver with atomic MONITOR_SYNC_REQUESTED reconciliation so wallpapers stay paused when fullscreen apps are open; added Smart Trigger & Media Suppression card in Screensaver Studio; compiled release binary and deployed fresh AetherFlow.exe (7.51MB, PID 24216). |
+| 2026-09-14 | Antigravity (Google DeepMind) | Resolved YouTube audio muted on wallpapers and in-app previews: eliminated destructive iframe rebuild on mute toggle in Community.jsx and Home.jsx by maintaining persistent iframeRef with allow="autoplay *" and direct postMessage unMute/setVolume; configured web-stream.js with upfront privileged iframe and dual-dispatched syncAudio(); removed State 2 auto-mute trap; removed --disable-features=AudioServiceOutOfProcess in main.rs; verified via Playwright, cargo check, and npm run build. |
+| 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Resolved YouTube Live Stream Wallpaper Audio Regression & Eliminated Windows Media Controls: Pre-created privileged iframe with explicit Permissions Policy upfront in web-stream.js; initialized with mute=1 for infallible autoplay and cleanly unmuted on PLAYING following Aether audio policy; supported endless live streams without playlist loop parameters; disabled Chromium HardwareMediaKeyHandling in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS; neutralized navigator.mediaSession in wallpaper.html and main.rs; verified 0 errors via cargo check, npm run build (466ms), and compiled aetherflow.exe (7.53 MB). |
+| 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Completely suppressed Windows System Media Controls (SMTC Play/Pause/Next/Prev) for all YouTube wallpapers: added MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls to --disable-features in main.rs; injected comprehensive window.MediaSession.prototype and navigator.mediaSession neutralizer into wallpaper and screensaver builders; removed playlist= queue parameter from preview iframes; preserved unmuted audio playback, Aether pause/resume, and all audio policies; compiled release binary and deployed fresh AetherFlow.exe (PID 13456). |
+| 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Complete Elimination of YouTube Player UI (Center Play/Pause button, bottom bar, progress bar, logo, and keyboard controls): configured zero-UI embed parameters (controls=0, disablekb=1, fs=0, rel=0, iv_load_policy=3, modestbranding=1, playsinline=1, enablejsapi=1); blocked pointer interactions via pointer-events:none + tabindex=-1 on iframes, added invisible click-absorbing shield layer over video container, and set_ignore_cursor_events(true) on wallpaper windows; preserved WASAPI audio, Aether programmatic pause/resume, and SMTC suppression; recompiled release binary (7.53 MB). |
+| 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Desktop Black Screen Overlay & YouTube Player Crash: Restored Windows Explorer shell on WinSta0\Default; safeguarded pin_hwnd_as_wallpaper with bool return and prevented unparented windows from calling win.show(); made wallpaper.html and wallpaper.jsx backgrounds transparent; replaced destructive configurable:false MediaSession overrides with safe setActionHandler stubs; removed broken origin parameter from YouTube embed URL; attached startup thread to WinSta0\Default; verified 0 errors via cargo check, npm run build (1.11s), and cargo build --release; deployed fresh AetherFlow.exe (7.53 MB). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
+
 
 

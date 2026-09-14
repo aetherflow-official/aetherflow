@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore.js'
+import { parseYouTubeId } from '../engines/web-stream.js'
 
 /**
  * Check if currently running inside the native Tauri runtime
@@ -104,11 +105,19 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
       || (wallpaper.config?.streamUrl || wallpaper.config?.url ? 'web-stream' : null)
       || wallpaper.id
 
+    let finalStreamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
+    const ytId = parseYouTubeId(finalStreamUrl)
+    if (ytId === 'jfKfPfyJRdk') finalStreamUrl = 'https://www.youtube.com/watch?v=TURbeWK2wwg'
+    else if (ytId === '1zxD9O4b1oY') finalStreamUrl = 'https://www.youtube.com/watch?v=uD4izuDMUQA'
+    else if (ytId === '7uK_Z2Q2R2E') finalStreamUrl = 'https://www.youtube.com/watch?v=21qNxnCS8WU'
+    else if (ytId === 'aXYKRAdrfEo') finalStreamUrl = 'https://www.youtube.com/watch?v=eZe4Q_58UTU'
+    else if (ytId === 'nz1cEO01LzE') finalStreamUrl = 'https://www.youtube.com/watch?v=WJ3-F02-F_Y'
+
     await tauriInvoke('apply_wallpaper', {
       engineId: resolvedEngine,
       config: {
         ...(wallpaper.config || {}),
-        streamUrl: wallpaper.config?.streamUrl || wallpaper.config?.url || '',
+        streamUrl: finalStreamUrl,
         speedMultiplier: speed,
         volume,
         muted,
@@ -280,18 +289,12 @@ export function addCustomStreamWallpaper(url, customName = null, muted = false, 
   const cleanUrl = url.trim()
 
   // Extract YouTube ID if present
-  let ytId = null
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/live\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/
-  ]
-  for (const p of patterns) {
-    const m = cleanUrl.match(p)
-    if (m && m[1]) {
-      ytId = m[1]
-      break
-    }
-  }
+  let ytId = parseYouTubeId(cleanUrl)
+  if (ytId === 'jfKfPfyJRdk') ytId = 'TURbeWK2wwg'
+  else if (ytId === '1zxD9O4b1oY') ytId = 'uD4izuDMUQA'
+  else if (ytId === '7uK_Z2Q2R2E') ytId = '21qNxnCS8WU'
+  else if (ytId === 'aXYKRAdrfEo') ytId = 'eZe4Q_58UTU'
+  else if (ytId === 'nz1cEO01LzE') ytId = 'WJ3-F02-F_Y'
 
   const defaultName = ytId ? 'YouTube Ambient Stream' : 'Live Web Stream'
   const preview = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : '/previews/deep-space.svg'

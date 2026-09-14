@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { safeConvertFileSrc, tauriInvoke } from '../../lib/wallpaperActions.js'
 import { useStore } from '../../store/useStore.js'
+import { parseYouTubeId } from '../../engines/web-stream.js'
 
 /**
  * WallpaperThumbnail — Supports Always On, On Hover, and Off modes.
@@ -90,12 +91,16 @@ export const ENGINE_THEMES = {
 }
 
 /**
- * Extracts a 11-char YouTube ID from any YouTube URL format.
+ * Extracts a 11-char YouTube ID from any YouTube URL format with auto-healing.
  */
 export function extractYouTubeId(url) {
-  if (!url || typeof url !== 'string') return null
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)
-  return match ? match[1] : null
+  const id = parseYouTubeId(url)
+  if (id === 'jfKfPfyJRdk') return 'TURbeWK2wwg'
+  if (id === '1zxD9O4b1oY') return 'uD4izuDMUQA'
+  if (id === '7uK_Z2Q2R2E') return '21qNxnCS8WU'
+  if (id === 'aXYKRAdrfEo') return 'eZe4Q_58UTU'
+  if (id === 'nz1cEO01LzE') return 'WJ3-F02-F_Y'
+  return id
 }
 
 /**

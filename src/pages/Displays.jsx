@@ -119,7 +119,7 @@ export default function DisplaysPage() {
   const togglePauseOnMaximized = useStore(s => s.togglePauseOnMaximized)
   const multiMonitorPauseMode = useStore(s => s.multiMonitorPauseMode) || 'isolated'
   const setMultiMonitorPauseMode = useStore(s => s.setMultiMonitorPauseMode)
-  const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'mute-covered'
+  const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'always'
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
 
   const taskbarStyle = useStore(s => s.taskbarStyle) || 'default'

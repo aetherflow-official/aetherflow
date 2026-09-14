@@ -16,7 +16,7 @@ export default function AudioPage() {
   const setAudioSource = useStore(s => s.setAudioSource)
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
   const setPreferredAudioMonitor = useStore(s => s.setPreferredAudioMonitor)
-  const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'mute-covered'
+  const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'always'
   const setAudioPlaybackRule = useStore(s => s.setAudioPlaybackRule)
 
   const pauseOnBattery = useStore(s => s.pauseOnBattery) || false
@@ -577,9 +577,9 @@ export default function AudioPage() {
             </div>
             <div className="segmented-control" style={{ width: '100%' }}>
               {[
-                { id: 'mute-covered', label: 'Mute When Covered (Default)' },
+                { id: 'always',       label: 'Always Active (Recommended)' },
+                { id: 'mute-covered', label: 'Mute When Covered' },
                 { id: 'mute-focused', label: 'Mute When Focused' },
-                { id: 'always',       label: 'Always Active' },
               ].map(opt => (
                 <button
                   key={opt.id}
