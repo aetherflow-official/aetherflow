@@ -310,6 +310,34 @@ static ACTIVE_WALLPAPERS: Mutex<Option<HashMap<String, ActiveWallpaperState>>> =
 pub mod mpv;
 pub mod taskbar;
 static MPV_PLAYERS: Mutex<Option<HashMap<String, mpv::MpvProcess>>> = Mutex::new(None);
+static MONITOR_APPLY_TICKETS: std::sync::LazyLock<Mutex<HashMap<String, u64>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn next_apply_ticket(label: &str) -> u64 {
+    if let Ok(mut tickets) = MONITOR_APPLY_TICKETS.lock() {
+        let entry = tickets.entry(label.to_string()).or_insert(0);
+        *entry += 1;
+        *entry
+    } else {
+        0
+    }
+}
+
+fn get_apply_ticket(label: &str) -> u64 {
+    if let Ok(tickets) = MONITOR_APPLY_TICKETS.lock() {
+        tickets.get(label).copied().unwrap_or(0)
+    } else {
+        0
+    }
+}
+
+fn invalidate_all_apply_tickets() {
+    if let Ok(mut tickets) = MONITOR_APPLY_TICKETS.lock() {
+        for v in tickets.values_mut() {
+            *v += 1;
+        }
+    }
+}
 
 // ─── Main AetherFlow Window Protection & HWND Identity ───────────────────────────
 static MAIN_HWND: Mutex<Option<usize>> = Mutex::new(None);
@@ -1217,6 +1245,17 @@ fn log_msg(msg: &str) {
     }
 }
 
+fn log_lifecycle(event: &str, details: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs();
+    let millis = now.subsec_millis();
+    let msg = format!("[LIFECYCLE {}.{:03}] {:<24} | {}", secs, millis, event, details);
+    log_msg(&msg);
+    println!("{}", msg);
+}
+
 /// Pin a native window handle into the WorkerW layer so it renders
 /// behind desktop icons but above the bare wallpaper bitmap.
 ///
@@ -2021,6 +2060,20 @@ async fn apply_wallpaper(
     } else {
         engine_id.clone()
     };
+
+    let old_state_desc = if let Ok(guard) = ACTIVE_WALLPAPERS.lock() {
+        guard.as_ref().and_then(|m| m.get(&target)).map(|s| format!("{}: {:?}", s.engine_id, s.config))
+    } else {
+        None
+    }.unwrap_or_else(|| "none".to_string());
+
+    log_lifecycle(
+        "USER_APPLY_REQUEST",
+        &format!(
+            "target='{}', req_engine='{}', resolved_engine='{}', opacity={}, brightness={}, old_state='{}'",
+            target, engine_id, resolved_engine_id, opacity, brightness, old_state_desc
+        ),
+    );
 
     // Record desired state per monitor for immediate recovery upon window mount
     if let Ok(mut guard) = ACTIVE_WALLPAPERS.lock() {
