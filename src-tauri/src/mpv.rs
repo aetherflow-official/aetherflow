@@ -457,6 +457,62 @@ pub fn is_video_wallpaper(engine_id: &str, video_path: Option<&str>) -> bool {
 }
 
 #[cfg(windows)]
+pub fn dump_window_diagnostics(tag: &str, hwnd: HWND) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowThreadProcessId, GetClassNameW, GetWindowTextW, IsWindowVisible,
+        GetParent, GetWindow, GetWindowLongW, GetLayeredWindowAttributes,
+        GW_OWNER, GWL_STYLE, GWL_EXSTYLE,
+    };
+    use windows_sys::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
+
+    if hwnd.is_null() {
+        log_mpv_msg(&format!("[WIN_DIAG] tag='{}' HWND is NULL", tag));
+        return;
+    }
+
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+
+        let mut cbuf = [0u16; 256];
+        let clen = GetClassNameW(hwnd, cbuf.as_mut_ptr(), 256);
+        let class_name = String::from_utf16_lossy(&cbuf[..clen as usize]);
+
+        let mut tbuf = [0u16; 256];
+        let tlen = GetWindowTextW(hwnd, tbuf.as_mut_ptr(), 256);
+        let title = String::from_utf16_lossy(&tbuf[..tlen as usize]);
+
+        let is_visible = IsWindowVisible(hwnd) != 0;
+        let parent = GetParent(hwnd) as usize;
+        let owner = GetWindow(hwnd, GW_OWNER) as usize;
+        let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+        let exstyle = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+
+        let mut alpha = 255u8;
+        let mut lwa_flags = 0u32;
+        let lwa_ok = GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut lwa_flags);
+        let alpha_str = if lwa_ok != 0 { format!("{}", alpha) } else { "none".to_string() };
+
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) as usize;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let ts = format!("{}.{:03}", now.as_secs(), now.subsec_millis());
+
+        let msg = format!(
+            "[WIN_DIAG {}] tag='{}' HWND=0x{:X} pid={} class='{}' title='{}' vis={} parent=0x{:X} owner=0x{:X} style=0x{:08X} exstyle=0x{:08X} alpha={} mon=0x{:X}",
+            ts, tag, hwnd as usize, pid, class_name, title, is_visible, parent, owner, style, exstyle, alpha_str, hmon
+        );
+        log_mpv_msg(&msg);
+        println!("{}", msg);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn dump_window_diagnostics(_tag: &str, _hwnd: usize) {}
+
+#[cfg(windows)]
 fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, GetClassNameW};
     use windows_sys::Win32::Foundation::LPARAM;
@@ -476,7 +532,7 @@ fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
             let mut buf = [0u16; 256];
             let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 256);
             let class_name = String::from_utf16_lossy(&buf[..len as usize]);
-            log_mpv_msg(&format!("[MPV ENUM] PID {} HWND 0x{:X} Class '{}'", data.pid, hwnd as usize, class_name));
+            dump_window_diagnostics("ENUM_CB_FOUND_WINDOW", hwnd);
             if class_name == "mpv" {
                 data.hwnd = Some(hwnd);
                 return 0; // stop enum
@@ -547,6 +603,7 @@ pub fn spawn_mpv_wallpaper(
     // MPV initializes its own Direct3D 11 swapchain without cross-process --wid restrictions.
     cmd.arg("--no-config")
         .arg("--force-window=immediate")
+        .arg("--window-minimized=yes")
         .arg("--show-in-taskbar=no")
         .arg("--taskbar-progress=no")
         .arg("--title-bar=no")
@@ -656,14 +713,16 @@ pub fn spawn_mpv_wallpaper(
     let mpv_hwnd = match find_mpv_hwnd(&mut child) {
         Some(h) => {
             log_mpv_msg(&format!("[MPV] Located native MPV HWND: 0x{:X} for PID={}", h as usize, mpv_pid));
+            dump_window_diagnostics("MPV_DISCOVERED_PRE_LAYERED", h);
             use windows_sys::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes,
-                GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, LWA_ALPHA
+                GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, ShowWindow,
+                GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+                SW_SHOWNOACTIVATE, LWA_ALPHA
             };
             unsafe {
                 let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
-                // Enforce WS_EX_TOOLWINDOW and WS_EX_LAYERED, strip WS_EX_APPWINDOW
-                let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED) & !WS_EX_APPWINDOW;
+                // Enforce WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, strip WS_EX_APPWINDOW
+                let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE) & !WS_EX_APPWINDOW;
                 SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
                 if ticket.is_some() {
                     // Staged MPV: initialize completely transparent (alpha = 0) while buffering
@@ -674,7 +733,12 @@ pub fn spawn_mpv_wallpaper(
                 } else {
                     SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
                 }
+                // Un-minimize while maintaining layered transparency (alpha = 0).
+                // This allows Direct3D 11 to decode video frames and advance playback-time
+                // without showing any black window or stealing foreground focus.
+                ShowWindow(h, SW_SHOWNOACTIVATE);
             }
+            dump_window_diagnostics("MPV_DISCOVERED_POST_LAYERED", h);
             h
         }
         None => {

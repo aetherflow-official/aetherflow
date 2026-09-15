@@ -3,21 +3,19 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-15 18:15 IST — Smooth Transactional Wallpaper Transitions & Rapid Switching Race Condition Elimination:
-1. **Root Cause Analysis**:
-   - Diagnosed why raw Windows desktop flashed during switching: previously, `apply_wallpaper` hid existing wallpaper WebViews and killed existing MPV instances *before* spawning or preparing the new wallpaper, leaving WorkerW bare for 200ms–5000ms.
-   - Rapid multi-clicks caused out-of-order race conditions because concurrent tasks shared the same named pipes without versioning, allowing stale in-flight jobs to overwrite newer selections.
-2. **Transactional Architecture**:
-   - Implemented monitor-scoped monotonically increasing apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS).
-   - In-flight background threads check ticket validity at every stage (pre-spawn, post-spawn, readiness verification). Superseded requests cleanly terminate without retiring the active wallpaper or touching state.
-3. **Atomic Swap & Staging**:
-   - New MPV instances are launched staged invisibly (`alpha = 0`, unique ticket-scoped IPC named pipe).
-   - Backend queries `playback-time` / `wait_for_playback` until the first frame is confirmed rendered.
-   - Only after readiness is confirmed and ticket is still valid does atomic swap occur: new MPV is brought to full opacity (`alpha = 255`), and the previous wallpaper is retired.
-4. **Popup Bug Protection**:
-   - Normal, custom, canvas, and locker wallpapers retain their existing HWNDs, WorkerW pinning, and visibility without recreation or unpinning, ensuring zero 80% WebView popups.
-5. **Validation**:
-   - Automated end-to-end test suite (`scratch/run_full_transition_suite.ps1`) verified: rapid A -> B -> C -> D switching, Video <-> Canvas transitions, and 0 popup windows.
+2026-09-15 22:50 IST — Eliminated Black Window Flash During YouTube MPV Wallpaper Transitions:
+1. **Root Cause Analysis (Diagnosed via Win32 Diagnostics)**:
+   - MPV native window was spawned as a visible top-level window without `--window-minimized=yes`, causing an opaque black rectangle on screen for 100ms–200ms before `find_mpv_hwnd` could apply transparency.
+   - `pin_hwnd_as_wallpaper` in `main.rs` prematurely set `alpha = 255` on staged windows before `SetParent`, briefly exposing the unparented top-level window to DWM.
+2. **Implementation**:
+   - Added `--window-minimized=yes` and `--show-in-taskbar=no` to `spawn_mpv_wallpaper`. The window is born iconic at `(-32000, -32000)` with 0 screen presence.
+   - Upon HWND acquisition, configured `WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, set `alpha = 0`, and unminimized via `SW_SHOWNOACTIVATE` so Direct3D renders frames invisibly.
+   - In `pin_hwnd_as_wallpaper`, dynamically preserved `alpha = 0` for staged transparent windows throughout `SetParent`, non-client frame clipping, and `SetWindowPos`.
+   - `alpha = target_alpha` is only restored after atomic positioning behind desktop icons in WorkerW.
+3. **Protected Invariants**:
+   - Monotonic tickets, stale-request protection, WorkerW architecture, and WebView2 wallpaper stability remain 100% intact. Zero black flash on screen.
+4. **Validation**:
+   - Verified live transitions (Canvas $\to$ YouTube, YouTube $\to$ Canvas, YouTube $\to$ YouTube) with continuous old wallpaper visibility and zero black window flash.
 
 
 

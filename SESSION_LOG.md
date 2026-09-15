@@ -2343,5 +2343,37 @@
      - Result: ALL TRANSITION & RACE TESTS PASSED SUCCESSFULLY.
 - **Build status:** ✅ `npm run build` (500ms), `cargo check` (2.16s), `cargo build --release` (7.56 MB) all passing with 0 errors.
 ---
+## Session: 2026-09-15 22:50 IST (Eliminated Black Window Flash During YouTube Wallpaper Transition)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Objective:** Diagnose and eliminate the brief black window flash occurring during YouTube MPV wallpaper transition while preserving the transactional request/ticket system, old wallpaper retention, and atomic swap logic.
+- **Root Cause Diagnosis (via Live Win32 HWND Diagnostics):**
+  1. **Root Cause 1 (Creation Flash):**
+     - In `spawn_mpv_wallpaper` (`src-tauri/src/mpv.rs`), MPV was launched with `--force-window=immediate` and geometry at the target monitor, but WITHOUT `--window-minimized=yes`.
+     - MPV immediately spawned a top-level native window (`class='mpv'`, `vis=true`, `style=0x14CE0000`, `exstyle=0x00000100`, `parent=0x0`) with a solid black `#000000` background.
+     - For 100ms–200ms before `find_mpv_hwnd` could locate the window and apply layered transparency, this opaque black rectangle was visibly composited by DWM on the monitor.
+  2. **Root Cause 2 (Premature Alpha Unmasking During Pinning):**
+     - In `pin_hwnd_as_wallpaper` (`src-tauri/src/main.rs`), `SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)` was called before `SetParent(hwnd, parent_hwnd)`.
+     - This unconditionally flipped the staged transparent MPV window back to 100% opaque (`alpha=255`) while still a top-level window during reparenting and geometry measurement.
+- **Implementation & Fix:**
+  1. In `src-tauri/src/mpv.rs` (`spawn_mpv_wallpaper`):
+     - Added `--window-minimized=yes` alongside `--show-in-taskbar=no`. MPV window is born in iconic state at `(-32000, -32000)` without taskbar entry, completely preventing any black flash on creation.
+     - Upon HWND acquisition in `spawn_mpv_wallpaper`, immediately applied `WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` and stripped `WS_EX_APPWINDOW`.
+     - Configured layered `alpha = 0` (100% transparent), and only then called `ShowWindow(h, SW_SHOWNOACTIVATE)`. This unminimizes the window into normal state without activating it or stealing foreground focus, allowing Direct3D 11 swapchain to initialize, resolve yt-dlp streams, and decode video frames invisibly in the background.
+  2. In `src-tauri/src/main.rs` (`pin_hwnd_as_wallpaper`):
+     - Added `WS_MINIMIZE` removal from `GWL_STYLE`.
+     - Added detection of staged transparent windows using `GetLayeredWindowAttributes`: if the window is already layered at `alpha == 0`, `pin_hwnd_as_wallpaper` preserves `alpha = 0` throughout `SetParent`, frame measurement, and `SetWindowPos`.
+     - Non-staged windows (such as newly spawned WebViews) only have their alpha set to 255 *after* `SetParent` and `SetWindowPos` place them behind `SHELLDLL_DefView`.
+     - Staged MPV windows remain at `alpha = 0` until `apply_wallpaper` executes the atomic swap at line 2328 after the first frame is confirmed ready.
+- **Verification:**
+  - `cargo check` passes with 0 errors.
+  - `npm run build` passes in 778ms.
+  - `cargo build --release` compiles clean binary deployed to `AetherFlow.exe`.
+  - Executed live transitions:
+    - Matrix-Rain (Canvas A) $\to$ YouTube B: Old wallpaper A remained continuously visible; MPV was born minimized at (-32000, -32000), acquired at `alpha=0`, decoded frames invisibly, pinned at `alpha=0`, and swapped atomically at `alpha=255` when ready. ZERO black flash.
+    - YouTube $\to$ Canvas $\to$ YouTube: Clean continuous playback, zero black flash, zero popups.
+- **Build status:** ✅ `npm run build` (778ms), `cargo check` (5.04s), `cargo build --release` (7.56 MB), `npm run tauri:build` (MSI & NSIS generated) all passing with 0 errors.
+---
+
+
 
 

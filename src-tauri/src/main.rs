@@ -1287,6 +1287,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
 
         log_msg(&format!("\n--- [AetherFlow WP] pin_hwnd_as_wallpaper called: hwnd=0x{:X} ---",
             hwnd as usize));
+        mpv::dump_window_diagnostics("PIN_ENTRY", hwnd);
 
         // ── Step 1: exact monitor bounds from target_bounds or Win32 ─────────
         let (mon_screen_x, mon_screen_y, mon_w, mon_h) = if let Some(bounds) = target_bounds {
@@ -1416,15 +1417,22 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         log_msg(&format!("[AetherFlow WP] After enum: workerw=0x{:X} shell=0x{:X}",
             state.workerw as usize, state.shell as usize));
 
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetLayeredWindowAttributes, WS_MINIMIZE};
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-        let new_style = (style | WS_CHILD | WS_VISIBLE) & !(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_BORDER);
+        let new_style = (style | WS_CHILD | WS_VISIBLE) & !(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_MINIMIZE);
         SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
         
         let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
         // Strip 3D non-client borders and frames, and strip WS_EX_APPWINDOW (0x00040000) so wallpaper never appears in Taskbar/Alt+Tab
         let new_ex_style = (ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000 | 0x00040000);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex_style as i32);
-        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+
+        // Detect if window is already layered and staged transparent (alpha = 0)
+        let mut cr_key = 0u32;
+        let mut current_alpha = 0u8;
+        let mut lwa_flags = 0u32;
+        let is_already_layered = GetLayeredWindowAttributes(hwnd, &mut cr_key, &mut current_alpha, &mut lwa_flags) != 0;
+        let is_staged_transparent = is_already_layered && current_alpha == 0;
 
         // ── DWM non-client and corner removal ────────────────────────────────
         // Disables the invisible 9px DWM drop-shadow frame that causes the left gap and right spill
@@ -1466,7 +1474,9 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             parent_client.right, parent_client.bottom
         ));
 
+        mpv::dump_window_diagnostics("PIN_BEFORE_SET_PARENT", hwnd);
         SetParent(hwnd, parent_hwnd);
+        mpv::dump_window_diagnostics("PIN_AFTER_SET_PARENT", hwnd);
 
         let mut hwnd_rect_after: RECT = std::mem::zeroed();
         GetWindowRect(hwnd, &mut hwnd_rect_after);
@@ -1553,6 +1563,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             adj_w, adj_h,
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
         );
+        mpv::dump_window_diagnostics("PIN_AFTER_SET_WINDOW_POS", hwnd);
 
         // Clip the window region strictly to the monitor client rectangle so non-client frame padding
         // never spills across monitor boundaries onto adjacent screens
@@ -1581,6 +1592,13 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
                 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
+        }
+
+        // For non-staged windows (such as newly spawned WebViews), initialize alpha to 255 now that
+        // the window is safely reparented behind desktop icons. Staged windows (like MPV) remain at
+        // alpha = 0 until the caller performs the atomic swap.
+        if !is_staged_transparent {
+            SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
         }
 
         // Force immediate DWM composition update and desktop client area invalidation
@@ -2257,6 +2275,7 @@ async fn apply_wallpaper(
                             "STAGED_MPV_HWND_ACQUIRED",
                             &format!("ticket={} monitor='{}' HWND=0x{:X}", my_ticket, label_clone, hwnd as usize),
                         );
+                        mpv::dump_window_diagnostics("MAIN_STAGED_MPV_HWND_ACQUIRED", hwnd);
 
                         // 1. Verify ticket is still active before beginning playback wait
                         if get_apply_ticket(&label_clone) != my_ticket {
@@ -2305,6 +2324,7 @@ async fn apply_wallpaper(
                             "SWAP_PINNING_HWND",
                             &format!("ticket={} monitor='{}' HWND=0x{:X}", my_ticket, label_clone, hwnd as usize),
                         );
+                        mpv::dump_window_diagnostics("MAIN_BEFORE_PIN_HWND", hwnd);
                         let pinned = pin_hwnd_as_wallpaper(hwnd, Some((mon_x, mon_y, mon_w, mon_h)));
                         if !pinned {
                             log_lifecycle(
@@ -2314,12 +2334,14 @@ async fn apply_wallpaper(
                             proc.terminate();
                             return;
                         }
+                        mpv::dump_window_diagnostics("MAIN_AFTER_PIN_HWND", hwnd);
 
                         // Set target opacity
                         let target_alpha = (opacity_val.clamp(0.05, 1.0) * 255.0).round() as u8;
                         unsafe {
                             SetLayeredWindowAttributes(hwnd, 0, target_alpha, LWA_ALPHA);
                         }
+                        mpv::dump_window_diagnostics("MAIN_AFTER_TARGET_ALPHA_RESTORE", hwnd);
 
                         let _ = proc.set_volume(screen_volume);
                         let _ = proc.set_mute(screen_muted);
