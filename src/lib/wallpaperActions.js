@@ -80,6 +80,9 @@ export async function tauriInvoke(cmd, args) {
   }
 }
 
+// Track monotonically increasing apply transaction IDs per monitor scope
+const monitorApplyTransactions = new Map()
+
 /**
  * Applies any wallpaper (built-in or custom video) to the Windows desktop
  * directly via Tauri backend.
@@ -89,6 +92,14 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
 
   const state = useStore.getState()
   const targetLabel = options.targetMonitor ?? (state.screenArrangement === 'per-screen' ? options.selectedMonitorLabel : null)
+  const txScope = targetLabel || '*'
+  const myTxId = (monitorApplyTransactions.get(txScope) || 0) + 1
+  monitorApplyTransactions.set(txScope, myTxId)
+  if (txScope === '*') {
+    for (const key of monitorApplyTransactions.keys()) {
+      monitorApplyTransactions.set(key, myTxId)
+    }
+  }
   
   const adheredAudio = state.wallpaperAudioSettings?.[wallpaper.id]
   const speed = options.speed ?? wallpaper.config?.speedMultiplier ?? state.wallpaperSpeed ?? 1
@@ -129,6 +140,12 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
       monitorLabel: targetLabel || null,
     })
 
+    // Discard commit if a newer apply request was already triggered
+    if (monitorApplyTransactions.get(txScope) !== myTxId) {
+      console.log(`[AetherFlow] Apply transaction ${myTxId} for ${txScope} was superseded; discarding commit.`)
+      return false
+    }
+
     // Update Zustand state
     state.setActiveWallpaper(wallpaper)
     state.setCurrentDesktopWallpaper(wallpaper)
@@ -153,6 +170,14 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
  * Stops live wallpaper on one or all monitors
  */
 export async function stopDesktopWallpaper(targetMonitor = null) {
+  const txScope = targetMonitor || '*'
+  monitorApplyTransactions.set(txScope, (monitorApplyTransactions.get(txScope) || 0) + 1)
+  if (txScope === '*') {
+    for (const key of monitorApplyTransactions.keys()) {
+      monitorApplyTransactions.set(key, (monitorApplyTransactions.get(key) || 0) + 1)
+    }
+  }
+
   const state = useStore.getState()
   try {
     await tauriInvoke('stop_wallpaper', { monitorLabel: targetMonitor || null })

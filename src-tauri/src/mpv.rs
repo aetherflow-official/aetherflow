@@ -509,10 +509,15 @@ pub fn spawn_mpv_wallpaper(
     speed: Option<f64>,
     brightness: Option<f64>,
     opacity: Option<f64>,
+    ticket: Option<u64>,
 ) -> Result<MpvProcess, String> {
     let mpv_exe = find_mpv_binary()?;
     let safe_label = monitor_label.replace("\\", "").replace(".", "_").replace(" ", "_");
-    let pipe_name = format!(r"\\.\pipe\aetherflow-mpv-{}", safe_label);
+    let pipe_name = if let Some(t) = ticket {
+        format!(r"\\.\pipe\aetherflow-mpv-{}-{}", safe_label, t)
+    } else {
+        format!(r"\\.\pipe\aetherflow-mpv-{}", safe_label)
+    };
 
     let is_network = is_network_url(video_path);
     let is_yt = is_youtube_url(video_path);
@@ -649,15 +654,17 @@ pub fn spawn_mpv_wallpaper(
             };
             unsafe {
                 let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
-                // Enforce WS_EX_TOOLWINDOW and strip WS_EX_APPWINDOW to prevent independent Taskbar/Alt+Tab presence
-                let mut new_ex = (ex | WS_EX_TOOLWINDOW) & !WS_EX_APPWINDOW;
-                if let Some(op) = opacity {
-                    new_ex |= WS_EX_LAYERED;
-                    SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
+                // Enforce WS_EX_TOOLWINDOW and WS_EX_LAYERED, strip WS_EX_APPWINDOW
+                let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED) & !WS_EX_APPWINDOW;
+                SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
+                if ticket.is_some() {
+                    // Staged MPV: initialize completely transparent (alpha = 0) while buffering
+                    SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
+                } else if let Some(op) = opacity {
                     let alpha = (op.max(0.05).min(1.0) * 255.0).round() as u8;
                     SetLayeredWindowAttributes(h, 0, alpha, LWA_ALPHA);
-                } else if new_ex != ex {
-                    SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
+                } else {
+                    SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
                 }
             }
             h

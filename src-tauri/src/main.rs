@@ -2177,22 +2177,14 @@ async fn apply_wallpaper(
                 };
                 let screen_volume = if screen_muted { 0.0 } else { global_volume };
 
-                // 1. Hide the canvas WebviewWindow for this monitor to release decoding & GPU
-                if let Some(win) = app.get_webview_window(&label) {
-                    let _ = win.emit_to(label.as_str(), "aether:stop", serde_json::json!({ "target": label.clone() }));
-                    let _ = win.emit_to(label.as_str(), "aura:stop", serde_json::json!({ "target": label.clone() }));
-                    let _ = win.hide();
-                }
-                trim_process_working_set();
+                let my_ticket = next_apply_ticket(&label);
+                log_lifecycle(
+                    "TICKET_ISSUED",
+                    &format!("ticket={} monitor='{}' video='{}'", my_ticket, label, vpath),
+                );
 
-                // 2. Terminate existing MPV on this monitor
-                if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
-                    if let Some(ref mut map) = *mpv_guard {
-                        if let Some(mut existing) = map.remove(&label) {
-                            existing.terminate();
-                        }
-                    }
-                }
+                // NOTE: We DO NOT terminate existing MPV or hide WebView2 here.
+                // The visible wallpaper remains completely intact until replacement is verified ready.
 
                 let pos = mon.position();
                 let size = mon.size();
@@ -2207,9 +2199,16 @@ async fn apply_wallpaper(
                     let mon_h = size.height as i32;
                     let brightness_val = brightness;
                     let opacity_val = opacity;
+                    let is_yt = use_mpv_for_youtube;
+                    let app_handle = app.clone();
 
                     tauri::async_runtime::spawn_blocking(move || {
-                        match mpv::spawn_mpv_wallpaper(
+                        log_lifecycle(
+                            "STAGED_MPV_SPAWN_START",
+                            &format!("ticket={} monitor='{}'", my_ticket, label_clone),
+                        );
+
+                        let mut proc = match mpv::spawn_mpv_wallpaper(
                             &vpath_clone,
                             &label_clone,
                             mon_x,
@@ -2221,40 +2220,138 @@ async fn apply_wallpaper(
                             Some(speed_val),
                             Some(brightness_val),
                             Some(opacity_val),
+                            Some(my_ticket),
                         ) {
-                            Ok(proc) => {
-                                let hwnd = proc.hwnd as HWND;
-                                if !hwnd.is_null() {
-                                    let pinned = pin_hwnd_as_wallpaper(hwnd, Some((mon_x, mon_y, mon_w, mon_h)));
-                                    if !pinned {
-                                        log_msg("[MPV] Failed to pin MPV to desktop; hiding MPV window.");
-                                        unsafe {
-                                            ShowWindow(hwnd, 0);
-                                        }
-                                    }
-                                }
-                                let _ = proc.set_volume(screen_volume);
-                                let _ = proc.set_mute(screen_muted);
-                                let msg = format!("[MPV] Successfully assigned MPV video wallpaper to {} (HWND=0x{:X}, vol={}, muted={}, speed={}, br={}, op={})", 
-                                    label_clone, proc.hwnd, screen_volume, screen_muted, speed_val, brightness_val, opacity_val);
-                                log_msg(&msg);
-                                println!("{}", msg);
-                                if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
-                                    let map = mpv_guard.get_or_insert_with(HashMap::new);
-                                    map.insert(label_clone, proc);
-                                }
-                            }
+                            Ok(p) => p,
                             Err(err) => {
-                                let err_msg = format!("[MPV ERROR] Failed to spawn MPV on {}: {}", label_clone, err);
-                                log_msg(&err_msg);
-                                eprintln!("{}", err_msg);
+                                log_lifecycle(
+                                    "STAGED_MPV_SPAWN_FAILED",
+                                    &format!("ticket={} monitor='{}' error='{}'", my_ticket, label_clone, err),
+                                );
+                                return;
                             }
+                        };
+
+                        let hwnd = proc.hwnd as HWND;
+                        if hwnd.is_null() {
+                            log_lifecycle(
+                                "STAGED_MPV_HWND_NULL",
+                                &format!("ticket={} monitor='{}'", my_ticket, label_clone),
+                            );
+                            proc.terminate();
+                            return;
                         }
+
+                        log_lifecycle(
+                            "STAGED_MPV_HWND_ACQUIRED",
+                            &format!("ticket={} monitor='{}' HWND=0x{:X}", my_ticket, label_clone, hwnd as usize),
+                        );
+
+                        // 1. Verify ticket is still active before beginning playback wait
+                        if get_apply_ticket(&label_clone) != my_ticket {
+                            log_lifecycle(
+                                "STALE_TICKET_PRE_WAIT",
+                                &format!("ticket={} superseded_by={}; terminating staged MPV", my_ticket, get_apply_ticket(&label_clone)),
+                            );
+                            proc.terminate();
+                            return;
+                        }
+
+                        let max_wait_ms = if is_yt { 15000 } else { 5000 };
+                        log_lifecycle(
+                            "WAIT_FOR_PLAYBACK_START",
+                            &format!("ticket={} monitor='{}' timeout={}ms", my_ticket, label_clone, max_wait_ms),
+                        );
+                        let ready = proc.wait_for_playback(max_wait_ms);
+                        log_lifecycle(
+                            "WAIT_FOR_PLAYBACK_RESULT",
+                            &format!("ticket={} monitor='{}' ready={}", my_ticket, label_clone, ready),
+                        );
+
+                        // 2. Verify ticket is STILL active after waiting
+                        if get_apply_ticket(&label_clone) != my_ticket {
+                            log_lifecycle(
+                                "STALE_TICKET_POST_WAIT",
+                                &format!("ticket={} superseded_by={}; terminating staged MPV", my_ticket, get_apply_ticket(&label_clone)),
+                            );
+                            proc.terminate();
+                            return;
+                        }
+
+                        // 3. Handle playback failure without dropping current wallpaper
+                        if !ready {
+                            log_lifecycle(
+                                "PLAYBACK_FAILED_PRESERVE_CURRENT",
+                                &format!("ticket={} monitor='{}'; preserving active wallpaper", my_ticket, label_clone),
+                            );
+                            proc.terminate();
+                            return;
+                        }
+
+                        // 4. ATOMIC SWAP:
+                        // First frame is decoded and ready! Pin into WorkerW behind icons
+                        log_lifecycle(
+                            "SWAP_PINNING_HWND",
+                            &format!("ticket={} monitor='{}' HWND=0x{:X}", my_ticket, label_clone, hwnd as usize),
+                        );
+                        let pinned = pin_hwnd_as_wallpaper(hwnd, Some((mon_x, mon_y, mon_w, mon_h)));
+                        if !pinned {
+                            log_lifecycle(
+                                "PIN_FAILED",
+                                &format!("ticket={} monitor='{}' HWND=0x{:X}", my_ticket, label_clone, hwnd as usize),
+                            );
+                            proc.terminate();
+                            return;
+                        }
+
+                        // Set target opacity
+                        let target_alpha = (opacity_val.clamp(0.05, 1.0) * 255.0).round() as u8;
+                        unsafe {
+                            SetLayeredWindowAttributes(hwnd, 0, target_alpha, LWA_ALPHA);
+                        }
+
+                        let _ = proc.set_volume(screen_volume);
+                        let _ = proc.set_mute(screen_muted);
+
+                        // Swap into MPV_PLAYERS and terminate the retired MPV instance
+                        let mut old_player_to_retire = None;
+                        if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
+                            let map = mpv_guard.get_or_insert_with(HashMap::new);
+                            old_player_to_retire = map.insert(label_clone.clone(), proc);
+                        }
+                        if let Some(mut old_proc) = old_player_to_retire {
+                            log_lifecycle(
+                                "RETIRE_OLD_MPV",
+                                &format!("ticket={} monitor='{}' old_HWND=0x{:X}", my_ticket, label_clone, old_proc.hwnd),
+                            );
+                            old_proc.terminate();
+                        }
+
+                        // Stop canvas webview rendering loop (0% CPU) without hiding its window
+                        if let Some(win) = app_handle.get_webview_window(&label_clone) {
+                            let _ = win.emit_to(label_clone.as_str(), "aether:stop", serde_json::json!({ "target": label_clone.clone() }));
+                            let _ = win.emit_to(label_clone.as_str(), "aura:stop", serde_json::json!({ "target": label_clone.clone() }));
+                        }
+                        trim_process_working_set();
+
+                        log_lifecycle(
+                            "TRANSACTION_COMPLETE",
+                            &format!(
+                                "ticket={} monitor='{}' HWND=0x{:X} vol={} muted={} speed={} br={} op={}",
+                                my_ticket, label_clone, hwnd as usize, screen_volume, screen_muted, speed_val, brightness_val, opacity_val
+                            ),
+                        );
                     });
                 }
             }
         }
     } else {
+        // Invalidate in-flight MPV apply tickets so no background MPV buffers/commits over canvas
+        invalidate_all_apply_tickets();
+        log_lifecycle(
+            "CANVAS_APPLY_START",
+            &format!("target='{}' engine='{}'", target, resolved_engine_id),
+        );
         ensure_wallpaper_windows(&app);
         // Canvas engine -> Route to WebView2 window
         // 1. Terminate any MPV instances
@@ -2403,6 +2500,13 @@ async fn apply_wallpaper(
 #[tauri::command]
 fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     let target = monitor_label.unwrap_or_else(|| "*".to_string());
+    if target == "*" {
+        invalidate_all_apply_tickets();
+    } else {
+        next_apply_ticket(&target);
+    }
+    log_lifecycle("STOP_WALLPAPER", &format!("target='{}'", target));
+
     if let Ok(mut guard) = ACTIVE_WALLPAPERS.lock() {
         if let Some(ref mut map) = *guard {
             if target == "*" {
