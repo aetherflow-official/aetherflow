@@ -161,6 +161,86 @@ impl MpvProcess {
         }))
     }
 
+    pub fn query_property(&self, prop: &str) -> Option<serde_json::Value> {
+        #[cfg(windows)]
+        {
+            use std::io::BufRead;
+            let pipe_wide: Vec<u16> = self.pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
+            let ready = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), 60) };
+            if ready == 0 {
+                return None;
+            }
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&self.pipe_name)
+                .ok()?;
+            let mut reader = std::io::BufReader::new(file);
+            let cmd = serde_json::json!({
+                "command": ["get_property", prop],
+                "request_id": 101
+            }).to_string() + "\n";
+            let writer = reader.get_mut();
+            if writer.write_all(cmd.as_bytes()).is_err() {
+                return None;
+            }
+            let _ = writer.flush();
+            for _ in 0..10 {
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() || line.is_empty() {
+                    break;
+                }
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if val.get("request_id").and_then(|r| r.as_u64()) == Some(101) {
+                        return val.get("data").cloned();
+                    }
+                }
+            }
+            None
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = prop;
+            None
+        }
+    }
+
+    pub fn wait_for_playback(&mut self, max_wait_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(max_wait_ms);
+        while start.elapsed() < timeout {
+            // Check if child exited prematurely (e.g. yt-dlp error or stream unavailable)
+            if let Ok(Some(status)) = self.child.try_wait() {
+                log_mpv_msg(&format!("[MPV] Process for {} exited early during wait_for_playback: {:?}", self.monitor_label, status));
+                return false;
+            }
+
+            if let Some(val) = self.query_property("playback-time") {
+                if let Some(t) = val.as_f64() {
+                    if t >= 0.0 {
+                        return true;
+                    }
+                }
+            }
+            if let Some(val) = self.query_property("time-pos") {
+                if let Some(t) = val.as_f64() {
+                    if t >= 0.0 {
+                        return true;
+                    }
+                }
+            }
+            if let Some(val) = self.query_property("video-format") {
+                if let Some(fmt) = val.as_str() {
+                    if !fmt.is_empty() {
+                        return true;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(75));
+        }
+        false
+    }
+
     pub fn terminate(&mut self) {
         println!("[MPV] Terminating MPV process for monitor {}", self.monitor_label);
         let _ = self.send_ipc_command(serde_json::json!({ "command": ["quit"] }));
