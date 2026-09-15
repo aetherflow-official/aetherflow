@@ -2314,5 +2314,34 @@
 - **Build status:** ✅ `npm run build` (1.11s), `cargo check` (3.50s), `cargo build --release` (7.53 MB) all passing with 0 errors.
 - **Next session should:** Verify YouTube stream playback visually from the UI and test audio controls.
 ---
+## Session: 2026-09-15 18:15 IST (Resolved Wallpaper Transition Smoothness & Rapid Switching Race Condition)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Completed:**
+  1. **Root Cause Analysis**:
+     - Diagnosed why raw Windows desktop flashed during transitions: `apply_wallpaper` previously hid existing wallpaper WebViews and terminated existing MPV instances before the new wallpaper was spawned or ready, leaving the desktop uncovered for 200ms–5000ms.
+     - Diagnosed rapid multi-click corruption: concurrent asynchronous tasks shared the same named pipes (`\\.\pipe\aetherflow-mpv-${label}`) without versioning, causing later tasks to be overwritten by slower in-flight tasks.
+  2. **Transactional Apply Architecture**:
+     - Added monitor-scoped monotonically increasing ticket counters (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS).
+     - At each async step (pre-spawn, post-spawn, readiness check), the worker thread verifies whether its ticket is still the current active ticket. If superseded, the task immediately aborts and cleans up its staged resources.
+  3. **MPV Staging & Atomic Swap**:
+     - New MPV instances are launched staged invisibly (`alpha = 0`, unique ticket-scoped IPC pipe).
+     - Backend queries `wait_for_playback` until the first frame is confirmed rendered.
+     - Once ready and ticket is validated, atomic swap occurs: new MPV is brought to full opacity (`alpha = 255`) and the previous wallpaper is retired.
+  4. **Protected Normal / Custom / Canvas / Locker Wallpapers**:
+     - Retained existing HWNDs, WorkerW pinning, and visibility without recreation or unpinning, ensuring zero 80% WebView popups.
+  5. **WinSta0 Window Station Attachment**:
+     - Added `OpenWindowStationW("WinSta0\0")` + `SetProcessWindowStation` and `OpenDesktopW("Default\0")` + `SetThreadDesktop` at startup to ensure clean desktop integration across all environments.
+  6. **Automated Verification**:
+     - Developed and ran comprehensive test suite (`scratch/run_full_transition_suite.ps1`):
+       - Test 1: Video A initial apply (first frame ready: True, atomic commit: True).
+       - Test 2: Video A -> Video B transition (retired old MPV: True, atomic swap: True).
+       - Test 3: Rapid switching stress test A -> B -> C -> D (stale tickets detected: True, final transaction committed: True, active MPV count: 2 for dual monitors, 0 orphans).
+       - Test 4: Video -> Canvas transition (matrix-rain started: True, MPV count after canvas: 0).
+       - Test 5: Canvas -> Canvas transition (deep-space: True).
+       - Test 6: Canvas -> Video transition (video restored: True).
+       - Test 7: Popup audit (floating wallpaper popups: 0).
+     - Result: ALL TRANSITION & RACE TESTS PASSED SUCCESSFULLY.
+- **Build status:** ✅ `npm run build` (500ms), `cargo check` (2.16s), `cargo build --release` (7.56 MB) all passing with 0 errors.
+---
 
 

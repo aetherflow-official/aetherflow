@@ -3,25 +3,21 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-14 22:10 IST — Complete Elimination of YouTube Player UI (Center Play/Pause button, bottom bar, progress bar, logo, and keyboard controls) on Wallpapers and Previews:
-1. **Root Cause Diagnosis**:
-   - The center circular black button with white play/pause icon is YouTube's internal interaction bezel (`.ytp-bezel` / `.ytp-large-play-button`).
-   - YouTube's embed player displays this bezel whenever user pointer events (hover, click, focus) hit the iframe, triggering click-to-pause or hovering UI overlays.
-   - `Home.jsx` and `Community.jsx` previews had `controls=1` explicitly enabled and lacked `disablekb=1` and `fs=0`.
-2. **Clean Structural Fix**:
-   - Switched embed parameters to complete zero-UI mode: `controls=0&disablekb=1&fs=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`.
-   - Blocked all pointer interaction reaching the YouTube iframe:
-     - Iframe styled with `pointer-events: none`, `tabIndex = -1`, `aria-hidden = true`.
-     - Added an invisible click-absorbing overlay layer (`pointer-events: auto`, intercepting and canceling `onClick`, `onPointerDown`, `onContextMenu`).
-     - Added `win.set_ignore_cursor_events(true)` on Tauri wallpaper windows so desktop clicks pass through to Windows.
-3. **Preservation of Programmatic Control & Audio**:
-   - All playback commands (`playVideo()`, `pauseVideo()`, `unMute()`, `setVolume()`) communicate programmatically via YouTube IFrame API and `postMessage`, completely independent of DOM pointer events.
-   - Live streams, WASAPI audio playback, volume controls, Aether pause/resume, and SMTC suppression remain 100% functional.
-4. **Verification**:
-   - `npm run build` passed in 586ms with 0 errors.
-   - `cargo build --release` compiled optimized `aetherflow.exe` in 2m 59s.
-   - Playwright visual testing verified zero YouTube controls, no center play/pause overlay, and working audio toggle.
-   - Deployed updated `AetherFlow.exe` (7.53 MB).
+2026-09-15 18:15 IST — Smooth Transactional Wallpaper Transitions & Rapid Switching Race Condition Elimination:
+1. **Root Cause Analysis**:
+   - Diagnosed why raw Windows desktop flashed during switching: previously, `apply_wallpaper` hid existing wallpaper WebViews and killed existing MPV instances *before* spawning or preparing the new wallpaper, leaving WorkerW bare for 200ms–5000ms.
+   - Rapid multi-clicks caused out-of-order race conditions because concurrent tasks shared the same named pipes without versioning, allowing stale in-flight jobs to overwrite newer selections.
+2. **Transactional Architecture**:
+   - Implemented monitor-scoped monotonically increasing apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS).
+   - In-flight background threads check ticket validity at every stage (pre-spawn, post-spawn, readiness verification). Superseded requests cleanly terminate without retiring the active wallpaper or touching state.
+3. **Atomic Swap & Staging**:
+   - New MPV instances are launched staged invisibly (`alpha = 0`, unique ticket-scoped IPC named pipe).
+   - Backend queries `playback-time` / `wait_for_playback` until the first frame is confirmed rendered.
+   - Only after readiness is confirmed and ticket is still valid does atomic swap occur: new MPV is brought to full opacity (`alpha = 255`), and the previous wallpaper is retired.
+4. **Popup Bug Protection**:
+   - Normal, custom, canvas, and locker wallpapers retain their existing HWNDs, WorkerW pinning, and visibility without recreation or unpinning, ensuring zero 80% WebView popups.
+5. **Validation**:
+   - Automated end-to-end test suite (`scratch/run_full_transition_suite.ps1`) verified: rapid A -> B -> C -> D switching, Video <-> Canvas transitions, and 0 popup windows.
 
 
 
@@ -224,6 +220,7 @@ npm run tauri:dev
 | 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Completely suppressed Windows System Media Controls (SMTC Play/Pause/Next/Prev) for all YouTube wallpapers: added MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls to --disable-features in main.rs; injected comprehensive window.MediaSession.prototype and navigator.mediaSession neutralizer into wallpaper and screensaver builders; removed playlist= queue parameter from preview iframes; preserved unmuted audio playback, Aether pause/resume, and all audio policies; compiled release binary and deployed fresh AetherFlow.exe (PID 13456). |
 | 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Complete Elimination of YouTube Player UI (Center Play/Pause button, bottom bar, progress bar, logo, and keyboard controls): configured zero-UI embed parameters (controls=0, disablekb=1, fs=0, rel=0, iv_load_policy=3, modestbranding=1, playsinline=1, enablejsapi=1); blocked pointer interactions via pointer-events:none + tabindex=-1 on iframes, added invisible click-absorbing shield layer over video container, and set_ignore_cursor_events(true) on wallpaper windows; preserved WASAPI audio, Aether programmatic pause/resume, and SMTC suppression; recompiled release binary (7.53 MB). |
 | 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Desktop Black Screen Overlay & YouTube Player Crash: Restored Windows Explorer shell on WinSta0\Default; safeguarded pin_hwnd_as_wallpaper with bool return and prevented unparented windows from calling win.show(); made wallpaper.html and wallpaper.jsx backgrounds transparent; replaced destructive configurable:false MediaSession overrides with safe setActionHandler stubs; removed broken origin parameter from YouTube embed URL; attached startup thread to WinSta0\Default; verified 0 errors via cargo check, npm run build (1.11s), and cargo build --release; deployed fresh AetherFlow.exe (7.53 MB). |
+| 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Wallpaper Transition Smoothness & Rapid Switching Race Condition: Eliminated raw Windows desktop flash during wallpaper switches; implemented monitor-scoped monotonically increasing apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS); staged new MPV instances invisibly (`alpha = 0`, unique IPC pipe) and queried first-frame playback readiness before performing atomic swap; retired old wallpaper only after replacement is confirmed ready and ticket remains active; superseded in-flight jobs discard without affecting active wallpaper; protected normal/custom/canvas/locker WebViews from recreation/unpinning, guaranteeing zero 80% WebView popups; attached WinSta0\Default window station; verified clean with automated 7-step test suite (`run_full_transition_suite.ps1`). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

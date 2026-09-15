@@ -327,4 +327,12 @@ Mark these off as you complete them:
     - [x] Implemented native Win32 WASAPI peak audio meter (`is_system_audio_active()`) and shell presentation detector (`is_presentation_or_d3d_fullscreen()`).
     - [x] Fixed wallpaper resume bug on screensaver dismissal: replaced unconditional unpause with atomic `MONITOR_SYNC_REQUESTED` reconciliation, ensuring wallpaper remains paused and audio remains muted while any app is fullscreen or maximized.
     - [x] Added "Smart Trigger & Media Suppression" setting card in Screensaver Studio (`Screensaver.jsx`) with persisted Zustand toggles (`useStore.js`).
+- [x] TASK 19: Smooth Transactional Wallpaper Transitions & Rapid Switching Race Condition Elimination:
+  - [x] Diagnosed root causes: premature wallpaper destruction/hiding before new wallpaper ready, concurrent IPC named pipe collisions across rapid clicks, and non-interactive window station isolation.
+  - [x] Implemented monitor-scoped transactional apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS) with monotonically increasing IDs.
+  - [x] Implemented MPV staging with `alpha = 0`, polling `wait_for_playback` on MPV IPC named pipes until the first frame is ready, and performing atomic swaps where the old wallpaper stays visible until the new wallpaper is ready.
+  - [x] Added stale request discard: superseded in-flight jobs immediately detect ticket obsolescence, terminate early, and clean up staging resources without touching active wallpaper or exposing desktop.
+  - [x] Protected normal, custom, canvas, and locker wallpapers: retained existing HWNDs, WorkerW pinning, and visibility without recreation or unpinning, ensuring zero 80% WebView popups.
+  - [x] Added WinSta0 window station and desktop attachment at process startup.
+  - [x] Verified with automated end-to-end test suite (`scratch/run_full_transition_suite.ps1`): rapid A -> B -> C -> D switching, Video <-> Canvas transitions, and 0 popup windows verified.
 
