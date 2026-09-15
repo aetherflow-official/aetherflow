@@ -568,9 +568,17 @@ export const useStore = create(
             if (!persistedState.audioPlaybackRule || persistedState.audioPlaybackRule === 'mute-covered') {
               persistedState.audioPlaybackRule = 'always'
             }
+            if (!persistedState.youtubeBackend || persistedState.youtubeBackend === 'webview2') {
+              persistedState.youtubeBackend = 'mpv'
+            }
           }
         }
         return persistedState
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state && state.youtubeBackend === 'webview2') {
+          state.youtubeBackend = 'mpv'
+        }
       },
       // Only persist these keys (NEVER persist complex session objects)
       partialize: (s) => ({
@@ -626,7 +634,7 @@ export const useStore = create(
         screensaverInhibitFullscreen: s.screensaverInhibitFullscreen ?? true,
         screensaverInhibitMaximized: s.screensaverInhibitMaximized ?? true,
         screensaverInhibitMediaPlayback: s.screensaverInhibitMediaPlayback ?? true,
-        youtubeBackend: s.youtubeBackend || 'mpv',
+        youtubeBackend: s.youtubeBackend === 'webview2' ? 'mpv' : (s.youtubeBackend || 'mpv'),
         authUser: s.authUser ? {
           id: s.authUser.id,
           email: s.authUser.email,
