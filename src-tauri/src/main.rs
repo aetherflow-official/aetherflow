@@ -4584,6 +4584,48 @@ fn main() {
                         ).await;
                     });
                 }
+            } else if let Some(pos) = argv.iter().position(|arg| arg == "--apply-engine") {
+                if let Some(engine) = argv.get(pos + 1) {
+                    let msg = format!("[CLI IPC] Received --apply-engine with: {}", engine);
+                    log_msg(&msg);
+                    println!("{}", msg);
+                    let app_h = app.clone();
+                    let engine_clone = engine.clone();
+                    tauri::async_runtime::spawn(async move {
+                        apply_wallpaper(
+                            app_h,
+                            engine_clone,
+                            serde_json::json!({}),
+                            1.0,
+                            0.85,
+                            None,
+                        ).await;
+                    });
+                }
+            } else if let Some(pos) = argv.iter().position(|arg| arg == "--apply-youtube") {
+                if let Some(url) = argv.get(pos + 1) {
+                    let msg = format!("[CLI IPC] Received --apply-youtube with: {}", url);
+                    log_msg(&msg);
+                    println!("{}", msg);
+                    let app_h = app.clone();
+                    let url_clone = url.clone();
+                    tauri::async_runtime::spawn(async move {
+                        apply_wallpaper(
+                            app_h,
+                            "web-stream".to_string(),
+                            serde_json::json!({
+                                "streamUrl": url_clone,
+                                "youtubeBackend": "mpv",
+                                "speedMultiplier": 1.0,
+                                "volume": 0.0,
+                                "muted": true,
+                            }),
+                            1.0,
+                            0.85,
+                            None,
+                        ).await;
+                    });
+                }
             } else if argv.iter().any(|arg| arg == "--stop-wallpaper") {
                 log_msg("[CLI IPC] Received --stop-wallpaper");
                 println!("[CLI IPC] Received --stop-wallpaper");
