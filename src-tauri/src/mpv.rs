@@ -457,9 +457,11 @@ pub fn is_video_wallpaper(engine_id: &str, video_path: Option<&str>) -> bool {
 }
 
 #[cfg(windows)]
-fn find_mpv_hwnd(pid: u32) -> Option<HWND> {
+fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, GetClassNameW};
     use windows_sys::Win32::Foundation::LPARAM;
+
+    let pid = child.id();
 
     struct SearchData {
         pid: u32,
@@ -474,6 +476,7 @@ fn find_mpv_hwnd(pid: u32) -> Option<HWND> {
             let mut buf = [0u16; 256];
             let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 256);
             let class_name = String::from_utf16_lossy(&buf[..len as usize]);
+            log_mpv_msg(&format!("[MPV ENUM] PID {} HWND 0x{:X} Class '{}'", data.pid, hwnd as usize, class_name));
             if class_name == "mpv" {
                 data.hwnd = Some(hwnd);
                 return 0; // stop enum
@@ -484,6 +487,11 @@ fn find_mpv_hwnd(pid: u32) -> Option<HWND> {
 
     // Poll for up to 5 seconds (100 iterations x 50ms)
     for _ in 0..100 {
+        if let Ok(Some(status)) = child.try_wait() {
+            log_mpv_msg(&format!("[MPV] Process {} exited early during find_mpv_hwnd: {:?}", pid, status));
+            return None;
+        }
+
         let mut data = SearchData { pid, hwnd: None };
         unsafe {
             EnumWindows(Some(enum_cb), &mut data as *mut _ as LPARAM);
@@ -638,14 +646,14 @@ pub fn spawn_mpv_wallpaper(
     log_mpv_msg(&format!("[MPV] Spawning standalone MPV: label='{}', bounds=({},{}) {}x{}, video='{}'", 
         monitor_label, mon_x, mon_y, mon_w, mon_h, video_path));
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to spawn MPV process {:?}: {}", mpv_exe, e))?;
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn MPV process {:?}: {}", mpv_exe, e))?;
     let mpv_pid = child.id();
 
     #[cfg(windows)]
     assign_child_to_mpv_job(&child);
 
     #[cfg(windows)]
-    let mpv_hwnd = match find_mpv_hwnd(mpv_pid) {
+    let mpv_hwnd = match find_mpv_hwnd(&mut child) {
         Some(h) => {
             log_mpv_msg(&format!("[MPV] Located native MPV HWND: 0x{:X} for PID={}", h as usize, mpv_pid));
             use windows_sys::Win32::UI::WindowsAndMessaging::{

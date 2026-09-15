@@ -1274,6 +1274,17 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
     }
 
     unsafe {
+        // Ensure thread is attached to interactive desktop (WinSta0\Default)
+        // especially when called from background Tokio worker threads
+        use windows_sys::Win32::System::StationsAndDesktops::{OpenDesktopW, SetThreadDesktop};
+        const DESKTOP_ALL_ACCESS: u32 = 0x01FF;
+        let default_name: Vec<u16> = "Default\0".encode_utf16().collect();
+        let hdesk = OpenDesktopW(default_name.as_ptr(), 0, 0, DESKTOP_ALL_ACCESS);
+        if !hdesk.is_null() {
+            let ok = SetThreadDesktop(hdesk);
+            log_msg(&format!("[AetherFlow WP] SetThreadDesktop: {}", ok != 0));
+        }
+
         log_msg(&format!("\n--- [AetherFlow WP] pin_hwnd_as_wallpaper called: hwnd=0x{:X} ---",
             hwnd as usize));
 
@@ -4467,10 +4478,19 @@ fn ensure_canonical_start_menu_shortcut() {
 fn main() {
     #[cfg(windows)]
     {
-        // 0. Ensure thread desktop is WinSta0\Default if opened from a non-interactive runner
+        // 0. Ensure process window station is WinSta0 and thread desktop is Default if opened from a runner
         unsafe {
-            use windows_sys::Win32::System::StationsAndDesktops::{OpenDesktopW, SetThreadDesktop};
+            use windows_sys::Win32::System::StationsAndDesktops::{
+                OpenWindowStationW, SetProcessWindowStation, OpenDesktopW, SetThreadDesktop,
+            };
+            const WINSTA_ALL_ACCESS: u32 = 0x037F;
             const DESKTOP_ALL_ACCESS: u32 = 0x01FF;
+            let winsta_name: Vec<u16> = "WinSta0\0".encode_utf16().collect();
+            let hwinsta = OpenWindowStationW(winsta_name.as_ptr(), 0, WINSTA_ALL_ACCESS);
+            if !hwinsta.is_null() {
+                let ok_winsta = SetProcessWindowStation(hwinsta);
+                log_msg(&format!("[STARTUP] SetProcessWindowStation to WinSta0: {}", ok_winsta != 0));
+            }
             let default_name: Vec<u16> = "Default\0".encode_utf16().collect();
             let hdesk = OpenDesktopW(default_name.as_ptr(), 0, 0, DESKTOP_ALL_ACCESS);
             if !hdesk.is_null() {
