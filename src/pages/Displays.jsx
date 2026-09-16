@@ -209,7 +209,7 @@ export default function DisplaysPage() {
         pauseOnMaximized: pMaximized,
         multiMonitorPauseMode: mMode,
         audioPlaybackRule: aRule,
-        preferredAudioMonitor: pAudioMon === 'auto' ? null : pAudioMon,
+        preferredAudioMonitor: pAudioMon || 'auto',
         wallpaperSyncOnResume: wSync,
       }).catch(() => {})
     }).catch(() => {})

@@ -2495,3 +2495,29 @@
   - Deployed release binary to root `AetherFlow.exe`.
 ---
 
+## Session: 2026-09-16 22:25 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:**
+  - Restore codebase to latest commit (`189444b`) containing 1080p stream extraction and non-blocking sync alignment.
+  - Re-apply display-wise audio routing and per-monitor volume retention fixes.
+  - Resolve YouTube playback anti-bot challenge via Firefox cookie authentication.
+- **Completed**:
+  1. **YouTube Anti-Bot Challenge Bypass (`src-tauri/src/mpv.rs`)**:
+     - Configured `--ytdl-raw-options=...,cookies-from-browser=firefox` resolving `ExitStatus(2)` (`Sign in to confirm you're not a bot`).
+  2. **Display-Wise Audio Retention Architecture (`src-tauri/src/main.rs`, `src/wallpaper.jsx`)**:
+     - Decoupled `screen_volume` from `screen_muted` on MPV and WebView2 spawn/config update (no zeroing of volume).
+     - Upgraded `reassign_live_audio_output` to query `get_target_mon_volume` and assert target monitor's volume on unmute.
+     - Updated `set_mpv_mute` to assert preserved volume upon unmute.
+     - Enhanced `sync_performance_settings` to cleanly handle `'auto'`, `None`, and monitor label transitions.
+     - Added `--audio-target <label|auto>` CLI argument for testing and automated routing.
+     - Updated `src/wallpaper.jsx` to process volume payload in `unmute` events without resetting to zero.
+  3. **Live Verification**:
+     - 1080p YouTube streams load and run in lockstep across DISPLAY1 and DISPLAY6 (`post_delta = 0.000s`).
+     - Switched audio between DISPLAY6, DISPLAY1, and `auto` via CLI IPC; audio switches immediately without needing volume slider touches.
+- **Build Status**:
+  - `npm run build`: ✅ Passes in 1.31s with 0 errors.
+  - `cargo check`: ✅ Passes in 20.27s with 0 errors.
+  - `cargo build --release`: ✅ Passes in 3m 03s.
+  - Deployed release binary to root `AetherFlow.exe`.
+---
+

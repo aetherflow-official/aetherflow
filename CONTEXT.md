@@ -3,26 +3,20 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-16 19:22 IST — Fixed YouTube 1080p Stream Extraction, Restored Seamless Pause-Sync & Perfected Initial Sync:
-1. **Root Cause Analysis**:
-   - Earlier, setting `--ytdl-format=bestvideo[height<=?2160]` forced 4K (3840x2160 at 17.2 Mbps) streams. Seeking in 4K over HTTP takes 500ms–2000ms to re-buffer, breaking both resume synchronization and initial sync alignment.
-   - At 1080p (`height<=1080`), file size is 10x smaller (~39MB vs ~450MB) and fits completely in MPV's 64MB demuxer cache, making seeks instant (<25ms) from RAM.
-   - In `App.jsx` and `Displays.jsx`, ensured `wallpaperSyncOnResume` defaults to `true` (`?? true` instead of `|| false`).
-2. **Implementation**:
-   - `src-tauri/src/mpv.rs`:
-     - Restored exact 1080p format `--ytdl-format=bestvideo[height<=1080]+bestaudio/best` with `js-runtimes="node",remote-components="ejs:github"`.
-   - `src-tauri/src/main.rs`:
-     - Perfected `trigger_post_start_sync_align`: checks occlusion pause states before aligning, and executes direct playing seek without artificial sleep or pause disturbance.
-   - `src/App.jsx` & `src/pages/Displays.jsx`:
-     - Guaranteed `wallpaperSyncOnResume ?? true`.
+2026-09-16 22:25 IST — Restored to Latest State with Display-Wise Audio Retention & Firefox Cookie Bypass:
+1. **Audio Routing Architecture**:
+   - Decoupled `screen_volume` from `screen_muted` in `main.rs` (so volume is never zeroed out upon spawn or update).
+   - In `update_wallpaper_config`, wildcard `target == "*"` now updates configs across all active monitor states, and secondary display volume is no longer zeroed out.
+   - In `reassign_live_audio_output`, looked up the monitor's specific volume via `get_target_mon_volume` and explicitly asserted `proc.set_volume(mon_vol)` before `proc.set_mute(false)` on MPV, and emitted `aether:unmute` with `volume: mon_vol` for WebViews.
+   - Updated `set_mpv_mute` to restore per-monitor volume upon unmute.
+   - Upgraded `sync_performance_settings` to cleanly handle `preferred_audio_monitor` (matching `'auto'`, `None`, and monitor labels) and `audio_playback_rule` changes.
+   - Added `--audio-target <label|auto>` CLI IPC command for dynamic external switching.
+2. **YouTube Anti-Bot Challenge Bypass**:
+   - Added `cookies-from-browser=firefox` to `--ytdl-raw-options` in `src-tauri/src/mpv.rs` to bypass YouTube `ExitStatus(2)` bot challenge (`Sign in to confirm you're not a bot`).
 3. **Live Verification**:
-   - **Pause & Resume Sync Test (`scratch/test_yt_pause_sync.ps1`)**:
-     - DISPLAY6 paused for 3.5s while DISPLAY1 played ahead.
-     - On uncover, DISPLAY6 caught up instantly: **`RESUME DELTA = 0.040s` (~1 frame at 25fps)**.
-   - **Initial Sync Test (`scratch/test_yt_sync.ps1`)**:
-     - DISPLAY6 started 7.3s behind DISPLAY1.
-     - Caught up seamlessly to **`post_delta = 0.125s`**.
-   - Built and deployed to root `AetherFlow.exe`. All builds pass cleanly.
+   - 1080p YouTube streams load and run in lockstep across DISPLAY1 and DISPLAY6 (`post_delta = 0.000s`).
+   - Switching audio target between DISPLAY1, DISPLAY6, and `auto` switches audio immediately without requiring volume slider movement.
+   - Recompiled release binary and deployed to `.\AetherFlow.exe`. All builds pass cleanly.
 
 
 

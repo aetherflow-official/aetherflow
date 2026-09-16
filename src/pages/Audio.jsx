@@ -202,7 +202,7 @@ export default function AudioPage() {
         pauseOnMaximized: pMaximized,
         multiMonitorPauseMode: mMode,
         audioPlaybackRule: aRule,
-        preferredAudioMonitor: pAudioMon === 'auto' ? null : pAudioMon,
+        preferredAudioMonitor: pAudioMon || 'auto',
       }).catch(() => {})
     }).catch(() => {})
   }

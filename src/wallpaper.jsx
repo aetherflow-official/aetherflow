@@ -258,7 +258,6 @@ function WallpaperCanvas() {
           if (isSecondaryScreen) {
             cfg.isSecondary = true
             cfg.muted = true
-            cfg.volume = 0
           }
           bootEngine(payload?.engineId, cfg)
         })
@@ -269,7 +268,6 @@ function WallpaperCanvas() {
           if (isSecondaryScreen) {
             cfg.isSecondary = true
             cfg.muted = true
-            cfg.volume = 0
           }
           engineRef.current?.updateOptions?.(cfg)
         })
@@ -314,11 +312,20 @@ function WallpaperCanvas() {
           try { engineRef.current?.updateOptions?.({ muted: true }) } catch (e) {}
         })
 
-        await registerEvent('unmute', () => {
+        await registerEvent('unmute', (payload) => {
           document.querySelectorAll('video, audio').forEach(el => {
-            try { el.muted = false } catch (e) {}
+            try {
+              el.muted = false
+              if (payload?.volume !== undefined) {
+                el.volume = Math.max(0, Math.min(1, payload.volume / 100))
+              }
+            } catch (e) {}
           })
-          try { engineRef.current?.updateOptions?.({ muted: false }) } catch (e) {}
+          try {
+            const opts = { muted: false }
+            if (payload?.volume !== undefined) opts.volume = payload.volume
+            engineRef.current?.updateOptions?.(opts)
+          } catch (e) {}
         })
 
         await registerEvent('set-brightness', (payload) => {

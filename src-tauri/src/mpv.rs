@@ -757,7 +757,7 @@ pub fn spawn_mpv_wallpaper(
             .arg("--demuxer-max-back-bytes=16M");
         if is_yt {
             cmd.arg("--ytdl=yes")
-                .arg("--ytdl-raw-options=js-runtimes=\"node\",remote-components=\"ejs:github\"")
+                .arg("--ytdl-raw-options=js-runtimes=\"node\",remote-components=\"ejs:github\",cookies-from-browser=firefox")
                 .arg("--ytdl-format=bestvideo[height<=1080]+bestaudio/best");
         }
     } else {

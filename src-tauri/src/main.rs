@@ -2705,7 +2705,7 @@ async fn apply_wallpaper(
                         false
                     }
                 };
-                let screen_volume = if screen_muted { 0.0 } else { global_volume };
+                let screen_volume = global_volume;
 
                 let my_ticket = next_apply_ticket(&label);
                 log_lifecycle(
@@ -2973,7 +2973,7 @@ async fn apply_wallpaper(
                         global_muted
                     }
                 };
-                let screen_volume = if screen_muted { 0.0 } else { global_volume };
+                let screen_volume = global_volume;
 
                 let mut win_config = config.clone();
                 if let Some(obj) = win_config.as_object_mut() {
@@ -3129,6 +3129,20 @@ fn set_mpv_volume(monitor_label: Option<String>, volume: f64) {
     }
 }
 
+fn get_target_mon_volume(mon_lbl: &str) -> f64 {
+    if let Ok(active_guard) = ACTIVE_WALLPAPERS.lock() {
+        if let Some(ref m) = *active_guard {
+            if let Some(vol) = m.get(mon_lbl).and_then(|s| s.config.get("volume").and_then(|v| v.as_f64())) {
+                return vol;
+            }
+            if let Some(vol) = m.get("*").and_then(|s| s.config.get("volume").and_then(|v| v.as_f64())) {
+                return vol;
+            }
+        }
+    }
+    50.0
+}
+
 #[tauri::command]
 fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
     let target = monitor_label.unwrap_or_else(|| "*".to_string());
@@ -3142,7 +3156,9 @@ fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
                     }
                 } else {
                     if map.len() == 1 {
-                        for (_label, proc) in map {
+                        for (label, proc) in map {
+                            let mon_vol = get_target_mon_volume(label);
+                            let _ = proc.set_volume(mon_vol);
                             let _ = proc.set_mute(false);
                         }
                     } else {
@@ -3158,6 +3174,8 @@ fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
 
                         for (label, proc) in map {
                             if *label == target_unmute_label {
+                                let mon_vol = get_target_mon_volume(label);
+                                let _ = proc.set_volume(mon_vol);
                                 let _ = proc.set_mute(false);
                             } else {
                                 let _ = proc.set_mute(true);
@@ -3168,6 +3186,10 @@ fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
             } else {
                 for (label, proc) in map {
                     if target == *label {
+                        if !muted {
+                            let mon_vol = get_target_mon_volume(label);
+                            let _ = proc.set_volume(mon_vol);
+                        }
                         let _ = proc.set_mute(muted);
                     }
                 }
@@ -3832,10 +3854,12 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
 
     if let Ok(mut guard) = ACTIVE_WALLPAPERS.lock() {
         if let Some(ref mut map) = *guard {
-            if let Some(state) = map.get_mut(&target) {
-                if let (Some(target_obj), Some(upd_obj)) = (state.config.as_object_mut(), config.as_object()) {
-                    for (k, v) in upd_obj {
-                        target_obj.insert(k.clone(), v.clone());
+            for (label, state) in map.iter_mut() {
+                if target == "*" || target == *label {
+                    if let (Some(target_obj), Some(upd_obj)) = (state.config.as_object_mut(), config.as_object()) {
+                        for (k, v) in upd_obj {
+                            target_obj.insert(k.clone(), v.clone());
+                        }
                     }
                 }
             }
@@ -3856,7 +3880,6 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
                 obj.insert("isSecondary".to_string(), serde_json::json!(is_secondary));
                 if is_secondary {
                     obj.insert("muted".to_string(), serde_json::json!(true));
-                    obj.insert("volume".to_string(), serde_json::json!(0.0));
                 } else {
                     audio_assigned = true;
                 }
@@ -3949,7 +3972,7 @@ fn reassign_live_audio_output(app: &AppHandle) {
     let target_audio = get_target_audio_monitor_label(app);
     log_msg(&format!("[AUDIO ROUTING] Reassigning live wallpaper audio output to target: {:?}", target_audio));
 
-    // 1. Update active MPV players: unmute target, mute all others
+    // 1. Update active MPV players: unmute target and assert its specific volume, mute all others
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
             for (label, proc) in map {
@@ -3957,7 +3980,15 @@ fn reassign_live_audio_output(app: &AppHandle) {
                     Some(ref t) => t == label,
                     None => true,
                 };
-                let _ = proc.set_mute(!should_play);
+                if should_play {
+                    let mon_vol = get_target_mon_volume(label);
+                    let _ = proc.set_volume(mon_vol);
+                    let _ = proc.set_mute(false);
+                    log_msg(&format!("[AUDIO ROUTING] MPV on '{}' UNMUTED with preserved volume {}", label, mon_vol));
+                } else {
+                    let _ = proc.set_mute(true);
+                    log_msg(&format!("[AUDIO ROUTING] MPV on '{}' MUTED", label));
+                }
             }
         }
     }
@@ -3970,10 +4001,20 @@ fn reassign_live_audio_output(app: &AppHandle) {
                 Some(ref t) => t == label,
                 None => true,
             };
-            let mute_event = if should_play { "aether:unmute" } else { "aether:mute" };
-            let legacy_mute_event = if should_play { "aura:unmute" } else { "aura:mute" };
-            let _ = win.emit_to(label.as_str(), mute_event, serde_json::json!({ "target": label }));
-            let _ = win.emit_to(label.as_str(), legacy_mute_event, serde_json::json!({ "target": label }));
+            if should_play {
+                let mon_vol = get_target_mon_volume(label);
+                let mute_event = "aether:unmute";
+                let legacy_mute_event = "aura:unmute";
+                let payload = serde_json::json!({ "target": label, "volume": mon_vol, "muted": false });
+                let _ = win.emit_to(label.as_str(), mute_event, payload.clone());
+                let _ = win.emit_to(label.as_str(), legacy_mute_event, payload);
+            } else {
+                let mute_event = "aether:mute";
+                let legacy_mute_event = "aura:mute";
+                let payload = serde_json::json!({ "target": label, "muted": true });
+                let _ = win.emit_to(label.as_str(), mute_event, payload.clone());
+                let _ = win.emit_to(label.as_str(), legacy_mute_event, payload);
+            }
         }
     }
 }
@@ -4000,17 +4041,21 @@ fn sync_performance_settings(
             guard.multi_monitor_pause_mode = mm;
         }
         if let Some(ar) = audio_playback_rule {
-            guard.audio_playback_rule = ar;
+            if guard.audio_playback_rule != ar {
+                guard.audio_playback_rule = ar;
+                audio_pref_changed = true;
+            }
         }
         if let Some(ws) = wallpaper_sync_on_resume {
             guard.wallpaper_sync_on_resume = ws;
         }
-        if let Some(pref) = preferred_audio_monitor {
-            let clean_pref = if pref == "auto" || pref.is_empty() { None } else { Some(pref) };
-            if guard.preferred_audio_monitor != clean_pref {
-                guard.preferred_audio_monitor = clean_pref;
-                audio_pref_changed = true;
-            }
+        let clean_pref = match preferred_audio_monitor {
+            Some(ref s) if s != "auto" && !s.is_empty() => Some(s.clone()),
+            _ => None,
+        };
+        if guard.preferred_audio_monitor != clean_pref {
+            guard.preferred_audio_monitor = clean_pref;
+            audio_pref_changed = true;
         }
     }
     MONITOR_SYNC_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -5122,6 +5167,17 @@ fn main() {
                 if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
                     guard.wallpaper_sync_on_resume = false;
                     log_msg("[CLI IPC] Disabled wallpaper_sync_on_resume via --sync-off");
+                }
+            } else if let Some(pos) = argv.iter().position(|arg| arg == "--audio-target") {
+                if let Some(target) = argv.get(pos + 1) {
+                    let clean_target = if target == "auto" || target.is_empty() { None } else { Some(target.clone()) };
+                    if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
+                        guard.preferred_audio_monitor = clean_target.clone();
+                    }
+                    let msg = format!("[CLI IPC] Audio target set to: {:?}", clean_target);
+                    log_msg(&msg);
+                    println!("{}", msg);
+                    reassign_live_audio_output(&app);
                 }
             }
 

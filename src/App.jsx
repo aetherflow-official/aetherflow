@@ -205,7 +205,7 @@ export default function App() {
           pauseOnMaximized: pauseOnMaximized !== false,
           multiMonitorPauseMode: multiMonitorPauseMode,
           audioPlaybackRule: audioPlaybackRule,
-          preferredAudioMonitor: preferredAudioMonitor === 'auto' ? null : preferredAudioMonitor,
+          preferredAudioMonitor: preferredAudioMonitor || 'auto',
           wallpaperSyncOnResume: !!wallpaperSyncOnResume,
         }).catch(() => {})
       } catch (err) {}
