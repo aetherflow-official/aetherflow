@@ -3,19 +3,22 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-15 22:50 IST — Eliminated Black Window Flash During YouTube MPV Wallpaper Transitions:
-1. **Root Cause Analysis (Diagnosed via Win32 Diagnostics)**:
-   - MPV native window was spawned as a visible top-level window without `--window-minimized=yes`, causing an opaque black rectangle on screen for 100ms–200ms before `find_mpv_hwnd` could apply transparency.
-   - `pin_hwnd_as_wallpaper` in `main.rs` prematurely set `alpha = 255` on staged windows before `SetParent`, briefly exposing the unparented top-level window to DWM.
+2026-09-16 13:35 IST — Implemented Multi-Monitor Wallpaper Resume-Sync on Monitor Uncover:
+1. **Objective & Behavior**:
+   - Reproduces playback synchronization on monitor uncover: when multiple monitors play the identical wallpaper (local video or YouTube VOD) and one monitor resumes after being covered/paused, it performs a one-time catch-up seek to match the currently playing reference monitor.
+   - Built on top of the stable architecture: zero global master clock, zero continuous sync, zero changes to tickets/staging/WorkerW/HWND/audio policies.
 2. **Implementation**:
-   - Added `--window-minimized=yes` and `--show-in-taskbar=no` to `spawn_mpv_wallpaper`. The window is born iconic at `(-32000, -32000)` with 0 screen presence.
-   - Upon HWND acquisition, configured `WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, set `alpha = 0`, and unminimized via `SW_SHOWNOACTIVATE` so Direct3D renders frames invisibly.
-   - In `pin_hwnd_as_wallpaper`, dynamically preserved `alpha = 0` for staged transparent windows throughout `SetParent`, non-client frame clipping, and `SetWindowPos`.
-   - `alpha = target_alpha` is only restored after atomic positioning behind desktop icons in WorkerW.
-3. **Protected Invariants**:
-   - Monotonic tickets, stale-request protection, WorkerW architecture, and WebView2 wallpaper stability remain 100% intact. Zero black flash on screen.
-4. **Validation**:
-   - Verified live transitions (Canvas $\to$ YouTube, YouTube $\to$ Canvas, YouTube $\to$ YouTube) with continuous old wallpaper visibility and zero black window flash.
+   - `src-tauri/src/mpv.rs`: Added standalone `send_ipc_cmd` and `query_ipc_property` with atomic request IDs, plus `seek` method for high-precision frame seek (`absolute+exact`).
+   - `src-tauri/src/main.rs`: Added `wallpaper_sync_on_resume: bool` to `PerformanceSettings` and `sync_performance_settings`.
+   - Implemented `is_same_wallpaper_source` and `maybe_sync_mpv_on_resume`: queries active playing reference, validates seekability and finite duration, calculates loop duration modulo `ref_time % duration`, seeks while paused, and resumes.
+   - Integrated into `start_system_state_monitor` strictly on `was_p && !should_p`, and added post-resume measurement telemetry (`ref_pos`, `resumed_pos`, `diff`).
+   - Frontend: Added `wallpaperSyncOnResume` (default: `false` / OFF) in `useStore.js` (persisted in `partialize`), `App.jsx`, and `Displays.jsx` UI control.
+3. **Validation & Measurements**:
+   - 10s occlusion: Resumed pos matched reference within 0.2667s.
+   - 30s occlusion: Resumed pos matched reference across loop within 0.3667s.
+   - 60s occlusion: Resumed pos matched reference across loops within 0.2500s.
+   - YouTube VOD: Resumed pos matched reference within 0.1200s.
+   - Different wallpapers & setting OFF: Zero seek performed, normal resume preserved. YouTube live streams safely protected from seeking.
 
 
 
@@ -219,6 +222,7 @@ npm run tauri:dev
 | 2026-09-14 | Antigravity (Gemini 3.8 Flash) | Complete Elimination of YouTube Player UI (Center Play/Pause button, bottom bar, progress bar, logo, and keyboard controls): configured zero-UI embed parameters (controls=0, disablekb=1, fs=0, rel=0, iv_load_policy=3, modestbranding=1, playsinline=1, enablejsapi=1); blocked pointer interactions via pointer-events:none + tabindex=-1 on iframes, added invisible click-absorbing shield layer over video container, and set_ignore_cursor_events(true) on wallpaper windows; preserved WASAPI audio, Aether programmatic pause/resume, and SMTC suppression; recompiled release binary (7.53 MB). |
 | 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Desktop Black Screen Overlay & YouTube Player Crash: Restored Windows Explorer shell on WinSta0\Default; safeguarded pin_hwnd_as_wallpaper with bool return and prevented unparented windows from calling win.show(); made wallpaper.html and wallpaper.jsx backgrounds transparent; replaced destructive configurable:false MediaSession overrides with safe setActionHandler stubs; removed broken origin parameter from YouTube embed URL; attached startup thread to WinSta0\Default; verified 0 errors via cargo check, npm run build (1.11s), and cargo build --release; deployed fresh AetherFlow.exe (7.53 MB). |
 | 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Wallpaper Transition Smoothness & Rapid Switching Race Condition: Eliminated raw Windows desktop flash during wallpaper switches; implemented monitor-scoped monotonically increasing apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS); staged new MPV instances invisibly (`alpha = 0`, unique IPC pipe) and queried first-frame playback readiness before performing atomic swap; retired old wallpaper only after replacement is confirmed ready and ticket remains active; superseded in-flight jobs discard without affecting active wallpaper; protected normal/custom/canvas/locker WebViews from recreation/unpinning, guaranteeing zero 80% WebView popups; attached WinSta0\Default window station; verified clean with automated 7-step test suite (`run_full_transition_suite.ps1`). |
+| 2026-09-16 | Antigravity (Gemini 3.8 Flash) | Implemented Multi-Monitor Wallpaper Resume-Sync on Monitor Uncover: Added opt-in setting (default OFF), monotonic MPV IPC property querying and absolute+exact seeking in `mpv.rs`; implemented `is_same_wallpaper_source`, `maybe_sync_mpv_on_resume`, and post-resume delta telemetry in `main.rs`; integrated with `useStore.js` and `Displays.jsx`; verified frame-accurate catch-up across 10s (0.26s delta), 30s (0.36s delta), 60s (0.25s delta), and YouTube VOD (0.12s delta) while preserving normal resume for live streams, different wallpapers, and when setting is OFF. |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

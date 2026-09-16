@@ -119,6 +119,8 @@ export default function DisplaysPage() {
   const togglePauseOnMaximized = useStore(s => s.togglePauseOnMaximized)
   const multiMonitorPauseMode = useStore(s => s.multiMonitorPauseMode) || 'isolated'
   const setMultiMonitorPauseMode = useStore(s => s.setMultiMonitorPauseMode)
+  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) || false
+  const setWallpaperSyncOnResume = useStore(s => s.setWallpaperSyncOnResume)
   const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'always'
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
 
@@ -199,6 +201,7 @@ export default function DisplaysPage() {
     const mMode = overrides.multiMonitorPauseMode !== undefined ? overrides.multiMonitorPauseMode : multiMonitorPauseMode
     const aRule = overrides.audioPlaybackRule !== undefined ? overrides.audioPlaybackRule : audioPlaybackRule
     const pAudioMon = overrides.preferredAudioMonitor !== undefined ? overrides.preferredAudioMonitor : preferredAudioMonitor
+    const wSync = overrides.wallpaperSyncOnResume !== undefined ? overrides.wallpaperSyncOnResume : wallpaperSyncOnResume
     import('@tauri-apps/api/core').then(({ invoke }) => {
       invoke('sync_performance_settings', {
         pauseOnBattery: pBattery,
@@ -207,6 +210,7 @@ export default function DisplaysPage() {
         multiMonitorPauseMode: mMode,
         audioPlaybackRule: aRule,
         preferredAudioMonitor: pAudioMon === 'auto' ? null : pAudioMon,
+        wallpaperSyncOnResume: wSync,
       }).catch(() => {})
     }).catch(() => {})
   }
@@ -239,6 +243,11 @@ export default function DisplaysPage() {
   const handleMultiMonitorPauseModeChange = (mode) => {
     setMultiMonitorPauseMode(mode)
     syncAllPerformance({ multiMonitorPauseMode: mode })
+  }
+
+  const handleWallpaperSyncChange = (val) => {
+    setWallpaperSyncOnResume(val)
+    syncAllPerformance({ wallpaperSyncOnResume: val })
   }
 
   return (
@@ -401,6 +410,28 @@ export default function DisplaysPage() {
               onClick={() => handleMultiMonitorPauseModeChange('global')}
             >
               Global (All Displays)
+            </button>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          label="Wallpaper Synchronization"
+          desc="When multiple monitors display the same video wallpaper and one resumes after being covered, automatically seek it to catch up with currently playing monitors"
+        >
+          <div className="segmented-control">
+            <button
+              type="button"
+              className={`segmented-item ${!wallpaperSyncOnResume ? 'active-brand' : ''}`}
+              onClick={() => handleWallpaperSyncChange(false)}
+            >
+              OFF
+            </button>
+            <button
+              type="button"
+              className={`segmented-item ${wallpaperSyncOnResume ? 'active-brand' : ''}`}
+              onClick={() => handleWallpaperSyncChange(true)}
+            >
+              ON
             </button>
           </div>
         </SettingRow>

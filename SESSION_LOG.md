@@ -2374,6 +2374,41 @@
 - **Build status:** ✅ `npm run build` (778ms), `cargo check` (5.04s), `cargo build --release` (7.56 MB), `npm run tauri:build` (MSI & NSIS generated) all passing with 0 errors.
 ---
 
+## Session: 2026-09-16 13:35 (Multi-Monitor Wallpaper Resume-Sync on Monitor Uncover)
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **User Request**:
+  - Reproduce playback position catch-up synchronization on monitor uncover: when multiple monitors play the same wallpaper and one monitor resumes after being covered/paused, catch up to the currently playing reference monitor.
+  - DO NOT implement a global master clock; DO NOT rewrite transition architecture; DO NOT revert commits.
+  - Build the smallest safe feature on top of the current working architecture.
+  - Test and report exact measurements: reference position, resumed position, and difference.
+- **Completed**:
+  1. **IPC Query & Seek Primitives (`src-tauri/src/mpv.rs`)**:
+     - Added standalone `send_ipc_cmd` and `query_ipc_property` with monotonic atomic `request_id` tracking.
+     - Added `MpvProcess::seek(&self, seconds: f64, exact: bool)` issuing `["seek", seconds, "absolute+exact"]`.
+  2. **Native Resume-Sync Engine (`src-tauri/src/main.rs`)**:
+     - Added `wallpaper_sync_on_resume: bool` (default `false`) to `PerformanceSettings`.
+     - Updated `sync_performance_settings` to accept optional `wallpaper_sync_on_resume: Option<bool>`.
+     - Added `is_same_wallpaper_source` to ensure identical content source identity.
+     - Implemented `maybe_sync_mpv_on_resume`: queries active playing reference, validates seekability and finite duration, calculates loop modulo `ref_time % duration`, clamps within duration, and seeks while paused.
+     - Hooked into `start_system_state_monitor` strictly on `was_p && !should_p` (one-time correction).
+     - Added post-resume measurement telemetry (`measure_resume_sync`) logging and emitting `aether:resume-sync` with `ref_pos`, `resumed_pos`, and delta.
+  3. **Frontend Settings & Persistence**:
+     - `src/store/useStore.js`: Added `wallpaperSyncOnResume` (default `false`), setter, and localStorage persistence in `partialize`.
+     - `src/App.jsx`: Included `wallpaperSyncOnResume` in `sync_performance_settings` dispatch.
+     - `src/pages/Displays.jsx`: Added "Wallpaper Synchronization" segmented control (`OFF` / `ON`, default `OFF`) with description under Multi-Monitor Playback Behavior.
+- **Verification & Measurement Results**:
+  - Local video (10s occlusion): Ref `14.47s`, Resumed `14.20s`, Delta: **`0.2667s`**.
+  - Local video across loops (30s occlusion): Ref `3.97s`, Resumed `3.60s`, Delta: **`0.3667s`**.
+  - Local video across loops (60s occlusion): Ref `2.45s`, Resumed `2.20s`, Delta: **`0.2500s`**.
+  - YouTube VOD (10s occlusion): Ref `12.44s`, Resumed `12.32s`, Delta: **`0.1200s`**.
+  - Different wallpapers: `Synced: False (Different source content)`, normal resume preserved.
+  - Setting OFF: `Synced: False (Sync setting OFF)`, normal resume preserved.
+  - YouTube Live stream protection: Missing/non-finite duration skips seek, normal resume preserved.
+- **Build Status**:
+  - `npm run build`: ✅ Passes in 653ms with zero errors.
+  - `cargo check`: ✅ Passes in 3.15s with zero errors.
+---
+
 
 
 

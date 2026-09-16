@@ -283,6 +283,8 @@ pub struct PerformanceSettings {
     pub multi_monitor_pause_mode: String,
     pub audio_playback_rule: String,
     pub preferred_audio_monitor: Option<String>,
+    #[serde(default)]
+    pub wallpaper_sync_on_resume: bool,
 }
 
 static PERFORMANCE_SETTINGS: Mutex<PerformanceSettings> = Mutex::new(PerformanceSettings {
@@ -292,6 +294,7 @@ static PERFORMANCE_SETTINGS: Mutex<PerformanceSettings> = Mutex::new(Performance
     multi_monitor_pause_mode: String::new(),
     audio_playback_rule: String::new(),
     preferred_audio_monitor: None,
+    wallpaper_sync_on_resume: false,
 });
 
 static IS_SYSTEM_PAUSED: Mutex<bool> = Mutex::new(false);
@@ -869,6 +872,232 @@ pub fn inspect_monitor_occlusion_states(_app: &AppHandle) -> (HashMap<String, Mo
     (HashMap::new(), false)
 }
 
+fn is_same_wallpaper_source(path_a: &str, path_b: &str) -> bool {
+    if path_a.is_empty() || path_b.is_empty() {
+        return false;
+    }
+    if path_a == path_b {
+        return true;
+    }
+    let norm_a = path_a.trim().replace('\\', "/").to_lowercase();
+    let norm_b = path_b.trim().replace('\\', "/").to_lowercase();
+    norm_a == norm_b
+}
+
+fn maybe_sync_mpv_on_resume(
+    resuming_label: &str,
+    target_paused_monitors: &std::collections::HashSet<String>,
+) {
+    let sync_enabled = if let Ok(guard) = PERFORMANCE_SETTINGS.lock() {
+        guard.wallpaper_sync_on_resume
+    } else {
+        false
+    };
+    if !sync_enabled {
+        return;
+    }
+
+    // Step 2 & 6: Inspect MPV_PLAYERS briefly to identify resuming process and active reference
+    let (resuming_pipe, resuming_video, ref_pipe, ref_label) = {
+        let mpv_guard = match MPV_PLAYERS.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let map = match *mpv_guard {
+            Some(ref m) => m,
+            None => return,
+        };
+
+        let resuming_proc = match map.get(resuming_label) {
+            Some(p) => p,
+            None => return,
+        };
+
+        let resuming_video = resuming_proc.video_path.clone();
+        let resuming_pipe = resuming_proc.pipe_name.clone();
+
+        // Search for an active, currently playing reference monitor with matching source
+        let mut best_ref: Option<(String, String)> = None;
+        for (other_label, other_proc) in map {
+            if other_label == resuming_label {
+                continue;
+            }
+            if target_paused_monitors.contains(other_label) {
+                continue; // Cannot be reference if covered / paused
+            }
+            if !is_same_wallpaper_source(&resuming_video, &other_proc.video_path) {
+                continue; // Different content: do NOT synchronize (STEP 6)
+            }
+            // Prefer primary monitor if available, else first active matching monitor
+            let is_primary = other_label.ends_with("DISPLAY1") || other_label.contains("primary");
+            if best_ref.is_none() || is_primary {
+                best_ref = Some((other_proc.pipe_name.clone(), other_label.clone()));
+            }
+        }
+
+        match best_ref {
+            Some((pipe, label)) => (resuming_pipe, resuming_video, pipe, label),
+            None => {
+                log_msg(&format!(
+                    "[RESUME-SYNC] No active playing reference found for monitor '{}' with matching source '{}'. Resuming normally.",
+                    resuming_label, resuming_video
+                ));
+                return;
+            }
+        }
+    };
+
+    let is_yt = mpv::is_youtube_url(&resuming_video);
+
+    // 1. Verify media is seekable (STEP 2)
+    let is_seekable = mpv::query_ipc_property(&resuming_pipe, "seekable")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    if !is_seekable {
+        log_msg(&format!(
+            "[RESUME-SYNC] Media on '{}' is not seekable. Resuming normally without seeking.",
+            resuming_label
+        ));
+        return;
+    }
+
+    // 2. Query reference position (STEP 2)
+    let ref_time_opt = mpv::query_ipc_property(&ref_pipe, "time-pos")
+        .or_else(|| mpv::query_ipc_property(&ref_pipe, "playback-time"))
+        .and_then(|v| v.as_f64());
+
+    let ref_time = match ref_time_opt {
+        Some(t) if t >= 0.0 => t,
+        _ => {
+            log_msg(&format!(
+                "[RESUME-SYNC] Reference '{}' has unavailable/invalid playback position. Resuming normally.",
+                ref_label
+            ));
+            return;
+        }
+    };
+
+    // 3. Query duration
+    let duration_opt = mpv::query_ipc_property(&ref_pipe, "duration")
+        .or_else(|| mpv::query_ipc_property(&resuming_pipe, "duration"))
+        .and_then(|v| v.as_f64());
+
+    // 4. Protect YouTube Live streams: must have valid positive duration (STEP 5)
+    if is_yt {
+        match duration_opt {
+            Some(d) if d > 0.0 && !d.is_nan() && !d.is_infinite() => {
+                // Seekable YouTube VOD
+            }
+            _ => {
+                log_msg(&format!(
+                    "[RESUME-SYNC] YouTube stream on '{}' has no valid finite duration (live stream). Skipping sync seek.",
+                    resuming_label
+                ));
+                return;
+            }
+        }
+    }
+
+    // 5. Calculate target position respecting duration for looping videos (STEP 4)
+    let target_pos = match duration_opt {
+        Some(d) if d > 0.0 => {
+            let mut pos = ref_time % d;
+            if pos < 0.0 {
+                pos = 0.0;
+            }
+            pos.min((d - 0.05).max(0.0))
+        }
+        _ => ref_time.max(0.0),
+    };
+
+    // 6. Perform seek on resuming player while paused (STEP 3)
+    if let Err(e) = mpv::send_ipc_cmd(&resuming_pipe, serde_json::json!({
+        "command": ["seek", target_pos, "absolute+exact"]
+    })) {
+        log_msg(&format!(
+            "[RESUME-SYNC WARN] Failed to seek '{}' to {:.2}s: {}. Continuing resume.",
+            resuming_label, target_pos, e
+        ));
+    } else {
+        let msg = format!(
+            "[RESUME-SYNC] Catch-up seek applied for monitor '{}' to target {:.2}s (ref '{}' at {:.2}s, duration {:?})",
+            resuming_label, target_pos, ref_label, ref_time, duration_opt
+        );
+        log_msg(&msg);
+        println!("{}", msg);
+    }
+}
+
+fn measure_resume_sync(app: &AppHandle, resuming_label: &str) {
+    let sync_enabled = if let Ok(guard) = PERFORMANCE_SETTINGS.lock() {
+        guard.wallpaper_sync_on_resume
+    } else {
+        false
+    };
+    if !sync_enabled {
+        return;
+    }
+
+    let (resuming_pipe, ref_pipe, ref_label) = {
+        let mpv_guard = match MPV_PLAYERS.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let map = match *mpv_guard {
+            Some(ref m) => m,
+            None => return,
+        };
+        let resuming_proc = match map.get(resuming_label) {
+            Some(p) => p,
+            None => return,
+        };
+        let resuming_video = resuming_proc.video_path.clone();
+        let resuming_pipe = resuming_proc.pipe_name.clone();
+
+        let mut found_ref = None;
+        for (other_label, other_proc) in map {
+            if other_label == resuming_label {
+                continue;
+            }
+            if is_same_wallpaper_source(&resuming_video, &other_proc.video_path) {
+                found_ref = Some((other_proc.pipe_name.clone(), other_label.clone()));
+                break;
+            }
+        }
+        match found_ref {
+            Some((rpipe, rlabel)) => (resuming_pipe, rpipe, rlabel),
+            None => return,
+        }
+    };
+
+    let resumed_pos = mpv::query_ipc_property(&resuming_pipe, "time-pos").and_then(|v| v.as_f64());
+    let ref_pos = mpv::query_ipc_property(&ref_pipe, "time-pos").and_then(|v| v.as_f64());
+    let duration = mpv::query_ipc_property(&ref_pipe, "duration").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+    let diff = match (ref_pos, resumed_pos) {
+        (Some(r), Some(res)) => {
+            let eff_r = if duration > 0.0 { r % duration } else { r };
+            Some((res - eff_r).abs())
+        }
+        _ => None,
+    };
+
+    let report = format!(
+        "[RESUME-SYNC MEASUREMENT] monitor='{}' ref='{}' ref_pos={:?} resumed_pos={:?} difference={:?} duration={}",
+        resuming_label, ref_label, ref_pos, resumed_pos, diff, duration
+    );
+    log_msg(&report);
+    println!("{}", report);
+
+    let _ = app.emit("aether:resume-sync", serde_json::json!({
+        "monitor": resuming_label,
+        "reference": ref_label,
+        "ref_pos": ref_pos,
+        "resumed_pos": resumed_pos,
+        "difference": diff,
+    }));
+}
+
 pub fn start_system_state_monitor(app: AppHandle) {
     std::thread::spawn(move || {
         // Wait for startup to settle
@@ -1119,9 +1348,23 @@ pub fn start_system_state_monitor(app: AppHandle) {
                 let should_p = target_paused_monitors.contains(label);
 
                 if was_p != should_p || force_sync {
+                    let is_resuming = was_p && !should_p;
+                    if is_resuming {
+                        maybe_sync_mpv_on_resume(label, &target_paused_monitors);
+                    }
+
                     set_mpv_pause(Some(label.clone()), should_p);
                     if wallpaper_labels.len() <= 1 {
                         set_mpv_pause(None, should_p);
+                    }
+
+                    if is_resuming {
+                        let label_cloned = label.clone();
+                        let app_cloned = app.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            measure_resume_sync(&app_cloned, &label_cloned);
+                        });
                     }
 
                     let event_name = if should_p { "aether:pause" } else { "aether:resume" };
@@ -3481,6 +3724,7 @@ fn sync_performance_settings(
     multi_monitor_pause_mode: Option<String>,
     audio_playback_rule: Option<String>,
     preferred_audio_monitor: Option<String>,
+    wallpaper_sync_on_resume: Option<bool>,
 ) {
     let mut audio_pref_changed = false;
     if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
@@ -3494,6 +3738,9 @@ fn sync_performance_settings(
         }
         if let Some(ar) = audio_playback_rule {
             guard.audio_playback_rule = ar;
+        }
+        if let Some(ws) = wallpaper_sync_on_resume {
+            guard.wallpaper_sync_on_resume = ws;
         }
         if let Some(pref) = preferred_audio_monitor {
             let clean_pref = if pref == "auto" || pref.is_empty() { None } else { Some(pref) };

@@ -403,6 +403,7 @@ export const useStore = create(
       pauseOnFullscreen: true,
       pauseOnMaximized: true,
       multiMonitorPauseMode: 'per-display', // 'per-display' | 'all-displays'
+      wallpaperSyncOnResume: false,         // Catch up playback position on unocclude/resume
       audioPlaybackRule: 'always',          // 'always' | 'mute-covered' | 'mute-focused'
       preferredAudioMonitor: 'auto',        // 'auto' | specific monitor label (e.g. 'wallpaper_DISPLAY1')
       audioReactive: false,
@@ -496,6 +497,7 @@ export const useStore = create(
       togglePauseOnFullscreen: () => set((s) => ({ pauseOnFullscreen: !s.pauseOnFullscreen })),
       togglePauseOnMaximized: () => set((s) => ({ pauseOnMaximized: !s.pauseOnMaximized })),
       setMultiMonitorPauseMode: (v) => set({ multiMonitorPauseMode: v }),
+      setWallpaperSyncOnResume: (v) => set({ wallpaperSyncOnResume: Boolean(v) }),
       setAudioPlaybackRule: (v) => set({ audioPlaybackRule: v }),
       setPreferredAudioMonitor: (v) => set({ preferredAudioMonitor: v }),
       toggleAudioReactive: () => set((s) => ({ audioReactive: !s.audioReactive })),
@@ -596,6 +598,7 @@ export const useStore = create(
         pauseOnFullscreen: s.pauseOnFullscreen,
         pauseOnMaximized: s.pauseOnMaximized,
         multiMonitorPauseMode: s.multiMonitorPauseMode,
+        wallpaperSyncOnResume: s.wallpaperSyncOnResume,
         audioPlaybackRule: s.audioPlaybackRule,
         preferredAudioMonitor: s.preferredAudioMonitor,
         audioReactive: s.audioReactive,

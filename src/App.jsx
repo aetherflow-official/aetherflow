@@ -44,6 +44,7 @@ export default function App() {
   const multiMonitorPauseMode = useStore(s => s.multiMonitorPauseMode) || 'per-display'
   const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'mute-covered'
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
+  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) || false
   const screensaverEnabled = useStore(s => s.screensaverEnabled)
   const screensaverTimeoutMins = useStore(s => s.screensaverTimeoutMins)
   const screensaverMode = useStore(s => s.screensaverMode)
@@ -205,11 +206,12 @@ export default function App() {
           multiMonitorPauseMode: multiMonitorPauseMode,
           audioPlaybackRule: audioPlaybackRule,
           preferredAudioMonitor: preferredAudioMonitor === 'auto' ? null : preferredAudioMonitor,
+          wallpaperSyncOnResume: !!wallpaperSyncOnResume,
         }).catch(() => {})
       } catch (err) {}
     }
     syncPerformance()
-  }, [pauseOnBattery, pauseOnFullscreen, pauseOnMaximized, multiMonitorPauseMode, audioPlaybackRule, preferredAudioMonitor])
+  }, [pauseOnBattery, pauseOnFullscreen, pauseOnMaximized, multiMonitorPauseMode, audioPlaybackRule, preferredAudioMonitor, wallpaperSyncOnResume])
 
   // Sync screensaver settings with native Rust background idle monitor
   React.useEffect(() => {

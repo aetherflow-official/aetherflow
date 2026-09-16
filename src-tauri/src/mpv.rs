@@ -89,36 +89,91 @@ pub struct MpvProcess {
     pub hwnd: usize,
 }
 
+static IPC_REQ_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(100);
+
+pub fn send_ipc_cmd(pipe_name: &str, command: serde_json::Value) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let mut file = match std::fs::OpenOptions::new().write(true).open(pipe_name) {
+            Ok(f) => f,
+            Err(_) => {
+                let pipe_wide: Vec<u16> = pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
+                let ready = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), 50) };
+                if ready == 0 {
+                    return Err(format!("MPV IPC pipe {} is not ready", pipe_name));
+                }
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(pipe_name)
+                    .map_err(|e| format!("Failed to open MPV IPC pipe {}: {}", pipe_name, e))?
+            }
+        };
+
+        let mut msg = command.to_string();
+        msg.push('\n');
+        file.write_all(msg.as_bytes())
+            .map_err(|e| format!("Failed to write to MPV IPC pipe: {}", e))?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (pipe_name, command);
+        Ok(())
+    }
+}
+
+pub fn query_ipc_property(pipe_name: &str, prop: &str) -> Option<serde_json::Value> {
+    #[cfg(windows)]
+    {
+        use std::io::BufRead;
+        let pipe_wide: Vec<u16> = pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
+        let ready = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), 60) };
+        if ready == 0 {
+            return None;
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(pipe_name)
+            .ok()?;
+        let mut reader = std::io::BufReader::new(file);
+        let my_id = IPC_REQ_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let cmd = serde_json::json!({
+            "command": ["get_property", prop],
+            "request_id": my_id
+        }).to_string() + "\n";
+        let writer = reader.get_mut();
+        if writer.write_all(cmd.as_bytes()).is_err() {
+            return None;
+        }
+        let _ = writer.flush();
+        for _ in 0..20 {
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() || line.is_empty() {
+                break;
+            }
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                if val.get("request_id").and_then(|r| r.as_u64()) == Some(my_id) {
+                    if val.get("error").and_then(|e| e.as_str()) == Some("success") {
+                        return val.get("data").cloned();
+                    } else {
+                        return None;
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (pipe_name, prop);
+        None
+    }
+}
+
 impl MpvProcess {
     pub fn send_ipc_command(&self, command: serde_json::Value) -> Result<(), String> {
-        #[cfg(windows)]
-        {
-            let mut file = match std::fs::OpenOptions::new().write(true).open(&self.pipe_name) {
-                Ok(f) => f,
-                Err(_) => {
-                    let pipe_wide: Vec<u16> = self.pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
-                    let ready = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), 50) };
-                    if ready == 0 {
-                        return Err(format!("MPV IPC pipe {} is not ready", self.pipe_name));
-                    }
-                    std::fs::OpenOptions::new()
-                        .write(true)
-                        .open(&self.pipe_name)
-                        .map_err(|e| format!("Failed to open MPV IPC pipe {}: {}", self.pipe_name, e))?
-                }
-            };
-
-            let mut msg = command.to_string();
-            msg.push('\n');
-            file.write_all(msg.as_bytes())
-                .map_err(|e| format!("Failed to write to MPV IPC pipe: {}", e))?;
-            Ok(())
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = command;
-            Ok(())
-        }
+        send_ipc_cmd(&self.pipe_name, command)
     }
 
     pub fn set_speed(&self, speed: f64) -> Result<(), String> {
@@ -138,6 +193,13 @@ impl MpvProcess {
     pub fn set_pause(&self, paused: bool) -> Result<(), String> {
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "pause", paused]
+        }))
+    }
+
+    pub fn seek(&self, seconds: f64, exact: bool) -> Result<(), String> {
+        let mode = if exact { "absolute+exact" } else { "absolute" };
+        self.send_ipc_command(serde_json::json!({
+            "command": ["seek", seconds, mode]
         }))
     }
 
@@ -162,47 +224,7 @@ impl MpvProcess {
     }
 
     pub fn query_property(&self, prop: &str) -> Option<serde_json::Value> {
-        #[cfg(windows)]
-        {
-            use std::io::BufRead;
-            let pipe_wide: Vec<u16> = self.pipe_name.encode_utf16().chain(std::iter::once(0)).collect();
-            let ready = unsafe { WaitNamedPipeW(pipe_wide.as_ptr(), 60) };
-            if ready == 0 {
-                return None;
-            }
-            let file = std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&self.pipe_name)
-                .ok()?;
-            let mut reader = std::io::BufReader::new(file);
-            let cmd = serde_json::json!({
-                "command": ["get_property", prop],
-                "request_id": 101
-            }).to_string() + "\n";
-            let writer = reader.get_mut();
-            if writer.write_all(cmd.as_bytes()).is_err() {
-                return None;
-            }
-            let _ = writer.flush();
-            for _ in 0..10 {
-                let mut line = String::new();
-                if reader.read_line(&mut line).is_err() || line.is_empty() {
-                    break;
-                }
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if val.get("request_id").and_then(|r| r.as_u64()) == Some(101) {
-                        return val.get("data").cloned();
-                    }
-                }
-            }
-            None
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = prop;
-            None
-        }
+        query_ipc_property(&self.pipe_name, prop)
     }
 
     pub fn wait_for_playback(&mut self, max_wait_ms: u64) -> bool {
