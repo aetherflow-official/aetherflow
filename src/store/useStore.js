@@ -403,7 +403,7 @@ export const useStore = create(
       pauseOnFullscreen: true,
       pauseOnMaximized: true,
       multiMonitorPauseMode: 'per-display', // 'per-display' | 'all-displays'
-      wallpaperSyncOnResume: false,         // Catch up playback position on unocclude/resume
+      wallpaperSyncOnResume: true,          // Synchronize multi-monitor playback (on start & resume)
       audioPlaybackRule: 'always',          // 'always' | 'mute-covered' | 'mute-focused'
       preferredAudioMonitor: 'auto',        // 'auto' | specific monitor label (e.g. 'wallpaper_DISPLAY1')
       audioReactive: false,

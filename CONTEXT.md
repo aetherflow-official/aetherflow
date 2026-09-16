@@ -3,22 +3,26 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-16 13:35 IST — Implemented Multi-Monitor Wallpaper Resume-Sync on Monitor Uncover:
-1. **Objective & Behavior**:
-   - Reproduces playback synchronization on monitor uncover: when multiple monitors play the identical wallpaper (local video or YouTube VOD) and one monitor resumes after being covered/paused, it performs a one-time catch-up seek to match the currently playing reference monitor.
-   - Built on top of the stable architecture: zero global master clock, zero continuous sync, zero changes to tickets/staging/WorkerW/HWND/audio policies.
+2026-09-16 19:22 IST — Fixed YouTube 1080p Stream Extraction, Restored Seamless Pause-Sync & Perfected Initial Sync:
+1. **Root Cause Analysis**:
+   - Earlier, setting `--ytdl-format=bestvideo[height<=?2160]` forced 4K (3840x2160 at 17.2 Mbps) streams. Seeking in 4K over HTTP takes 500ms–2000ms to re-buffer, breaking both resume synchronization and initial sync alignment.
+   - At 1080p (`height<=1080`), file size is 10x smaller (~39MB vs ~450MB) and fits completely in MPV's 64MB demuxer cache, making seeks instant (<25ms) from RAM.
+   - In `App.jsx` and `Displays.jsx`, ensured `wallpaperSyncOnResume` defaults to `true` (`?? true` instead of `|| false`).
 2. **Implementation**:
-   - `src-tauri/src/mpv.rs`: Added standalone `send_ipc_cmd` and `query_ipc_property` with atomic request IDs, plus `seek` method for high-precision frame seek (`absolute+exact`).
-   - `src-tauri/src/main.rs`: Added `wallpaper_sync_on_resume: bool` to `PerformanceSettings` and `sync_performance_settings`.
-   - Implemented `is_same_wallpaper_source` and `maybe_sync_mpv_on_resume`: queries active playing reference, validates seekability and finite duration, calculates loop duration modulo `ref_time % duration`, seeks while paused, and resumes.
-   - Integrated into `start_system_state_monitor` strictly on `was_p && !should_p`, and added post-resume measurement telemetry (`ref_pos`, `resumed_pos`, `diff`).
-   - Frontend: Added `wallpaperSyncOnResume` (default: `false` / OFF) in `useStore.js` (persisted in `partialize`), `App.jsx`, and `Displays.jsx` UI control.
-3. **Validation & Measurements**:
-   - 10s occlusion: Resumed pos matched reference within 0.2667s.
-   - 30s occlusion: Resumed pos matched reference across loop within 0.3667s.
-   - 60s occlusion: Resumed pos matched reference across loops within 0.2500s.
-   - YouTube VOD: Resumed pos matched reference within 0.1200s.
-   - Different wallpapers & setting OFF: Zero seek performed, normal resume preserved. YouTube live streams safely protected from seeking.
+   - `src-tauri/src/mpv.rs`:
+     - Restored exact 1080p format `--ytdl-format=bestvideo[height<=1080]+bestaudio/best` with `js-runtimes="node",remote-components="ejs:github"`.
+   - `src-tauri/src/main.rs`:
+     - Perfected `trigger_post_start_sync_align`: checks occlusion pause states before aligning, and executes direct playing seek without artificial sleep or pause disturbance.
+   - `src/App.jsx` & `src/pages/Displays.jsx`:
+     - Guaranteed `wallpaperSyncOnResume ?? true`.
+3. **Live Verification**:
+   - **Pause & Resume Sync Test (`scratch/test_yt_pause_sync.ps1`)**:
+     - DISPLAY6 paused for 3.5s while DISPLAY1 played ahead.
+     - On uncover, DISPLAY6 caught up instantly: **`RESUME DELTA = 0.040s` (~1 frame at 25fps)**.
+   - **Initial Sync Test (`scratch/test_yt_sync.ps1`)**:
+     - DISPLAY6 started 7.3s behind DISPLAY1.
+     - Caught up seamlessly to **`post_delta = 0.125s`**.
+   - Built and deployed to root `AetherFlow.exe`. All builds pass cleanly.
 
 
 

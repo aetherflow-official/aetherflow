@@ -119,7 +119,7 @@ export default function DisplaysPage() {
   const togglePauseOnMaximized = useStore(s => s.togglePauseOnMaximized)
   const multiMonitorPauseMode = useStore(s => s.multiMonitorPauseMode) || 'isolated'
   const setMultiMonitorPauseMode = useStore(s => s.setMultiMonitorPauseMode)
-  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) || false
+  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) ?? true
   const setWallpaperSyncOnResume = useStore(s => s.setWallpaperSyncOnResume)
   const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'always'
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
@@ -416,7 +416,7 @@ export default function DisplaysPage() {
 
         <SettingRow
           label="Wallpaper Synchronization"
-          desc="When multiple monitors display the same video wallpaper and one resumes after being covered, automatically seek it to catch up with currently playing monitors"
+          desc="When multiple monitors display the same video wallpaper, automatically synchronize playback on startup and when resuming after being covered"
         >
           <div className="segmented-control">
             <button

@@ -44,7 +44,7 @@ export default function App() {
   const multiMonitorPauseMode = useStore(s => s.multiMonitorPauseMode) || 'per-display'
   const audioPlaybackRule = useStore(s => s.audioPlaybackRule) || 'mute-covered'
   const preferredAudioMonitor = useStore(s => s.preferredAudioMonitor) || 'auto'
-  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) || false
+  const wallpaperSyncOnResume = useStore(s => s.wallpaperSyncOnResume) ?? true
   const screensaverEnabled = useStore(s => s.screensaverEnabled)
   const screensaverTimeoutMins = useStore(s => s.screensaverTimeoutMins)
   const screensaverMode = useStore(s => s.screensaverMode)

@@ -294,7 +294,7 @@ static PERFORMANCE_SETTINGS: Mutex<PerformanceSettings> = Mutex::new(Performance
     multi_monitor_pause_mode: String::new(),
     audio_playback_rule: String::new(),
     preferred_audio_monitor: None,
-    wallpaper_sync_on_resume: false,
+    wallpaper_sync_on_resume: true,
 });
 
 static IS_SYSTEM_PAUSED: Mutex<bool> = Mutex::new(false);
@@ -872,6 +872,29 @@ pub fn inspect_monitor_occlusion_states(_app: &AppHandle) -> (HashMap<String, Mo
     (HashMap::new(), false)
 }
 
+fn extract_youtube_id(url: &str) -> Option<String> {
+    if !mpv::is_youtube_url(url) {
+        return None;
+    }
+    if let Some(pos) = url.find("v=") {
+        let after_v = &url[pos + 2..];
+        let id: String = after_v.chars().take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect();
+        if !id.is_empty() {
+            return Some(id);
+        }
+    }
+    for prefix in &["youtu.be/", "/embed/", "/live/"] {
+        if let Some(pos) = url.find(prefix) {
+            let after = &url[pos + prefix.len()..];
+            let id: String = after.chars().take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect();
+            if !id.is_empty() {
+                return Some(id);
+            }
+        }
+    }
+    None
+}
+
 fn is_same_wallpaper_source(path_a: &str, path_b: &str) -> bool {
     if path_a.is_empty() || path_b.is_empty() {
         return false;
@@ -881,7 +904,231 @@ fn is_same_wallpaper_source(path_a: &str, path_b: &str) -> bool {
     }
     let norm_a = path_a.trim().replace('\\', "/").to_lowercase();
     let norm_b = path_b.trim().replace('\\', "/").to_lowercase();
-    norm_a == norm_b
+    if norm_a == norm_b {
+        return true;
+    }
+    if let (Some(id_a), Some(id_b)) = (extract_youtube_id(path_a), extract_youtube_id(path_b)) {
+        return id_a == id_b;
+    }
+    false
+}
+
+static LAST_POST_START_SYNC: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+
+fn trigger_post_start_sync_align(_app: AppHandle, source: String, target_label: String, my_ticket: u64) {
+    std::thread::spawn(move || {
+        let is_yt = mpv::is_youtube_url(&source);
+        let initial_delay_ms = if is_yt { 4500 } else { 2000 };
+        std::thread::sleep(std::time::Duration::from_millis(initial_delay_ms));
+
+        // Verify ticket has not been superseded
+        if get_apply_ticket(&target_label) != my_ticket {
+            return;
+        }
+
+        // Check if sync is enabled
+        let sync_enabled = if let Ok(guard) = PERFORMANCE_SETTINGS.lock() {
+            guard.wallpaper_sync_on_resume
+        } else {
+            false
+        };
+        if !sync_enabled {
+            return;
+        }
+
+        // Retry loop: up to 3 attempts, spaced by 2.5 seconds, in case streams are still buffering
+        for attempt in 1..=3 {
+            if get_apply_ticket(&target_label) != my_ticket {
+                return;
+            }
+
+            // Debounce: If another thread already synced this source within the last 4 seconds, skip
+            if let Ok(last_guard) = LAST_POST_START_SYNC.lock() {
+                if let Some((ref last_src, ref last_time)) = *last_guard {
+                    if is_same_wallpaper_source(&source, last_src) && last_time.elapsed() < std::time::Duration::from_millis(4000) {
+                        return;
+                    }
+                }
+            }
+
+            // Gather active matching MPV players
+            let players = {
+                let guard = match MPV_PLAYERS.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+                let map = match *guard {
+                    Some(ref m) => m,
+                    None => return,
+                };
+                let mut list = Vec::new();
+                for (lbl, proc) in map {
+                    if is_same_wallpaper_source(&source, &proc.video_path) {
+                        list.push((lbl.clone(), proc.pipe_name.clone()));
+                    }
+                }
+                list
+            };
+
+            if players.len() < 2 {
+                return;
+            }
+
+            // Reference monitor: prefer DISPLAY1 or primary, else first in list
+            let ref_idx = players
+                .iter()
+                .position(|(lbl, _)| lbl.ends_with("DISPLAY1") || lbl.contains("primary"))
+                .unwrap_or(0);
+            let (ref_label, ref_pipe) = &players[ref_idx];
+
+            let ref_time_opt = mpv::query_ipc_property(ref_pipe, "time-pos")
+                .or_else(|| mpv::query_ipc_property(ref_pipe, "playback-time"))
+                .and_then(|v| v.as_f64());
+
+            let ref_time = match ref_time_opt {
+                Some(t) if t >= 0.0 => t,
+                _ => {
+                    log_msg(&format!(
+                        "[POST-START-SYNC] Attempt {}/3: Ref '{}' not ready yet, retrying in 2.5s...",
+                        attempt, ref_label
+                    ));
+                    std::thread::sleep(std::time::Duration::from_millis(2500));
+                    continue;
+                }
+            };
+
+            let duration_opt = mpv::query_ipc_property(ref_pipe, "duration").and_then(|v| v.as_f64());
+            if is_yt {
+                match duration_opt {
+                    Some(d) if d > 0.0 && !d.is_nan() && !d.is_infinite() => {}
+                    _ => {
+                        log_msg(&format!(
+                            "[POST-START-SYNC] YouTube stream on '{}' has no valid duration (live stream). Skipping.",
+                            ref_label
+                        ));
+                        return;
+                    }
+                }
+            }
+
+            let mut all_ready = true;
+            let mut sync_performed = false;
+
+            for (other_label, other_pipe) in &players {
+                if other_label == ref_label {
+                    continue;
+                }
+
+                let other_time_opt = mpv::query_ipc_property(other_pipe, "time-pos")
+                    .or_else(|| mpv::query_ipc_property(other_pipe, "playback-time"))
+                    .and_then(|v| v.as_f64());
+
+                let other_time = match other_time_opt {
+                    Some(t) if t >= 0.0 => t,
+                    _ => {
+                        all_ready = false;
+                        break;
+                    }
+                };
+
+                // Re-query reference time to minimize delta error
+                let current_ref_time = mpv::query_ipc_property(ref_pipe, "time-pos")
+                    .or_else(|| mpv::query_ipc_property(ref_pipe, "playback-time"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(ref_time);
+
+                let is_other_paused = mpv::query_ipc_property(other_pipe, "pause").and_then(|v| v.as_bool()).unwrap_or(false);
+                if is_other_paused {
+                    log_msg(&format!(
+                        "[POST-START-SYNC] Monitor '{}' is currently paused (occluded). Skipping post-start alignment.",
+                        other_label
+                    ));
+                    continue;
+                }
+
+                let is_ref_paused = mpv::query_ipc_property(ref_pipe, "pause").and_then(|v| v.as_bool()).unwrap_or(false);
+                if is_ref_paused {
+                    log_msg(&format!(
+                        "[POST-START-SYNC] Reference '{}' is currently paused (occluded). Skipping post-start alignment.",
+                        ref_label
+                    ));
+                    continue;
+                }
+
+                let delta = (current_ref_time - other_time).abs();
+                log_msg(&format!(
+                    "[POST-START-SYNC] Comparing '{}' (at {:.2}s) with ref '{}' (at {:.2}s), delta={:.3}s",
+                    other_label, other_time, ref_label, current_ref_time, delta
+                ));
+
+                // Threshold: If difference is > 80ms, synchronize
+                if delta >= 0.080 {
+                    let target_pos = match duration_opt {
+                        Some(d) if d > 0.0 => {
+                            let mut p = current_ref_time % d;
+                            if p < 0.0 { p = 0.0; }
+                            p.min((d - 0.05).max(0.0))
+                        }
+                        _ => current_ref_time.max(0.0),
+                    };
+
+                    log_msg(&format!(
+                        "[POST-START-SYNC] Seamlessly seeking '{}' to target {:.2}s (ref '{:.2}s', delta={:.3}s)",
+                        other_label, target_pos, current_ref_time, delta
+                    ));
+
+                    // Seek directly to exact target frame while playing
+                    let _ = mpv::send_ipc_cmd(other_pipe, serde_json::json!({
+                        "command": ["seek", target_pos, "absolute+exact"]
+                    }));
+
+                    sync_performed = true;
+
+                    // 5. Verify sync accuracy after 250ms
+                    let pipe_ver = other_pipe.clone();
+                    let ref_pipe_ver = ref_pipe.clone();
+                    let lbl_ver = other_label.clone();
+                    let ref_lbl_ver = ref_label.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(250));
+                        let t_other = mpv::query_ipc_property(&pipe_ver, "time-pos").and_then(|v| v.as_f64());
+                        let t_ref = mpv::query_ipc_property(&ref_pipe_ver, "time-pos").and_then(|v| v.as_f64());
+                        if let (Some(to), Some(tr)) = (t_other, t_ref) {
+                            let diff = (tr - to).abs();
+                            let msg = format!(
+                                "[POST-START-SYNC-VERIFIED] monitor='{}' ({:.3}s) ref='{}' ({:.3}s) post_delta={:.3}s",
+                                lbl_ver, to, ref_lbl_ver, tr, diff
+                            );
+                            log_msg(&msg);
+                            println!("{}", msg);
+                        }
+                    });
+                } else {
+                    log_msg(&format!(
+                        "[POST-START-SYNC] Monitor '{}' already in sync with ref '{}' (delta={:.3}s < 80ms)",
+                        other_label, ref_label, delta
+                    ));
+                }
+            }
+
+            if !all_ready {
+                log_msg(&format!(
+                    "[POST-START-SYNC] Attempt {}/3: Not all monitors ready, retrying in 2.5s...",
+                    attempt
+                ));
+                std::thread::sleep(std::time::Duration::from_millis(2500));
+                continue;
+            }
+
+            if sync_performed {
+                if let Ok(mut last_guard) = LAST_POST_START_SYNC.lock() {
+                    *last_guard = Some((source.clone(), std::time::Instant::now()));
+                }
+                log_msg("[POST-START-SYNC] Post-start synchronization cycle completed successfully.");
+            }
+            break;
+        }
+    });
 }
 
 fn maybe_sync_mpv_on_resume(
@@ -1889,6 +2136,9 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
                 SetWindowPos(main_h, 0 as HWND, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
         }
+        if !hdesk.is_null() {
+            windows_sys::Win32::System::StationsAndDesktops::CloseDesktop(hdesk);
+        }
         true
     }
 }
@@ -2374,12 +2624,17 @@ async fn apply_wallpaper(
     let stream_url_opt = config.get("streamUrl").and_then(|v| v.as_str()).or_else(|| config.get("url").and_then(|v| v.as_str())).map(|s| s.to_string());
     let youtube_backend = config.get("youtubeBackend").and_then(|v| v.as_str()).unwrap_or("mpv");
 
-    let is_youtube_stream = stream_url_opt.as_deref().map(mpv::is_youtube_url).unwrap_or(false);
+    let local_video_path_opt = config.get("videoPath").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let is_youtube_stream = stream_url_opt.as_deref().map(mpv::is_youtube_url).unwrap_or(false)
+        || local_video_path_opt.as_deref().map(mpv::is_youtube_url).unwrap_or(false);
     let use_mpv_for_youtube = is_youtube_stream && youtube_backend == "mpv";
 
-    let local_video_path_opt = config.get("videoPath").and_then(|v| v.as_str()).map(|s| s.to_string());
     let video_path_opt = if use_mpv_for_youtube {
-        stream_url_opt.clone()
+        if stream_url_opt.as_deref().map(mpv::is_youtube_url).unwrap_or(false) {
+            stream_url_opt.clone()
+        } else {
+            local_video_path_opt.clone()
+        }
     } else {
         local_video_path_opt.clone()
     };
@@ -2419,7 +2674,10 @@ async fn apply_wallpaper(
         for (idx, mon) in monitors.iter().enumerate() {
             if let Some(name) = mon.name() {
                 let label = get_monitor_label(name);
-                if !is_duplicated && target != label {
+                let matches_target = target == "*"
+                    || target == label
+                    || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
+                if !matches_target {
                     continue;
                 }
 
@@ -2471,7 +2729,7 @@ async fn apply_wallpaper(
                     let mon_h = size.height as i32;
                     let brightness_val = brightness;
                     let opacity_val = opacity;
-                    let is_yt = use_mpv_for_youtube;
+                    let is_yt = use_mpv_for_youtube || mpv::is_youtube_url(&vpath_clone);
                     let app_handle = app.clone();
 
                     tauri::async_runtime::spawn_blocking(move || {
@@ -2617,6 +2875,8 @@ async fn apply_wallpaper(
                                 my_ticket, label_clone, hwnd as usize, screen_volume, screen_muted, speed_val, brightness_val, opacity_val
                             ),
                         );
+
+                        trigger_post_start_sync_align(app_handle.clone(), vpath_clone.clone(), label_clone.clone(), my_ticket);
                     });
                 }
             }
@@ -2652,7 +2912,10 @@ async fn apply_wallpaper(
         let windows = app.webview_windows();
         let mut audio_assigned = false;
         for (label, win) in windows {
-            if label.starts_with("wallpaper_") && (target == "*" || target == label) {
+            let matches_target = target == "*"
+                || target == label
+                || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
+            if label.starts_with("wallpaper_") && matches_target {
                 #[cfg(windows)]
                 let mut pinned = true;
                 #[cfg(windows)]
@@ -4850,9 +5113,29 @@ fn main() {
                 }
             }
 
+            if argv.iter().any(|arg| arg == "--sync-on") {
+                if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
+                    guard.wallpaper_sync_on_resume = true;
+                    log_msg("[CLI IPC] Enabled wallpaper_sync_on_resume via --sync-on");
+                }
+            } else if argv.iter().any(|arg| arg == "--sync-off") {
+                if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
+                    guard.wallpaper_sync_on_resume = false;
+                    log_msg("[CLI IPC] Disabled wallpaper_sync_on_resume via --sync-off");
+                }
+            }
+
             if let Some(pos) = argv.iter().position(|arg| arg == "--apply-video") {
                 if let Some(path) = argv.get(pos + 1) {
-                    let msg = format!("[CLI IPC] Received --apply-video with path: {}", path);
+                    let target_mon = argv.get(pos + 2).cloned().map(|s| {
+                        let clean = s.replace("\\\\.\\", "").replace("\\", "").replace(".", "_");
+                        if !clean.starts_with("wallpaper_") {
+                            format!("wallpaper_{}", clean)
+                        } else {
+                            clean
+                        }
+                    });
+                    let msg = format!("[CLI IPC] Received --apply-video with path: {} target: {:?}", path, target_mon);
                     log_msg(&msg);
                     println!("{}", msg);
                     let app_h = app.clone();
@@ -4869,7 +5152,7 @@ fn main() {
                             }),
                             1.0,
                             0.85,
-                            None,
+                            target_mon,
                         ).await;
                     });
                 }
@@ -5079,11 +5362,19 @@ fn main() {
             let args: Vec<String> = std::env::args().collect();
             if let Some(pos) = args.iter().position(|arg| arg == "--apply-video") {
                 if let Some(path) = args.get(pos + 1) {
+                    let target_mon = args.get(pos + 2).cloned().map(|s| {
+                        let clean = s.replace("\\\\.\\", "").replace("\\", "").replace(".", "_");
+                        if !clean.starts_with("wallpaper_") {
+                            format!("wallpaper_{}", clean)
+                        } else {
+                            clean
+                        }
+                    });
                     let app_h = app.handle().clone();
                     let path_clone = path.clone();
                     tauri::async_runtime::spawn(async move {
                         std::thread::sleep(std::time::Duration::from_millis(1200));
-                        let msg = format!("[COLD LAUNCH CLI] Applying video wallpaper from CLI: {}", path_clone);
+                        let msg = format!("[COLD LAUNCH CLI] Applying video wallpaper from CLI: {} target: {:?}", path_clone, target_mon);
                         log_msg(&msg);
                         println!("{}", msg);
                         apply_wallpaper(
@@ -5097,7 +5388,7 @@ fn main() {
                             }),
                             1.0,
                             0.85,
-                            None,
+                            target_mon,
                         ).await;
                     });
                 }

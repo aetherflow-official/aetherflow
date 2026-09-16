@@ -536,26 +536,32 @@ pub fn dump_window_diagnostics(_tag: &str, _hwnd: usize) {}
 
 #[cfg(windows)]
 fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, GetClassNameW};
-    use windows_sys::Win32::Foundation::LPARAM;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, EnumThreadWindows, GetWindowThreadProcessId, GetClassNameW
+    };
+    use windows_sys::Win32::Foundation::{LPARAM, CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, THREADENTRY32, TH32CS_SNAPTHREAD,
+        Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
+    };
 
-    let pid = child.id();
+    let target_pid = child.id();
 
     struct SearchData {
-        pid: u32,
+        target_pids: Vec<u32>,
         hwnd: Option<HWND>,
     }
 
-    unsafe extern "system" fn enum_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
+    unsafe extern "system" fn enum_win_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
         let data = &mut *(lparam as *mut SearchData);
         let mut proc_id = 0u32;
         GetWindowThreadProcessId(hwnd, &mut proc_id);
-        if proc_id == data.pid {
-            let mut buf = [0u16; 256];
-            let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 256);
-            let class_name = String::from_utf16_lossy(&buf[..len as usize]);
-            dump_window_diagnostics("ENUM_CB_FOUND_WINDOW", hwnd);
-            if class_name == "mpv" {
+        let mut buf = [0u16; 256];
+        let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 256);
+        let class_name = String::from_utf16_lossy(&buf[..len as usize]);
+        if class_name == "mpv" {
+            if data.target_pids.contains(&proc_id) {
+                dump_window_diagnostics("ENUM_CB_FOUND_WINDOW", hwnd);
                 data.hwnd = Some(hwnd);
                 return 0; // stop enum
             }
@@ -563,20 +569,101 @@ fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
         1
     }
 
-    // Poll for up to 5 seconds (100 iterations x 50ms)
-    for _ in 0..100 {
+    unsafe extern "system" fn enum_thread_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
+        let data = &mut *(lparam as *mut SearchData);
+        let mut buf = [0u16; 256];
+        let len = GetClassNameW(hwnd, buf.as_mut_ptr(), 256);
+        let class_name = String::from_utf16_lossy(&buf[..len as usize]);
+        if class_name == "mpv" {
+            let mut proc_id = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut proc_id);
+            dump_window_diagnostics("ENUM_THREAD_FOUND_WINDOW", hwnd);
+            data.hwnd = Some(hwnd);
+            return 0; // stop enum for this thread
+        }
+        1
+    }
+
+    // Helper to gather target_pid and all child processes spawned by it
+    let get_all_pids = |root_pid: u32| -> Vec<u32> {
+        let mut pids = vec![root_pid];
+        unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snap != INVALID_HANDLE_VALUE {
+                let mut pe: PROCESSENTRY32 = std::mem::zeroed();
+                pe.dwSize = std::mem::size_of::<PROCESSENTRY32>() as u32;
+                if Process32First(snap, &mut pe) != 0 {
+                    loop {
+                        if pids.contains(&pe.th32ParentProcessID) && !pids.contains(&pe.th32ProcessID) {
+                            pids.push(pe.th32ProcessID);
+                        }
+                        if Process32Next(snap, &mut pe) == 0 {
+                            break;
+                        }
+                    }
+                }
+                CloseHandle(snap);
+            }
+        }
+        pids
+    };
+
+    // Helper to enumerate all threads belonging to target PIDs
+    let get_threads_for_pids = |pids: &[u32]| -> Vec<u32> {
+        let mut threads = Vec::new();
+        unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if snap != INVALID_HANDLE_VALUE {
+                let mut te: THREADENTRY32 = std::mem::zeroed();
+                te.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+                if Thread32First(snap, &mut te) != 0 {
+                    loop {
+                        if pids.contains(&te.th32OwnerProcessID) {
+                            threads.push(te.th32ThreadID);
+                        }
+                        if Thread32Next(snap, &mut te) == 0 {
+                            break;
+                        }
+                    }
+                }
+                CloseHandle(snap);
+            }
+        }
+        threads
+    };
+
+    // Poll for up to 6 seconds (120 iterations x 50ms)
+    for _ in 0..120 {
         if let Ok(Some(status)) = child.try_wait() {
-            log_mpv_msg(&format!("[MPV] Process {} exited early during find_mpv_hwnd: {:?}", pid, status));
+            log_mpv_msg(&format!("[MPV] Process {} exited early during find_mpv_hwnd: {:?}", target_pid, status));
             return None;
         }
 
-        let mut data = SearchData { pid, hwnd: None };
+        let target_pids = get_all_pids(target_pid);
+        let mut data = SearchData {
+            target_pids: target_pids.clone(),
+            hwnd: None,
+        };
+
+        // Strategy 1: EnumThreadWindows (direct, fast, immune to desktop isolation or top-level filter issues)
+        let thread_ids = get_threads_for_pids(&target_pids);
+        for tid in thread_ids {
+            unsafe {
+                EnumThreadWindows(tid, Some(enum_thread_cb), &mut data as *mut _ as LPARAM);
+            }
+            if let Some(h) = data.hwnd {
+                return Some(h);
+            }
+        }
+
+        // Strategy 2: EnumWindows fallback
         unsafe {
-            EnumWindows(Some(enum_cb), &mut data as *mut _ as LPARAM);
+            EnumWindows(Some(enum_win_cb), &mut data as *mut _ as LPARAM);
         }
         if let Some(h) = data.hwnd {
             return Some(h);
         }
+
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     None

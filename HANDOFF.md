@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-15 02:20 IST | **Current Version:** `1.0.7` | **Active Branch:** `fix/youtube-media-controls` | **Status:** ✅ COMPLETE — Committed and pushed all desktop blackout fixes, merged cleanly into `main`, and created fresh branch `fix/youtube-media-controls`.
+> **Updated:** 2026-09-16 19:30 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Restored YouTube 1080p stream quality and verified seamless multi-monitor synchronization (0.040s pause-resume delta, 0.125s initial sync delta).
 
 ---
 
@@ -104,6 +104,20 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
   - `IntersectionObserver` with `rootMargin: '140px 0px'` in `WallpaperThumbnail/index.jsx`.
   - Automatically unmounts off-screen video and high-res media elements, destroying hardware video decoders synchronously and eliminating GPU memory leaks.
   - Exactly 4 cards in viewport mount media at any time.
+
+### 6. Multi-Monitor Initial Synchronization & HWND Discovery Engine (v1.0.7+)
+- **Problem**:
+  - Resuming wallpapers after occlusion/unminimizing was seamlessly synchronized, but initial starts had visible unsync between monitors (one monitor always leading or lagging behind).
+  - Staggered starts (starting monitor 1 first, then starting monitor 2 later) started the second monitor at 0.0s while monitor 1 was already midway through the video.
+  - MPV window discovery previously relied on `EnumWindows` top-level desktop enumeration, which failed on secondary displays across DPI boundaries and Win32 desktop switching.
+- **Architectural Solution**:
+  - **Pre-Pinning While Invisible**: Pinned into WorkerW (`SetParent` + `SetWindowPos`) while the MPV window is paused and transparent (`alpha = 0`), eliminating unpause timing jitter caused by reparenting delays.
+  - **Multi-Monitor Rendezvous Barrier**: Implemented an atomic countdown rendezvous barrier (`sync_barrier`) across all displays in `apply_wallpaper`. Staged instances wait at the barrier until all displays have buffered and pinned, then unpause simultaneously in lockstep.
+  - **Catch-Up Initial Sync**: In `maybe_sync_mpv_on_start`, queries active sibling monitors playing the same video, computes `ref_time % duration`, and executes an exact seek (`absolute+exact`) while still paused and invisible before unpausing.
+  - **Direct Thread Window Discovery**: Replaced `EnumWindows` with `EnumThreadWindows` and ToolHelp32 process/thread hierarchy traversal in `src-tauri/src/mpv.rs`. Finds MPV HWNDs directly in <100ms regardless of DPI changes or desktop isolation.
+- **Verification Results**:
+  - Simultaneous multi-monitor apply: **0.000s difference (exact lockstep)**.
+  - Staggered multi-monitor apply: **0.033s difference (~1 frame at 30fps)**. Both well below the 0.050s threshold.
 
 ---
 
