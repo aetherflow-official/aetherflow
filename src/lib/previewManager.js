@@ -157,3 +157,6 @@ class PreviewManager {
 }
 
 export const previewManager = new PreviewManager()
+if (typeof window !== 'undefined') {
+  window.previewManager = previewManager
+}

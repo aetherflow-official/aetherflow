@@ -345,15 +345,13 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
         previewManager.requestPreview(wallpaper.id, videoSrc, 'video')
       }
     } else {
-      if (activePreview.activeId === wallpaper.id || previewManager.pendingId === wallpaper.id) {
-        previewManager.cancelPreview(wallpaper.id)
-      }
+      previewManager.cancelPreview(wallpaper.id)
     }
 
     return () => {
       previewManager.cancelPreview(wallpaper.id)
     }
-  }, [isHovered, isVideo, currentMode, wallpaper.id, wallpaper.config, activePreview.activeId])
+  }, [isHovered, isVideo, currentMode, wallpaper.id, wallpaper.config?.videoPath, wallpaper.defaultConfig?.videoPath])
 
   // Resolve Theme & Badges
   let theme = null
@@ -407,7 +405,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   }
 
   let livePreviewMedia = null
-  if (currentMode !== 'off' && isVideo && isThisPreviewActive && activePreview.activeSrc) {
+  if (currentMode !== 'off' && isVideo && isThisPreviewActive && activePreview.activeSrc && isHovered) {
     livePreviewMedia = (
       <VideoPosterFrame
         videoSrc={activePreview.activeSrc}
