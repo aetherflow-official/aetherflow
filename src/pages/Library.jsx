@@ -81,7 +81,14 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
   const isImage = typeInfo.type === 'image'
   const isCanvas = typeInfo.type === 'canvas'
 
-  const videoPath = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath
+  const videoPath =
+    wallpaper.config?.videoPath ||
+    wallpaper.videoPath ||
+    wallpaper.source ||
+    wallpaper.path ||
+    wallpaper.config?.path ||
+    wallpaper.config?.url ||
+    wallpaper.defaultConfig?.videoPath
   const videoSrc = videoPath
     ? (videoPath.startsWith('http') || videoPath.startsWith('data:') ? videoPath : safeConvertFileSrc(videoPath))
     : ''
