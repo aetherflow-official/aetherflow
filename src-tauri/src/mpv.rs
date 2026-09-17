@@ -483,9 +483,15 @@ pub fn dump_window_diagnostics(tag: &str, hwnd: HWND) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetWindowThreadProcessId, GetClassNameW, GetWindowTextW, IsWindowVisible,
         GetParent, GetWindow, GetWindowLongW, GetLayeredWindowAttributes,
+        GetWindowRect, GetClientRect,
         GW_OWNER, GWL_STYLE, GWL_EXSTYLE,
     };
-    use windows_sys::Win32::Graphics::Gdi::{MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
+    use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::{
+        MonitorFromWindow, GetMonitorInfoW, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        MapWindowPoints,
+    };
+    use windows_sys::Win32::Graphics::Dwm::DwmGetWindowAttribute;
 
     if hwnd.is_null() {
         log_mpv_msg(&format!("[WIN_DIAG] tag='{}' HWND is NULL", tag));
@@ -515,7 +521,26 @@ pub fn dump_window_diagnostics(tag: &str, hwnd: HWND) {
         let lwa_ok = GetLayeredWindowAttributes(hwnd, std::ptr::null_mut(), &mut alpha, &mut lwa_flags);
         let alpha_str = if lwa_ok != 0 { format!("{}", alpha) } else { "none".to_string() };
 
-        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) as usize;
+        let mut wr: RECT = std::mem::zeroed();
+        let mut cr: RECT = std::mem::zeroed();
+        GetWindowRect(hwnd, &mut wr);
+        GetClientRect(hwnd, &mut cr);
+
+        let mut client_origin = [POINT { x: 0, y: 0 }];
+        MapWindowPoints(hwnd, std::ptr::null_mut(), client_origin.as_mut_ptr(), 1);
+
+        let mut border_col = 0u32;
+        let mut ncr_policy = 0u32;
+        let mut corner_pref = 0u32;
+        DwmGetWindowAttribute(hwnd, 34, &mut border_col as *mut u32 as *mut _, std::mem::size_of::<u32>() as u32);
+        DwmGetWindowAttribute(hwnd, 2, &mut ncr_policy as *mut u32 as *mut _, std::mem::size_of::<u32>() as u32);
+        DwmGetWindowAttribute(hwnd, 33, &mut corner_pref as *mut u32 as *mut _, std::mem::size_of::<u32>() as u32);
+
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut minfo: MONITORINFO = std::mem::zeroed();
+        minfo.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(hmon, &mut minfo);
+        let rc = minfo.rcMonitor;
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -523,8 +548,13 @@ pub fn dump_window_diagnostics(tag: &str, hwnd: HWND) {
         let ts = format!("{}.{:03}", now.as_secs(), now.subsec_millis());
 
         let msg = format!(
-            "[WIN_DIAG {}] tag='{}' HWND=0x{:X} pid={} class='{}' title='{}' vis={} parent=0x{:X} owner=0x{:X} style=0x{:08X} exstyle=0x{:08X} alpha={} mon=0x{:X}",
-            ts, tag, hwnd as usize, pid, class_name, title, is_visible, parent, owner, style, exstyle, alpha_str, hmon
+            "[WIN_DIAG {}] tag='{}' HWND=0x{:X} pid={} class='{}' title='{}' vis={} parent=0x{:X} owner=0x{:X} style=0x{:08X} (CAPTION={}, THICKFRAME={}, BORDER={}, POPUP={}, CHILD={}) exstyle=0x{:08X} alpha={} DWM_Border=0x{:08X} NCR={} Corner={} WinRect=({},{})-({},{}) [{}x{}] ClientRect=[{}x{}] ClientOrigin=({},{}) MonRect=({},{})-({},{}) [{}x{}]",
+            ts, tag, hwnd as usize, pid, class_name, title, is_visible, parent, owner,
+            style, (style & 0x00C00000) != 0, (style & 0x00040000) != 0, (style & 0x00800000) != 0, (style & 0x80000000) != 0, (style & 0x40000000) != 0,
+            exstyle, alpha_str, border_col, ncr_policy, corner_pref,
+            wr.left, wr.top, wr.right, wr.bottom, wr.right - wr.left, wr.bottom - wr.top,
+            cr.right, cr.bottom, client_origin[0].x, client_origin[0].y,
+            rc.left, rc.top, rc.right, rc.bottom, rc.right - rc.left, rc.bottom - rc.top
         );
         log_mpv_msg(&msg);
         println!("{}", msg);
@@ -632,8 +662,8 @@ fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
         threads
     };
 
-    // Poll for up to 6 seconds (120 iterations x 50ms)
-    for _ in 0..120 {
+    // Poll for up to 6 seconds (fast 10ms polling initially to catch window on creation)
+    for i in 0..250 {
         if let Ok(Some(status)) = child.try_wait() {
             log_mpv_msg(&format!("[MPV] Process {} exited early during find_mpv_hwnd: {:?}", target_pid, status));
             return None;
@@ -664,7 +694,8 @@ fn find_mpv_hwnd(child: &mut Child) -> Option<HWND> {
             return Some(h);
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        let poll_ms = if i < 40 { 10 } else { 25 };
+        std::thread::sleep(std::time::Duration::from_millis(poll_ms));
     }
     None
 }
@@ -681,7 +712,7 @@ pub fn spawn_mpv_wallpaper(
     muted: Option<bool>,
     speed: Option<f64>,
     brightness: Option<f64>,
-    opacity: Option<f64>,
+    _opacity: Option<f64>,
     ticket: Option<u64>,
 ) -> Result<MpvProcess, String> {
     let mpv_exe = find_mpv_binary()?;
@@ -711,14 +742,15 @@ pub fn spawn_mpv_wallpaper(
     // Lively-style standalone borderless window flags:
     // MPV initializes its own Direct3D 11 swapchain without cross-process --wid restrictions.
     cmd.arg("--no-config")
-        .arg("--force-window=immediate")
         .arg("--window-minimized=yes")
+        .arg("--force-window=immediate")
         .arg("--show-in-taskbar=no")
         .arg("--taskbar-progress=no")
         .arg("--title-bar=no")
         .arg("--title=AetherFlow Video Engine")
         .arg("--force-media-title=AetherFlow Video Engine")
         .arg("--no-border")
+        .arg("--window-corners=donotround")
         .arg("--no-osc")
         .arg("--no-osd-bar")
         .arg("--osd-level=0")
@@ -747,8 +779,9 @@ pub fn spawn_mpv_wallpaper(
         .arg("--input-cursor=no")
         .arg("--hwdec=auto-safe")
         .arg("--panscan=1.0")
-        .arg(format!("--geometry={:+}{:+}", mon_x, mon_y))
-        .arg(format!("--autofit={}x{}", mon_w, mon_h))
+        .arg("--keepaspect-window=no")
+        .arg("--auto-window-resize=no")
+        .arg(format!("--geometry={}x{}{:+}{:+}", mon_w, mon_h, mon_x, mon_y))
         .arg("--background-color=#000000");
 
     if is_network {
@@ -824,28 +857,53 @@ pub fn spawn_mpv_wallpaper(
             log_mpv_msg(&format!("[MPV] Located native MPV HWND: 0x{:X} for PID={}", h as usize, mpv_pid));
             dump_window_diagnostics("MPV_DISCOVERED_PRE_LAYERED", h);
             use windows_sys::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, ShowWindow,
-                GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-                SW_SHOWNOACTIVATE, LWA_ALPHA
+                GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, SetWindowPos,
+                ShowWindow, SW_SHOWNOACTIVATE,
+                GWL_STYLE, GWL_EXSTYLE, WS_POPUP, WS_CAPTION, WS_THICKFRAME,
+                WS_BORDER, WS_DLGFRAME, WS_SYSMENU, WS_MINIMIZE, WS_MAXIMIZE,
+                WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+                SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_FRAMECHANGED,
+                LWA_ALPHA
             };
+            use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
             unsafe {
+                // Attach borderless subclass proc to suppress all non-client painting and frame calculations
+                windows_sys::Win32::UI::Shell::SetWindowSubclass(
+                    h,
+                    Some(crate::borderless_wallpaper_subclass_proc),
+                    2001,
+                    0,
+                );
+
+                // Strip all window caption, sizing borders, system menu, minimize/maximize buttons, keep invisible
+                let style = GetWindowLongW(h, GWL_STYLE) as u32;
+                let new_style = (style | WS_POPUP) & !(WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZE | WS_MAXIMIZE | 0x10000000 /* WS_VISIBLE */);
+                SetWindowLongW(h, GWL_STYLE, new_style as i32);
+
+                // Enforce WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, strip WS_EX_APPWINDOW and 3D borders
                 let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
-                // Enforce WS_EX_TOOLWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, strip WS_EX_APPWINDOW
-                let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE) & !WS_EX_APPWINDOW;
+                let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE) & !(WS_EX_APPWINDOW | 0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
                 SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
-                if ticket.is_some() {
-                    // Staged MPV: initialize completely transparent (alpha = 0) while buffering
-                    SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
-                } else if let Some(op) = opacity {
-                    let alpha = (op.max(0.05).min(1.0) * 255.0).round() as u8;
-                    SetLayeredWindowAttributes(h, 0, alpha, LWA_ALPHA);
-                } else {
-                    SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA);
-                }
-                // Un-minimize while maintaining layered transparency (alpha = 0).
-                // This allows Direct3D 11 to decode video frames and advance playback-time
-                // without showing any black window or stealing foreground focus.
+
+                // Disable DWM border color (kill Windows 11 1px border), non-client rendering, and rounded corners
+                let border_none: u32 = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+                DwmSetWindowAttribute(h, 34 /* DWMWA_BORDER_COLOR */, &border_none as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                let ncr_disabled: u32 = 1; // DWMNCRP_DISABLED
+                DwmSetWindowAttribute(h, 2 /* DWMWA_NCRENDERING_POLICY */, &ncr_disabled as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                let do_not_round: u32 = 1; // DWMWCP_DONOTROUND
+                DwmSetWindowAttribute(h, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &do_not_round as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+
+                // Always start completely transparent (alpha = 0) while unparented.
+                // pin_hwnd_as_wallpaper will place it behind desktop icons and restore target opacity.
+                SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
+
+                // UN-MINIMIZE while maintaining layered transparency (alpha = 0).
+                // This un-minimizes MPV from (-32000, -32000) [199x34] to its full geometry [mon_w x mon_h]
+                // so Direct3D 11 decodes frames into the full window without showing anything or stealing focus!
                 ShowWindow(h, SW_SHOWNOACTIVATE);
+
+                // Notify Windows of the frame change so non-client caption and borders are purged immediately
+                SetWindowPos(h, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             }
             dump_window_diagnostics("MPV_DISCOVERED_POST_LAYERED", h);
             h

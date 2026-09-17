@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-16 19:30 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Restored YouTube 1080p stream quality and verified seamless multi-monitor synchronization (0.040s pause-resume delta, 0.125s initial sync delta).
+> **Updated:** 2026-09-17 03:32 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Fixed multi-monitor boundary seam (0px gap/overlap) and eliminated startup title bar flash. Full release build & NSIS installer updated.
 
 ---
 

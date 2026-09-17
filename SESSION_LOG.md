@@ -2518,6 +2518,26 @@
   - `npm run build`: ✅ Passes in 1.31s with 0 errors.
   - `cargo check`: ✅ Passes in 20.27s with 0 errors.
   - `cargo build --release`: ✅ Passes in 3m 03s.
+## Session: 2026-09-17 03:50 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:**
+  - Fix top native window title bar artifact (`AetherFlow Wallpaper - \\.\DISPLAY1`) and window sizing/seam issues across multi-monitor setup.
+- **Completed:**
+  1. **Root-Cause Resolution of Title Bar Artifact**:
+     - Identified that Tauri's `WebviewWindowBuilder` assigned the title, and when `win.show()` was called after pinning, Tao re-applied non-client window attributes and painted the title bar.
+     - Changed `.title("")` on wallpaper windows and eliminated redundant `win.show()` calls.
+     - Implemented `borderless_wallpaper_subclass_proc` using `SetWindowSubclass` to intercept `WM_NCCALCSIZE` (returning 0), `WM_NCPAINT` (returning 0), and `WM_NCACTIVATE` (returning 1). Traps and suppresses non-client painting on both Tauri and MPV wallpaper windows.
+  2. **MPV Window Sizing & Zero-Gap Multi-Monitor Geometry**:
+     - Resolved MPV 199x34 postage-stamp minimization: restored `ShowWindow(h, SW_SHOWNOACTIVATE)` while `alpha = 0` so MPV safely un-minimizes to full monitor dimensions (`mon_w x mon_h`) without flashing on screen.
+     - Removed destructive `ShowWindow(SW_HIDE)` call from enum callbacks.
+     - Disabled Windows 11 DWM 1px accent border with `DWMWA_BORDER_COLOR = 0xFFFFFFFE` (`COLOR_NONE`), `DWMNCRP_DISABLED`, and `DWMWCP_DONOTROUND`.
+     - Display 1 spans strictly `(0, 0, 1920, 1080)` and Display 6 spans strictly `(1920, 247, 1366, 768)` with exact 0px overlap and 0px gap.
+  3. **Live Verification**:
+     - Tested video wallpaper playback on both displays.
+     - Verified logs: `POST-POSITION HWND WinRect: [1920x1080]` and `[1366x768]`, `Measured frame insets: left=0, top=0, right=0, bottom=0`, `alpha=255`, `POST-START-SYNC-VERIFIED delta=0.133s`.
+- **Build Status**:
+  - `npm run build`: ✅ Passes in 525ms with 0 errors.
+  - `cargo check`: ✅ Passes in 3.00s with 0 errors and 0 warnings.
+  - `cargo build --release`: ✅ Passes in 2m 07s.
   - Deployed release binary to root `AetherFlow.exe`.
 ---
-

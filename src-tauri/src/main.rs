@@ -16,7 +16,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     SetWindowPos, HWND_BOTTOM, SWP_SHOWWINDOW, ShowWindow, DestroyWindow, IsWindow, IsWindowVisible, GetParent,
     GetWindowLongW, SetWindowLongW, GWL_STYLE, GWL_EXSTYLE, WS_CHILD, WS_POPUP,
     WS_VISIBLE, WS_THICKFRAME, WS_CAPTION, WS_BORDER,
-    SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_NOACTIVATE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     GetClassNameW,
     WS_EX_LAYERED, SetLayeredWindowAttributes, LWA_ALPHA,
     GetSystemMetrics, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -32,7 +32,7 @@ use windows_sys::Win32::Graphics::Gdi::{
     MonitorFromWindow, MonitorFromPoint, GetMonitorInfoW, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL,
     MapWindowPoints, InvalidateRect, UpdateWindow, RedrawWindow,
     RDW_INVALIDATE, RDW_UPDATENOW, RDW_ERASE, RDW_ALLCHILDREN,
-    CreateRectRgn, SetWindowRgn,
+    SetWindowRgn,
 };
 #[cfg(windows)]
 use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DwmGetWindowAttribute};
@@ -1728,6 +1728,40 @@ unsafe extern "system" fn enum_window(window: HWND, lparam: LPARAM) -> i32 {
     1 // TRUE — keep enumerating
 }
 
+#[cfg(windows)]
+pub unsafe extern "system" fn borderless_wallpaper_subclass_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+    _uid_subclass: usize,
+    _ref_data: usize,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    const WM_NCCALCSIZE: u32 = 0x0083;
+    const WM_NCPAINT: u32 = 0x0085;
+    const WM_NCACTIVATE: u32 = 0x0086;
+
+    match msg {
+        WM_NCCALCSIZE => {
+            if wparam != 0 {
+                // Return 0: entire window rectangle is the client area.
+                // ZERO pixels for title bar, ZERO pixels for borders.
+                return 0;
+            }
+        }
+        WM_NCPAINT => {
+            // Return 0: suppress all non-client painting (no title bar, no borders drawn).
+            return 0;
+        }
+        WM_NCACTIVATE => {
+            // Return 1: suppress active/inactive caption changes.
+            return 1;
+        }
+        _ => {}
+    }
+    windows_sys::Win32::UI::Shell::DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
 fn log_msg(msg: &str) {
     use std::io::Write;
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open("desktop_debug.log") {
@@ -1908,13 +1942,22 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             state.workerw as usize, state.shell as usize));
 
         use windows_sys::Win32::UI::WindowsAndMessaging::{GetLayeredWindowAttributes, WS_MINIMIZE};
+        
+        // Attach borderless subclass to suppress WM_NCCALCSIZE, WM_NCPAINT, WM_NCACTIVATE
+        windows_sys::Win32::UI::Shell::SetWindowSubclass(
+            hwnd,
+            Some(borderless_wallpaper_subclass_proc),
+            1001,
+            0,
+        );
+
         let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-        let new_style = (style | WS_CHILD | WS_VISIBLE) & !(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_MINIMIZE);
+        let new_style = (style | WS_CHILD) & !(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_BORDER | 0x00400000 /* WS_DLGFRAME */ | 0x00080000 /* WS_SYSMENU */ | 0x00020000 /* WS_MINIMIZEBOX */ | 0x00010000 /* WS_MAXIMIZEBOX */ | WS_MINIMIZE | 0x10000000 /* WS_VISIBLE */);
         SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
         
         let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
         // Strip 3D non-client borders and frames, and strip WS_EX_APPWINDOW (0x00040000) so wallpaper never appears in Taskbar/Alt+Tab
-        let new_ex_style = (ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000 | 0x00040000);
+        let new_ex_style = (ex_style | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | 0x00000020 /* WS_EX_TRANSPARENT */) & !(0x00000100 | 0x00000200 | 0x00000001 | 0x00020000 | 0x00040000);
         SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex_style as i32);
 
         // Detect if window is already layered and staged transparent (alpha = 0)
@@ -1924,7 +1967,7 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
         let is_already_layered = GetLayeredWindowAttributes(hwnd, &mut cr_key, &mut current_alpha, &mut lwa_flags) != 0;
         let is_staged_transparent = is_already_layered && current_alpha == 0;
 
-        // ── DWM non-client and corner removal ────────────────────────────────
+        // ── DWM non-client, border, and corner removal ────────────────────────
         // Disables the invisible 9px DWM drop-shadow frame that causes the left gap and right spill
         let ncr_disabled: u32 = 1; // DWMNCRP_DISABLED
         DwmSetWindowAttribute(
@@ -1941,8 +1984,16 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             &do_not_round as *const u32 as *const _,
             std::mem::size_of::<u32>() as u32,
         );
+        // Kill Windows 11 1-pixel active/accent window border (DWMWA_BORDER_COLOR = 34)
+        let border_none: u32 = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+        DwmSetWindowAttribute(
+            hwnd,
+            34, // DWMWA_BORDER_COLOR
+            &border_none as *const u32 as *const _,
+            std::mem::size_of::<u32>() as u32,
+        );
         
-        log_msg(&format!("[AetherFlow WP] Set GWL_STYLE: 0x{:08X} -> 0x{:08X}, added WS_EX_LAYERED, DWM frame disabled", style, new_style));
+        log_msg(&format!("[AetherFlow WP] Set GWL_STYLE: 0x{:08X} -> 0x{:08X}, added WS_EX_LAYERED, DWM border killed, DWM frame disabled", style, new_style));
 
         let parent_hwnd = if is_raised_desktop || !progman_shell.is_null() {
             log_msg(&format!("[AetherFlow WP] MODE: Raised Desktop — parent = Progman 0x{:X}", progman as usize));
@@ -1966,6 +2017,18 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
 
         mpv::dump_window_diagnostics("PIN_BEFORE_SET_PARENT", hwnd);
         SetParent(hwnd, parent_hwnd);
+        let style_after = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+        let clean_style_after = (style_after | WS_CHILD | WS_VISIBLE) & !(WS_POPUP | WS_CAPTION | WS_THICKFRAME | WS_BORDER | 0x00400000 /* WS_DLGFRAME */ | 0x00080000 /* WS_SYSMENU */ | 0x00020000 /* WS_MINIMIZEBOX */ | 0x00010000 /* WS_MAXIMIZEBOX */ | WS_MINIMIZE);
+        SetWindowLongW(hwnd, GWL_STYLE, clean_style_after as i32);
+
+        // Re-attach subclass to guarantee non-client messages are trapped
+        windows_sys::Win32::UI::Shell::SetWindowSubclass(
+            hwnd,
+            Some(borderless_wallpaper_subclass_proc),
+            1001,
+            0,
+        );
+        SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         mpv::dump_window_diagnostics("PIN_AFTER_SET_PARENT", hwnd);
 
         let mut hwnd_rect_after: RECT = std::mem::zeroed();
@@ -2015,19 +2078,17 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             client_origin[0].x, client_origin[0].y
         ));
 
-        // Use measured insets if plausible (0..50px), otherwise 0
-        let pad_left = if (0..50).contains(&left_frame) { left_frame } else { 0 };
-        let pad_top = if (0..50).contains(&top_frame) { top_frame } else { 0 };
-        let pad_right = if (0..50).contains(&right_frame) { right_frame } else { 0 };
-        let pad_bottom = if (0..50).contains(&bottom_frame) { bottom_frame } else { 0 };
-
-        let adj_x = client_x - pad_left;
-        let adj_y = client_y - pad_top;
-        let adj_w = mon_w + pad_left + pad_right;
-        let adj_h = mon_h + pad_top + pad_bottom;
+        // ── Step 3: Exact Monitor Assignment ────────────────────────────────
+        // Invariant: The wallpaper window must cover the exact physical monitor rectangle
+        // without arbitrary padding or blind inflation. Window region clipping (SetWindowRgn)
+        // causes DWM to render hard boundary artifacts at multi-monitor seams and must not be used.
+        let adj_x = client_x;
+        let adj_y = client_y;
+        let adj_w = mon_w;
+        let adj_h = mon_h;
 
         log_msg(&format!(
-            "[AetherFlow WP] Target client pos=({},{}) size={}x{} -> HWND pos=({},{}) size={}x{}",
+            "[AetherFlow WP] Exact monitor assignment: Target pos=({},{}) size={}x{} -> HWND pos=({},{}) size={}x{}",
             client_x, client_y, mon_w, mon_h,
             adj_x, adj_y, adj_w, adj_h
         ));
@@ -2046,32 +2107,46 @@ fn pin_hwnd_as_wallpaper(hwnd: HWND, target_bounds: Option<(i32, i32, i32, i32)>
             HWND_BOTTOM
         };
 
-        SetWindowPos(
+        use windows_sys::Win32::Foundation::GetLastError;
+        use windows_sys::Win32::UI::WindowsAndMessaging::MoveWindow;
+
+        let swp_res = SetWindowPos(
             hwnd,
             insert_after,
             adj_x, adj_y,
             adj_w, adj_h,
             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
         );
+        let err = GetLastError();
+        log_msg(&format!(
+            "[AetherFlow WP] SetWindowPos with insert_after 0x{:X} pos=({},{}) size={}x{}: result={}, err={}",
+            insert_after as usize, adj_x, adj_y, adj_w, adj_h, swp_res, err
+        ));
+
+        if swp_res == 0 {
+            let swp_retry = SetWindowPos(
+                hwnd,
+                HWND_BOTTOM,
+                adj_x, adj_y,
+                adj_w, adj_h,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+            );
+            log_msg(&format!(
+                "[AetherFlow WP] SetWindowPos fallback to HWND_BOTTOM: result={}, err={}",
+                swp_retry, GetLastError()
+            ));
+        }
+
+        let mw_res = MoveWindow(hwnd, adj_x, adj_y, adj_w, adj_h, 1);
+        log_msg(&format!(
+            "[AetherFlow WP] MoveWindow: pos=({},{}) size={}x{}: result={}, err={}",
+            adj_x, adj_y, adj_w, adj_h, mw_res, GetLastError()
+        ));
+
         mpv::dump_window_diagnostics("PIN_AFTER_SET_WINDOW_POS", hwnd);
 
-        // Clip the window region strictly to the monitor client rectangle so non-client frame padding
-        // never spills across monitor boundaries onto adjacent screens
-        if pad_left > 0 || pad_right > 0 || pad_top > 0 || pad_bottom > 0 {
-            let rgn = CreateRectRgn(
-                pad_left,
-                pad_top,
-                pad_left + mon_w,
-                pad_top + mon_h,
-            );
-            SetWindowRgn(hwnd, rgn, 1);
-            log_msg(&format!(
-                "[AetherFlow WP] SetWindowRgn: clipped non-client frame to ({},{})-({},{})",
-                pad_left, pad_top, pad_left + mon_w, pad_top + mon_h
-            ));
-        } else {
-            SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
-        }
+        // Ensure no leftover window region is clipping the window or creating DWM seam outlines
+        SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
 
         // Ensure child WorkerW (if present under Progman) stays at HWND_BOTTOM
         // so Explorer's static wallpaper bitmap never draws over our live wallpaper!
@@ -2437,7 +2512,7 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                 println!("{}", new_mon_log);
 
                 let win_res = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("wallpaper.html".into()))
-                    .title(&format!("AetherFlow Wallpaper - {}", name))
+                    .title("")
                     .decorations(false)
                     .transparent(true)
                     .visible(false)
@@ -2472,7 +2547,6 @@ fn reconcile_wallpaper_windows(app: &AppHandle) {
                                 let pinned = pin_hwnd_as_wallpaper(raw_hwnd, Some((pos.x, pos.y, size.width as i32, size.height as i32)));
                                 if pinned {
                                     let _ = win.set_ignore_cursor_events(true);
-                                    let _ = win.show();
                                 } else {
                                     log_msg(&format!("[WALLPAPER HOST] Window 0x{:X} failed to pin; keeping hidden.", raw_hwnd as usize));
                                     let _ = win.hide();
@@ -2667,14 +2741,17 @@ async fn apply_wallpaper(
         };
 
         let speed_val = config.get("speedMultiplier").and_then(|v| v.as_f64()).or_else(|| config.get("speed").and_then(|v| v.as_f64())).unwrap_or(1.0);
-        let is_duplicated = target == "*";
+        let is_all = target == "*"
+            || target == "wallpaper_*"
+            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*";
+        let is_duplicated = is_all;
         let mut audio_assigned = false;
         let target_audio_label = get_target_audio_monitor_label(&app);
 
         for (idx, mon) in monitors.iter().enumerate() {
             if let Some(name) = mon.name() {
                 let label = get_monitor_label(name);
-                let matches_target = target == "*"
+                let matches_target = is_all
                     || target == label
                     || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
                 if !matches_target {
@@ -2890,10 +2967,13 @@ async fn apply_wallpaper(
         );
         ensure_wallpaper_windows(&app);
         // Canvas engine -> Route to WebView2 window
+        let is_all = target == "*"
+            || target == "wallpaper_*"
+            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*";
         // 1. Terminate any MPV instances
         if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref mut map) = *mpv_guard {
-                if target == "*" {
+                if is_all {
                     for (_, mut proc) in map.drain() {
                         proc.terminate();
                     }
@@ -2902,7 +2982,7 @@ async fn apply_wallpaper(
                 }
             }
         }
-        if target == "*" {
+        if is_all {
             mpv::kill_all_mpv_processes();
         }
 
@@ -2912,7 +2992,7 @@ async fn apply_wallpaper(
         let windows = app.webview_windows();
         let mut audio_assigned = false;
         for (label, win) in windows {
-            let matches_target = target == "*"
+            let matches_target = is_all
                 || target == label
                 || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
             if label.starts_with("wallpaper_") && matches_target {
@@ -2940,7 +3020,12 @@ async fn apply_wallpaper(
 
                 if pinned {
                     let _ = win.set_ignore_cursor_events(true);
-                    let _ = win.show();
+                    #[cfg(windows)]
+                    if let Ok(raw) = win.hwnd() {
+                        unsafe {
+                            windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(raw.0 as HWND, windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE);
+                        }
+                    }
                 } else {
                     let _ = win.hide();
                 }
@@ -5185,7 +5270,9 @@ fn main() {
                 if let Some(path) = argv.get(pos + 1) {
                     let target_mon = argv.get(pos + 2).cloned().map(|s| {
                         let clean = s.replace("\\\\.\\", "").replace("\\", "").replace(".", "_");
-                        if !clean.starts_with("wallpaper_") {
+                        if clean == "*" || clean == "wallpaper_*" {
+                            "*".to_string()
+                        } else if !clean.starts_with("wallpaper_") {
                             format!("wallpaper_{}", clean)
                         } else {
                             clean
@@ -5420,7 +5507,9 @@ fn main() {
                 if let Some(path) = args.get(pos + 1) {
                     let target_mon = args.get(pos + 2).cloned().map(|s| {
                         let clean = s.replace("\\\\.\\", "").replace("\\", "").replace(".", "_");
-                        if !clean.starts_with("wallpaper_") {
+                        if clean == "*" || clean == "wallpaper_*" {
+                            "*".to_string()
+                        } else if !clean.starts_with("wallpaper_") {
                             format!("wallpaper_{}", clean)
                         } else {
                             clean

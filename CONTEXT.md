@@ -3,20 +3,20 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-16 22:25 IST — Restored to Latest State with Display-Wise Audio Retention & Firefox Cookie Bypass:
-1. **Audio Routing Architecture**:
-   - Decoupled `screen_volume` from `screen_muted` in `main.rs` (so volume is never zeroed out upon spawn or update).
-   - In `update_wallpaper_config`, wildcard `target == "*"` now updates configs across all active monitor states, and secondary display volume is no longer zeroed out.
-   - In `reassign_live_audio_output`, looked up the monitor's specific volume via `get_target_mon_volume` and explicitly asserted `proc.set_volume(mon_vol)` before `proc.set_mute(false)` on MPV, and emitted `aether:unmute` with `volume: mon_vol` for WebViews.
-   - Updated `set_mpv_mute` to restore per-monitor volume upon unmute.
-   - Upgraded `sync_performance_settings` to cleanly handle `preferred_audio_monitor` (matching `'auto'`, `None`, and monitor labels) and `audio_playback_rule` changes.
-   - Added `--audio-target <label|auto>` CLI IPC command for dynamic external switching.
-2. **YouTube Anti-Bot Challenge Bypass**:
-   - Added `cookies-from-browser=firefox` to `--ytdl-raw-options` in `src-tauri/src/mpv.rs` to bypass YouTube `ExitStatus(2)` bot challenge (`Sign in to confirm you're not a bot`).
-3. **Live Verification**:
-   - 1080p YouTube streams load and run in lockstep across DISPLAY1 and DISPLAY6 (`post_delta = 0.000s`).
-   - Switching audio target between DISPLAY1, DISPLAY6, and `auto` switches audio immediately without requiring volume slider movement.
-   - Recompiled release binary and deployed to `.\AetherFlow.exe`. All builds pass cleanly.
+2026-09-17 03:48 IST — Complete Elimination of Title Bar Artifact & Zero-Gap Multi-Monitor Geometry:
+1. **Title Bar Artifact (`AetherFlow Wallpaper - \\.\DISPLAY1`) Resolved**:
+   - Identified that Tauri's `WebviewWindowBuilder` assigned the window title, and when `win.show()` was called after pinning, Tao re-applied non-client window attributes and drew the title bar.
+   - Set `.title("")` on all background wallpaper host windows and eliminated the redundant `win.show()` call (the window is already positioned and shown via Win32 `SWP_SHOWWINDOW`).
+   - Implemented `borderless_wallpaper_subclass_proc` using `SetWindowSubclass` to intercept `WM_NCCALCSIZE` (returning 0), `WM_NCPAINT` (returning 0), and `WM_NCACTIVATE` (returning 1) on both Tauri and MPV wallpaper windows. Windows is strictly prevented from ever calculating or drawing non-client borders, frames, or title bars.
+2. **MPV Window Sizing & Seam Fixed**:
+   - Fixed the 199x34 postage-stamp MPV bug caused by window minimization: restored `ShowWindow(h, SW_SHOWNOACTIVATE)` while `alpha = 0` so MPV safely un-minimizes to full monitor dimensions (`mon_w x mon_h`) without flashing on screen.
+   - Removed destructive `ShowWindow(SW_HIDE)` call during enum callbacks.
+   - Windows 11 DWM 1px accent border killed with `DWMWA_BORDER_COLOR = 0xFFFFFFFE` (`COLOR_NONE`), `DWMNCRP_DISABLED`, and `DWMWCP_DONOTROUND`.
+   - Display 1 spans strictly `(0, 0, 1920, 1080)` and Display 6 spans strictly `(1920, 247, 1366, 768)` with exact 0px overlap and 0px gap.
+3. **Build & Verification**:
+   - `cargo build --release` completed with 0 errors and 0 warnings.
+   - Updated release binary `.\AetherFlow.exe`.
+   - Runtime logs verified: `POST-POSITION HWND WinRect: [1920x1080]` and `[1366x768]`, `Measured frame insets: left=0, top=0, right=0, bottom=0`, `alpha=255`, `POST-START-SYNC-VERIFIED delta=0.133s`.
 
 
 
