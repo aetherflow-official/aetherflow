@@ -2813,3 +2813,32 @@
 - **Build status:** ✅ Frontend and release binaries verified cleanly with 0 errors.
 ---
 
+## Session: 2026-09-18 02:20 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Implement Sequential Background Poster Generation for Custom Videos
+- **Completed:**
+  1. **Background Sequential Poster Queue (`src/lib/posterGenerator.js`)**:
+     - Built dedicated `PosterGeneratorQueue` singleton with strict `MAX_ACTIVE_DECODERS = 1` concurrency constraint.
+     - Single offscreen `<video>` extraction: seeks to representative frame (0.5s–1.0s), draws to 640x360 canvas (`max dimension: 640px`), converts to JPEG data URL (`quality: 0.82`).
+     - Immediate hardware decoder teardown after each frame: `pause()`, `removeAttribute('src')`, `load()`, cleanup event handlers, dereference, followed by an 80ms cooling gap before processing next video.
+     - Automatically updates store via `updateInstalledWallpaper`, persisting to `localStorage` and disk (`persistCustomWallpapersToDisk`), and updates memory cache.
+     - Deduplicated, timeout-protected (4.5s max per video), and cancellable on navigation.
+  2. **Library Integration (`src/pages/Library.jsx`)**:
+     - Automatically identifies custom videos with `thumbnail == null`.
+     - Prioritizes visible viewport cards (first 8) with high-priority unshift, queues remaining cards behind.
+     - Resumes queue on mount and pauses queue on unmount.
+  3. **Refined Fallback Scrim (`src/styles/index.css`, `src/components/WallpaperCard/index.jsx`)**:
+     - Added `.wp-overlay-scrim.is-fallback` with light 52% bottom-only gradient when `!hasPoster`, eliminating the black smothering effect on fallback cards.
+     - Once poster is generated, card automatically transitions to full photographic scrim with smooth 0.22s cross-fade.
+  4. **Verification & Runtime QA**:
+     - All 27 custom videos in Library now have real static poster images (`cardsWithImg: 27/27`).
+     - Resting state: `totalVideosInDOM: 0` (0 video elements, 0 active decoders).
+     - Hover preview: exactly 1 video element active during hover, 0 on mouse leave.
+     - Home page favorites automatically display the generated static posters (`cardsWithImg: 27/27`).
+     - Preview OFF mode: posters remain visible, hover triggers 0 video elements.
+     - `npm run build`: passes cleanly in 485ms with 0 errors.
+     - Committed to `feature/library-redesign-preview-overhaul` (`6917da9`).
+- **Build status:** ✅ Passes cleanly in 485ms with 0 errors.
+---
+

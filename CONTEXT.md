@@ -3,20 +3,24 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 01:45 IST — Restored Static Custom Video Posters & Clean Architecture:
-1. **Restored Static Custom Video Posters (`src/components/WallpaperThumbnail/index.jsx`, `src/store/useStore.js`)**:
-   - **Root Cause Diagnosed**: Paused unplayed `<video>` elements (`preload="metadata"`, `#t=0.5`) on resting cards rendered as solid black rectangles in Chromium/WebView2, obscuring the card and fallback. Additionally, `shouldShowMedia` previously suppressed static `<img>` posters when cards were resting in `hover` or `off` modes.
-   - **Decoupled Architecture**: Completely separated static poster layer from live preview layer. Static posters render as lightweight `<img>` tags at `zIndex: 1` whenever thumbnail sources or cached frames exist, visible at rest, during hover, in Preview OFF, Preview HOVER, and Preview ON.
-   - **Zero Resting Decoders**: Zero `<video>` tags or hardware decoders allocated for resting cards (`totalVideosInDOM: 0`).
-   - **PreviewManager Single Slot Preserved**: Live video preview strictly mounts only when hovered, active, and coordinated by `PreviewManager`.
-   - **Zero Black Flash**: Live preview mounts at `zIndex: 2` with `opacity: hasLoaded ? 1 : 0` and smooth 0.22s cross-fade; poster remains visible underneath while video buffers.
-   - **Permanent Poster Persistence**: Captures crisp 480p JPEG into memory cache and updates store via `updateInstalledWallpaper`, persisting static thumbnails to `localStorage` and disk.
-   - **Luminous Vector Fallbacks**: Enhanced `ENGINE_THEMES['video-player']` with a luminous sapphire/indigo gradient and glowing icons, ensuring resting cards without stored thumbnails look like intentional artwork rather than pitch black.
-   - **Home Synchronization**: Shared `WallpaperCard` on Home favorites behaves identically.
-2. **Production Binaries Packaged**:
-   - Native release binary: `src-tauri/target/release/aetherflow.exe` (7.60 MB).
-   - Standalone root binary: `AetherFlow.exe` (7.60 MB).
-   - `npm run build`: Passes in 390ms with 0 errors.
+2026-09-18 02:20 IST — Sequential Background Poster Generation for Custom Videos:
+1. **Implemented Sequential Background Poster Queue (`src/lib/posterGenerator.js`)**:
+   - Single-worker background queue enforcing `MAX_ACTIVE_DECODERS = 1` concurrency.
+   - Extracts representative frames (0.5s–1.0s) from local videos using offscreen HTML5 `<video>`, scales aspect-preserving to max 640x360, and generates lightweight JPEG data URLs (`quality: 0.82`).
+   - Strict resource lifecycle: immediately pauses, strips `src`, loads, removes event handlers, and inserts an 80ms cooling gap between jobs to let GPU process garbage collect decoder allocations.
+   - Updates `useStore.updateInstalledWallpaper`, persisting to `localStorage` and disk (`persistCustomWallpapersToDisk`), ensuring permanent, one-time generation.
+   - Integrated into `Library.jsx` with viewport-first prioritization (first 8 visible cards queued high-priority, remainder behind), pausing gracefully on unmount.
+2. **Refined Fallback Scrim (`src/styles/index.css`, `src/components/WallpaperCard/index.jsx`)**:
+   - Added `.wp-overlay-scrim.is-fallback` (52% bottom-fade) when `!hasPoster`, eliminating the black smothering effect on fallback cards.
+   - Once poster is generated, card automatically transitions to full photographic scrim with smooth 0.22s cross-fade.
+3. **Runtime QA & Zero-Leak Verification**:
+   - All 27 custom videos in Library now have permanent static poster images (`cardsWithImg: 27/27`).
+   - At rest: `totalVideosInDOM: 0` (0 video elements, 0 decoders).
+   - During hover: strictly 1 video element active, unmounting back to 0 on mouse leave.
+   - Home favorites automatically inherit static poster images (`cardsWithImg: 27/27`).
+   - Preview OFF mode: posters remain visible, hover spawns 0 video elements.
+   - `npm run build`: Passes in 485ms with 0 errors.
+   - Committed to `feature/library-redesign-preview-overhaul` (`6917da9`).
 
 ---
 
@@ -225,6 +229,7 @@ npm run tauri:dev
 | 2026-09-17 | Antigravity (Google DeepMind) | Resolved Custom Theme Studio Crash & Home Wallpaper Disappearance: Fixed undefined `handleToggleLivePreview` & `handleLoadStarterPreset` in `Personalization.jsx`; restored automatic re-pinning of custom wallpapers in `useStore.js` and auto-healing in `Home.jsx`; hardened `ErrorBoundary` cache reset against data wipes; recompiled & deployed updated `AetherFlow.exe` (PID 29156). |
 | 2026-09-17 | Antigravity (Google DeepMind) | Wallpaper Card System Redesign: Eliminated hard split / solid metadata box underneath cards; transformed cards into 100% continuous artwork surfaces with subtle multi-stop bottom scrim gradients; created unified WallpaperCard component across Library (featured & standard) and Home (favorites); implemented compact type badges, top-right controls, resting apply button, and clean hover actions without blacking out artwork; preserved central single-slot PreviewManager; verified across Dark/Light themes and viewports. |
 | 2026-09-18 | Antigravity (Google DeepMind) | Restored Static Custom Video Posters: Decoupled static poster layer (<img>, zIndex 1) from single-slot live preview layer (<VideoPosterFrame>, zIndex 2); eliminated solid black card rendering caused by paused unplayed <video> tags; guaranteed 0 video decoders at rest (totalVideosInDOM: 0); prevented black flash during hover with 0.22s cross-fade; added dynamic 480p JPEG thumbnail capture & permanent store persistence to localStorage and disk; updated fallback with luminous sapphire/indigo gradient; committed to feature/library-redesign-preview-overhaul (1055c3e). |
+| 2026-09-18 | Antigravity (Google DeepMind) | Sequential Background Poster Generation for Custom Videos: Built dedicated single-worker queue (posterGenerator.js, MAX_ACTIVE_DECODERS = 1) extracting 640x360 JPEG posters for local videos; integrated with LibraryPage visible-first prioritization; added .wp-overlay-scrim.is-fallback (52% bottom-fade) preventing black card appearance; verified all 27 custom videos acquire static <img> posters (cardsWithImg: 27/27); verified 0 videos at rest, 1 on hover; Home favorites automatically updated; committed to feature/library-redesign-preview-overhaul (6917da9). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 
