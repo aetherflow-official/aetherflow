@@ -10,6 +10,7 @@ import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
 import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
 import WallpaperThumbnail from '../components/WallpaperThumbnail/index.jsx'
+import WallpaperCard from '../components/WallpaperCard/index.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
 import {
   applyWallpaperToDesktop,
@@ -1620,271 +1621,34 @@ export default function HomePage() {
             const isSelected    = activeWallpaper?.id === wallpaper.id
             const activeScreens = getWallpaperActiveScreens(wallpaper)
             const isLive        = activeScreens.length > 0
-            const typeInfo      = getWallpaperTypeInfo(wallpaper)
             const isLiked       = (likedWallpaperIds || []).includes(wallpaper.id)
+            const isPinned      = homeWallpaperIds.includes(wallpaper.id)
 
             return (
-              <div
+              <WallpaperCard
                 key={wallpaper.id}
-                className="mp-card"
-                style={{
-                  border: isSelected ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
-                  boxShadow: isSelected ? '0 0 0 1px var(--color-brand), 0 8px 24px rgba(0,0,0,0.3)' : undefined,
+                wallpaper={wallpaper}
+                isFeatured={false}
+                isLive={isLive}
+                isSelected={isSelected}
+                isLiked={isLiked}
+                isPinned={isPinned}
+                isApplying={applying}
+                thumbnailMode={thumbnailMode}
+                onSelect={(wp) => selectWallpaper(wp)}
+                onApply={(wp) => {
+                  selectWallpaper(wp)
+                  handleApply(wp)
                 }}
-                onClick={() => selectWallpaper(wallpaper)}
-                onMouseEnter={() => setHoveredId(wallpaper.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onDoubleClick={() => {
-                  selectWallpaper(wallpaper)
-                  handleApply(wallpaper)
+                onPreview={(wp) => setPreviewWallpaper(wp)}
+                onToggleLike={(id) => toggleLikeWallpaper(id)}
+                onTogglePin={(id) => unpinFromHome(id)}
+                onRename={(id, name) => setRenameModal({ isOpen: true, id, currentName: name })}
+                onDelete={(id) => {
+                  if (isLive) handleStop()
+                  uninstallItem(id)
                 }}
-              >
-                {/* ── 1. Thumbnail Container (Supports On, Hover, and Off modes, Zero Leak) ── */}
-                <div
-                  className="mp-thumb-container"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setPreviewWallpaper(wallpaper)
-                  }}
-                  title={`Click to preview ${wallpaper.name}`}
-                >
-                  <WallpaperThumbnail
-                    wallpaper={wallpaper}
-                    isHovered={hoveredId === wallpaper.id}
-                    mode={thumbnailMode}
-                  />
-
-                  {/* Top-Left: Media Type Badge */}
-                  <div className="mp-badge-top-left">
-                    <div
-                      className="mp-pill-badge"
-                      style={{
-                        background: 'rgba(10, 10, 14, 0.75)',
-                        color: typeInfo.color,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        fontSize: 10,
-                      }}
-                    >
-                      <typeInfo.icon size={11} />
-                      <span>{typeInfo.label}</span>
-                    </div>
-                  </div>
-
-                  {/* Top-Right: Live Status Badge, Like Button & Unpin Button */}
-                  <div className="mp-badge-top-right flex items-center gap-1">
-                    {isLive && (
-                      <div
-                        className="mp-pill-badge"
-                        style={{
-                          background: 'rgba(16, 185, 129, 0.92)',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: 10,
-                          fontWeight: 700,
-                        }}
-                      >
-                        <div className="status-dot-live" />
-                        <span>{activeScreens[0] === 'All Screens' ? 'LIVE' : activeScreens.join(', ')}</span>
-                      </div>
-                    )}
-
-                    {/* Heart / Like Button */}
-                    <button
-                      className="btn-icon"
-                      style={{
-                        background: isLiked ? 'color-mix(in srgb, var(--color-rose) 30%, rgba(0,0,0,0.7))' : 'rgba(0,0,0,0.65)',
-                        color: isLiked ? 'var(--color-rose)' : 'rgba(255,255,255,0.85)',
-                        padding: 5,
-                        borderRadius: 6,
-                        backdropFilter: 'blur(8px)',
-                        border: isLiked ? '1px solid var(--color-rose)' : '1px solid rgba(255,255,255,0.14)',
-                        transition: 'all 0.15s ease',
-                      }}
-                      title={isLiked ? 'Unlike wallpaper' : 'Like wallpaper'}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleLikeWallpaper(wallpaper.id)
-                      }}
-                    >
-                      <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
-                    </button>
-
-                    <button
-                      className="btn-icon"
-                      style={{
-                        background: 'rgba(0,0,0,0.65)',
-                        color: 'rgba(255,255,255,0.85)',
-                        padding: 5,
-                        borderRadius: 6,
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                      }}
-                      title="Remove from Home favorites"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        unpinFromHome(wallpaper.id)
-                      }}
-                    >
-                      <PinOff size={12} />
-                    </button>
-                  </div>
-
-                  {/* Hover Overlay: Center Quick Preview Pill */}
-                  <div className="mp-thumb-overlay">
-                    <div className="mp-preview-pill">
-                      <Eye size={13} />
-                      <span>Quick Preview</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── 2. Card Content & Hierarchy ── */}
-                <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                  {/* Title & Subtitle */}
-                  <div style={{ marginBottom: 8 }}>
-                    <h3
-                      className="font-semibold"
-                      style={{
-                        fontSize: 13.5,
-                        lineHeight: '1.3',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        cursor: 'pointer',
-                        color: isSelected ? 'var(--color-brand)' : 'var(--text-main)',
-                        transition: 'color 0.15s ease',
-                      }}
-                      onClick={() => selectWallpaper(wallpaper)}
-                      title={wallpaper.name}
-                    >
-                      {wallpaper.name}
-                    </h3>
-                    <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                      {wallpaper.communityMeta?.author
-                        ? `by ${wallpaper.communityMeta.author}`
-                        : wallpaper.isCustom
-                        ? `Custom ${typeInfo.label}`
-                        : `Built-in Canvas Engine`}
-                    </div>
-                  </div>
-
-                  {/* Tags & Action Icons Row */}
-                  <div
-                    className="flex items-center justify-between"
-                    style={{
-                      paddingTop: 8,
-                      paddingBottom: 10,
-                      borderTop: '1px solid var(--border-subtle)',
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div className="flex items-center gap-1 text-xs text-subtle truncate" style={{ maxWidth: '55%' }}>
-                      {wallpaper.tags && wallpaper.tags.length > 0 ? (
-                        wallpaper.tags.slice(0, 2).map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: 'var(--bg-card-hover)',
-                              border: '1px solid var(--border-subtle)',
-                              fontSize: 9.5,
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            #{tag}
-                          </span>
-                        ))
-                      ) : (
-                        <span style={{ fontSize: 10.5, color: 'var(--text-subtle)' }}>60 FPS Native</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      {/* Dedicated Preview Button */}
-                      <button
-                        className="btn btn-ghost"
-                        style={{
-                          padding: '3px 6px',
-                          fontSize: 10.5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          color: 'var(--text-muted)',
-                          height: 'auto',
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setPreviewWallpaper(wallpaper)
-                        }}
-                        title="Open live preview window"
-                      >
-                        <Eye size={11} />
-                        <span>Preview</span>
-                      </button>
-
-                      <button
-                        className="btn-icon"
-                        style={{ padding: '3px 5px', color: 'var(--text-muted)' }}
-                        title="Rename Wallpaper"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setRenameModal({ isOpen: true, id: wallpaper.id, currentName: wallpaper.name })
-                        }}
-                      >
-                        <Pencil size={11} />
-                      </button>
-
-                      {wallpaper.isCustom && (
-                        <button
-                          className="btn-icon"
-                          style={{ padding: '3px 5px', color: 'var(--color-rose)' }}
-                          title="Delete custom wallpaper"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (isLive) handleStop()
-                            uninstallItem(wallpaper.id)
-                          }}
-                        >
-                          <Trash2 size={11} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Primary Action Button */}
-                  <div style={{ marginTop: 'auto' }}>
-                    {isLive ? (
-                      <div
-                        className="btn btn-success mp-btn-action w-full"
-                        style={{
-                          cursor: 'default',
-                          background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
-                          borderColor: 'var(--color-emerald)',
-                          color: 'var(--color-emerald)',
-                          height: 32,
-                          fontSize: 12,
-                        }}
-                      >
-                        <Check size={13} /> Active on Desktop
-                      </div>
-                    ) : (
-                      <button
-                        className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'} mp-btn-action w-full`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          selectWallpaper(wallpaper)
-                          handleApply(wallpaper)
-                        }}
-                        title="Apply to Windows desktop"
-                        style={{ height: 32, fontSize: 12 }}
-                      >
-                        <Play size={12} fill="currentColor" /> Apply to Desktop
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+              />
             )
           })}
         </div>
