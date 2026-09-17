@@ -3,8 +3,7 @@ import {
   Heart, MoreHorizontal, Play, Check, Eye, Pin, Pencil, Trash2,
   Video, Image as ImageIcon, Globe, Sparkles
 } from 'lucide-react'
-import { safeConvertFileSrc } from '../../lib/wallpaperActions.js'
-import WallpaperThumbnail, { videoPosterMemoryCache } from '../WallpaperThumbnail/index.jsx'
+import WallpaperThumbnail from '../WallpaperThumbnail/index.jsx'
 
 export function getCardTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
@@ -74,7 +73,7 @@ export default function WallpaperCard({
     ? `Custom ${typeInfo.label}`
     : `by AetherFlow`
 
-  const hasPoster = Boolean(
+  const hasArtwork = Boolean(
     wallpaper.thumbnail ||
     wallpaper.preview ||
     wallpaper.cover ||
@@ -82,8 +81,7 @@ export default function WallpaperCard({
     wallpaper.config?.imagePath ||
     wallpaper.config?.youtubeId ||
     wallpaper.config?.streamUrl ||
-    (wallpaper.engine && wallpaper.engine !== 'video-player') ||
-    (wallpaper.id && videoPosterMemoryCache.has(wallpaper.id))
+    (wallpaper.engine && wallpaper.engine !== 'video-player')
   )
 
   return (
@@ -196,7 +194,7 @@ export default function WallpaperCard({
       </div>
 
       {/* ── 4. Bottom Readability Scrim & Metadata Overlay ──────────────────── */}
-      <div className={`wp-overlay-scrim ${!hasPoster ? 'is-fallback' : ''}`}>
+      <div className={`wp-overlay-scrim ${!hasArtwork ? 'is-fallback' : ''}`}>
         <div className="wp-overlay-content">
           <div className="wp-overlay-info">
             <h3 className="wp-overlay-title" title={wallpaper.name}>

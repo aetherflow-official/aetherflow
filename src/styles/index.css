@@ -1969,10 +1969,11 @@ input:checked ~ .toggle-thumb {
 .wp-overlay-scrim.is-fallback {
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.52) 0%,
-    rgba(0, 0, 0, 0.18) 38%,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.12) 40%,
     transparent 70%
   );
+  padding-top: 24px;
 }
 
 .wp-overlay-content {

@@ -17,6 +17,15 @@ try {
         if (parsed?.state?.homeWallpaperIds) {
           parsed.state.homeWallpaperIds = parsed.state.homeWallpaperIds.filter(id => !id.startsWith('community-'))
         }
+        if (parsed?.state?.installed) {
+          parsed.state.installed = parsed.state.installed.map(item => {
+            if (item.thumbnail && typeof item.thumbnail === 'string' && item.thumbnail.startsWith('data:image/')) {
+              const { thumbnail, ...rest } = item
+              return rest
+            }
+            return item
+          })
+        }
         localStorage.setItem('aetherflow-state', JSON.stringify(parsed))
       } catch (e) {
         console.warn('[Store] Recovered corrupted aetherflow-state in localStorage')
@@ -62,9 +71,13 @@ export async function syncCustomWallpapersFromDisk() {
 
       // Ensure all disk items are present in installed with isCustom flag
       for (const item of diskItems) {
+        const cleanedItem = { ...item }
+        if (cleanedItem.thumbnail && typeof cleanedItem.thumbnail === 'string' && cleanedItem.thumbnail.startsWith('data:image/')) {
+          delete cleanedItem.thumbnail
+        }
         currentMap.set(item.id, {
           ...(currentMap.get(item.id) || {}),
-          ...item,
+          ...cleanedItem,
           isCustom: true,
         })
       }

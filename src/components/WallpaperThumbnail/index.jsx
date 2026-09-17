@@ -197,40 +197,18 @@ export function resolveWallpaperThumbnail(wallpaper) {
     return builtinPreviews[engineId]
   }
 
-  // 5. In-memory captured video poster
-  if (wallpaper.id && videoPosterMemoryCache.has(wallpaper.id)) {
-    return videoPosterMemoryCache.get(wallpaper.id)
-  }
-  const rawVideoPath =
-    wallpaper.config?.videoPath ||
-    wallpaper.videoPath ||
-    wallpaper.source ||
-    wallpaper.path ||
-    wallpaper.config?.path ||
-    wallpaper.config?.url ||
-    wallpaper.defaultConfig?.videoPath ||
-    ''
-  if (rawVideoPath) {
-    if (videoPosterMemoryCache.has(rawVideoPath)) return videoPosterMemoryCache.get(rawVideoPath)
-    const converted = safeConvertFileSrc(rawVideoPath)
-    if (converted && videoPosterMemoryCache.has(converted)) return videoPosterMemoryCache.get(converted)
-  }
-
   return null
 }
-
-export const videoPosterMemoryCache = new Map()
 
 /**
  * VideoPosterFrame — Clean video preview renderer.
  * Handles live hover playback with previewManager registration.
  * Enforces strict hardware decoder cleanup on unmount.
- * Smoothly fades in over the static poster once frame data is ready (eliminates black flash).
+ * Smoothly fades in once frame data is ready (eliminates black flash).
  */
-function VideoPosterFrame({ videoSrc, onPosterReady }) {
+function VideoPosterFrame({ videoSrc }) {
   const [hasLoaded, setHasLoaded] = useState(false)
   const videoRef = useRef(null)
-  const capturedRef = useRef(false)
 
   useEffect(() => {
     const v = videoRef.current
@@ -253,30 +231,6 @@ function VideoPosterFrame({ videoSrc, onPosterReady }) {
     }
   }, [])
 
-  const captureFrame = useCallback((e) => {
-    setHasLoaded(true)
-    const v = e?.target || videoRef.current
-    if (!v || capturedRef.current) return
-
-    if (onPosterReady && v.videoWidth > 0 && v.videoHeight > 0) {
-      try {
-        const canvas = document.createElement('canvas')
-        const scale = Math.min(1, 480 / v.videoWidth)
-        canvas.width = Math.max(1, Math.round(v.videoWidth * scale))
-        canvas.height = Math.max(1, Math.round(v.videoHeight * scale))
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(v, 0, 0, canvas.width, canvas.height)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-        if (dataUrl && dataUrl.length > 200) {
-          capturedRef.current = true
-          onPosterReady(dataUrl)
-        }
-      } catch (canvasErr) {
-        // Tainted canvas or security error — keep playing smoothly
-      }
-    }
-  }, [onPosterReady])
-
   return (
     <video
       ref={(el) => {
@@ -287,8 +241,7 @@ function VideoPosterFrame({ videoSrc, onPosterReady }) {
       muted
       loop
       playsInline
-      onLoadedData={captureFrame}
-      onTimeUpdate={captureFrame}
+      onLoadedData={() => setHasLoaded(true)}
       onCanPlay={() => {
         setHasLoaded(true)
         if (videoRef.current) {
@@ -358,22 +311,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   const [activePreview, setActivePreview] = useState(previewManager.getState())
   const [imgLoadError, setImgLoadError] = useState(false)
-  const [capturedPoster, setCapturedPoster] = useState(() => {
-    if (wallpaper.id && videoPosterMemoryCache.has(wallpaper.id)) return videoPosterMemoryCache.get(wallpaper.id)
-    if (!rawVideoPath && !videoSrc) return null
-    return videoPosterMemoryCache.get(rawVideoPath) || videoPosterMemoryCache.get(videoSrc) || null
-  })
   const containerRef = useRef(null)
-
-  // Synchronize capturedPoster if set elsewhere in memory cache
-  useEffect(() => {
-    if (!capturedPoster) {
-      const cached = (wallpaper.id && videoPosterMemoryCache.get(wallpaper.id)) ||
-                     (rawVideoPath && videoPosterMemoryCache.get(rawVideoPath)) ||
-                     (videoSrc && videoPosterMemoryCache.get(videoSrc))
-      if (cached) setCapturedPoster(cached)
-    }
-  }, [wallpaper.id, rawVideoPath, videoSrc, capturedPoster])
 
   // Subscribe to previewManager singleton
   useEffect(() => {
@@ -424,10 +362,10 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const accentColor = isYouTube ? '#ef4444' : theme.color
   const badgeText = isYouTube ? 'YOUTUBE' : theme.badge
 
-  // Resolve static thumbnail (works for images, streams, YouTube, canvas SVGs, community wallpapers, custom video posters)
-  const staticThumbUrl = capturedPoster || resolveWallpaperThumbnail(wallpaper)
+  // Resolve genuine static thumbnail (images, streams, YouTube, canvas SVGs, supplied covers)
+  const staticThumbUrl = resolveWallpaperThumbnail(wallpaper)
 
-  // STATIC POSTER: Always visible at rest whenever a poster exists (lightweight <img>, zero video decoders)
+  // STATIC THUMBNAIL: Visible at rest whenever genuine artwork/thumbnail exists (lightweight <img>, zero video decoders)
   let staticMedia = null
   if (staticThumbUrl && !imgLoadError) {
     staticMedia = (
@@ -457,18 +395,6 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
     videoMedia = (
       <VideoPosterFrame
         videoSrc={videoSrc}
-        onPosterReady={(dataUrl) => {
-          if (wallpaper.id) videoPosterMemoryCache.set(wallpaper.id, dataUrl)
-          if (rawVideoPath) videoPosterMemoryCache.set(rawVideoPath, dataUrl)
-          if (videoSrc) videoPosterMemoryCache.set(videoSrc, dataUrl)
-          setCapturedPoster(dataUrl)
-          try {
-            const updateInstalled = useStore.getState().updateInstalledWallpaper
-            if (updateInstalled) {
-              updateInstalled(wallpaper.id, { thumbnail: dataUrl })
-            }
-          } catch {}
-        }}
       />
     )
   }
@@ -502,7 +428,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
         style={{
           position: 'absolute',
           inset: 0,
-          background: `radial-gradient(circle at 50% 45%, ${accentColor}18 0%, transparent 70%)`,
+          background: `radial-gradient(circle at 50% 45%, ${accentColor}25 0%, transparent 70%)`,
           pointerEvents: 'none',
         }}
       />
@@ -513,12 +439,12 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
           width: 46,
           height: 46,
           borderRadius: 13,
-          background: `${accentColor}15`,
-          border: `1px solid ${accentColor}35`,
+          background: `${accentColor}1e`,
+          border: `1px solid ${accentColor}40`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 4px 16px ${accentColor}1a`,
+          boxShadow: `0 4px 18px ${accentColor}22`,
           marginBottom: 8,
           zIndex: 0,
           transition: 'transform 0.25s ease',
