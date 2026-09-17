@@ -41,7 +41,7 @@ A **standalone Windows desktop application** that:
 | `npm run build` | ✅ Passes in ~580ms |
 | `npm run dev` | ✅ Runs at http://localhost:1420/ |
 | `npm run tauri:dev` | ✅ Passes (Rust installed & verified) |
-| Windows .exe / standalone | ✅ Built: `AetherFlow.exe`, `run.bat`, and `AetherFlow_1.0.1_x64-setup.exe` |
+| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (v1.0.7), `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe` |
 
 ---
 
