@@ -332,6 +332,14 @@ export const useStore = create(
           persistCustomWallpapersToDisk(installed)
           return { installed }
         }),
+      updateInstalledWallpaper: (id, updates) =>
+        set((s) => {
+          const installed = (s.installed || []).map(item =>
+            item.id === id ? { ...item, ...updates } : item
+          )
+          persistCustomWallpapersToDisk(installed)
+          return { installed }
+        }),
       uninstallItem: (id) =>
         set((s) => {
           const installed = (s.installed || []).filter(i => i.id !== id)

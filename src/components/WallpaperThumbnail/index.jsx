@@ -74,7 +74,7 @@ export const ENGINE_THEMES = {
   'video-player': {
     icon: Video,
     color: '#3b82f6',
-    bg: 'linear-gradient(135deg, #07101f 0%, #0c1e3a 100%)',
+    bg: 'linear-gradient(135deg, #0b1528 0%, #102447 50%, #162b55 100%)',
     badge: 'VIDEO',
     label: 'Video Wallpaper'
   },
@@ -115,6 +115,11 @@ export function resolveWallpaperThumbnail(wallpaper) {
     wallpaper.thumbnailPath ||
     wallpaper.previewUrl ||
     wallpaper.thumbnailUrl ||
+    wallpaper.cover ||
+    wallpaper.coverUrl ||
+    wallpaper.coverPath ||
+    wallpaper.image ||
+    wallpaper.imageUrl ||
     wallpaper.config?.preview ||
     wallpaper.config?.thumbnail ||
     wallpaper.config?.poster ||
@@ -122,13 +127,19 @@ export function resolveWallpaperThumbnail(wallpaper) {
     wallpaper.config?.thumbnailPath ||
     wallpaper.config?.previewUrl ||
     wallpaper.config?.thumbnailUrl ||
+    wallpaper.config?.cover ||
+    wallpaper.config?.coverUrl ||
+    wallpaper.config?.coverPath ||
+    wallpaper.config?.image ||
     wallpaper.defaultConfig?.preview ||
     wallpaper.defaultConfig?.thumbnail ||
     wallpaper.defaultConfig?.poster ||
     wallpaper.defaultConfig?.posterPath ||
+    wallpaper.defaultConfig?.cover ||
     wallpaper.communityMeta?.preview ||
     wallpaper.communityMeta?.thumbnail ||
     wallpaper.communityMeta?.poster ||
+    wallpaper.communityMeta?.cover ||
     (typeof wallpaper.communityMeta?.source === 'string' && /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(wallpaper.communityMeta.source) ? wallpaper.communityMeta.source : null)
 
   if (explicitCandidate) {
@@ -187,6 +198,9 @@ export function resolveWallpaperThumbnail(wallpaper) {
   }
 
   // 5. In-memory captured video poster
+  if (wallpaper.id && videoPosterMemoryCache.has(wallpaper.id)) {
+    return videoPosterMemoryCache.get(wallpaper.id)
+  }
   const rawVideoPath =
     wallpaper.config?.videoPath ||
     wallpaper.videoPath ||
@@ -208,27 +222,22 @@ export function resolveWallpaperThumbnail(wallpaper) {
 export const videoPosterMemoryCache = new Map()
 
 /**
- * VideoPosterFrame — Clean video preview and poster frame renderer.
- * Handles live hover playback with previewManager registration, or paused poster frame display.
- * Enforces strict hardware decoder cleanup on unmount or pause.
+ * VideoPosterFrame — Clean video preview renderer.
+ * Handles live hover playback with previewManager registration.
+ * Enforces strict hardware decoder cleanup on unmount.
+ * Smoothly fades in over the static poster once frame data is ready (eliminates black flash).
  */
-function VideoPosterFrame({ videoSrc, isHovered, isPlaying = false, onPosterReady }) {
+function VideoPosterFrame({ videoSrc, onPosterReady }) {
   const [hasLoaded, setHasLoaded] = useState(false)
   const videoRef = useRef(null)
+  const capturedRef = useRef(false)
 
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    if (isPlaying) {
-      previewManager.registerVideoElement(v)
-      v.play().catch(() => {})
-    } else {
-      v.pause()
-      try {
-        if (v.currentTime > 0.5) v.currentTime = 0.5
-      } catch (e) {}
-    }
-  }, [isPlaying])
+    previewManager.registerVideoElement(v)
+    v.play().catch(() => {})
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -244,20 +253,12 @@ function VideoPosterFrame({ videoSrc, isHovered, isPlaying = false, onPosterRead
     }
   }, [])
 
-  const handleFrameReady = useCallback((e) => {
+  const captureFrame = useCallback((e) => {
     setHasLoaded(true)
     const v = e?.target || videoRef.current
-    if (!v) return
+    if (!v || capturedRef.current) return
 
-    // Seek to 0.5s if at frame 0 in poster mode to avoid black frames
-    if (v.currentTime === 0 && !isPlaying) {
-      try {
-        v.currentTime = 0.5
-      } catch (err) {}
-    }
-
-    // Try capturing a lightweight static JPEG poster into memory cache
-    if (onPosterReady && !isPlaying && v.videoWidth > 0 && v.videoHeight > 0) {
+    if (onPosterReady && v.videoWidth > 0 && v.videoHeight > 0) {
       try {
         const canvas = document.createElement('canvas')
         const scale = Math.min(1, 480 / v.videoWidth)
@@ -267,30 +268,30 @@ function VideoPosterFrame({ videoSrc, isHovered, isPlaying = false, onPosterRead
         ctx.drawImage(v, 0, 0, canvas.width, canvas.height)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
         if (dataUrl && dataUrl.length > 200) {
+          capturedRef.current = true
           onPosterReady(dataUrl)
         }
       } catch (canvasErr) {
-        // Tainted canvas or security error — keep video element as poster
+        // Tainted canvas or security error — keep playing smoothly
       }
     }
-  }, [isPlaying, onPosterReady])
+  }, [onPosterReady])
 
   return (
     <video
       ref={(el) => {
         videoRef.current = el
       }}
-      src={isPlaying ? videoSrc : `${videoSrc}#t=0.5`}
-      preload={isPlaying ? 'auto' : 'metadata'}
+      src={videoSrc}
+      preload="auto"
       muted
       loop
       playsInline
-      onLoadedMetadata={handleFrameReady}
-      onLoadedData={handleFrameReady}
-      onSeeked={handleFrameReady}
+      onLoadedData={captureFrame}
+      onTimeUpdate={captureFrame}
       onCanPlay={() => {
         setHasLoaded(true)
-        if (isPlaying && videoRef.current) {
+        if (videoRef.current) {
           videoRef.current.play().catch(() => {})
         }
       }}
@@ -310,9 +311,10 @@ function VideoPosterFrame({ videoSrc, isHovered, isPlaying = false, onPosterRead
         height: '100%',
         objectFit: 'cover',
         display: 'block',
-        zIndex: isPlaying ? 2 : 1,
+        zIndex: 2,
         opacity: hasLoaded ? 1 : 0,
-        transition: 'opacity 0.25s ease',
+        transition: 'opacity 0.22s ease',
+        pointerEvents: 'none',
       }}
     />
   )
@@ -356,8 +358,8 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   const [activePreview, setActivePreview] = useState(previewManager.getState())
   const [imgLoadError, setImgLoadError] = useState(false)
-  const [isInView, setIsInView] = useState(() => currentMode === 'always')
   const [capturedPoster, setCapturedPoster] = useState(() => {
+    if (wallpaper.id && videoPosterMemoryCache.has(wallpaper.id)) return videoPosterMemoryCache.get(wallpaper.id)
     if (!rawVideoPath && !videoSrc) return null
     return videoPosterMemoryCache.get(rawVideoPath) || videoPosterMemoryCache.get(videoSrc) || null
   })
@@ -365,11 +367,13 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   // Synchronize capturedPoster if set elsewhere in memory cache
   useEffect(() => {
-    if (!capturedPoster && (rawVideoPath || videoSrc)) {
-      const cached = videoPosterMemoryCache.get(rawVideoPath) || videoPosterMemoryCache.get(videoSrc)
+    if (!capturedPoster) {
+      const cached = (wallpaper.id && videoPosterMemoryCache.get(wallpaper.id)) ||
+                     (rawVideoPath && videoPosterMemoryCache.get(rawVideoPath)) ||
+                     (videoSrc && videoPosterMemoryCache.get(videoSrc))
       if (cached) setCapturedPoster(cached)
     }
-  }, [rawVideoPath, videoSrc, capturedPoster])
+  }, [wallpaper.id, rawVideoPath, videoSrc, capturedPoster])
 
   // Subscribe to previewManager singleton
   useEffect(() => {
@@ -377,38 +381,6 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   }, [])
 
   const isThisPreviewActive = activePreview.activeId === wallpaper.id
-
-  // Viewport lazy loader for 'always' mode
-  useEffect(() => {
-    if (currentMode !== 'always') {
-      setIsInView(false)
-      return
-    }
-
-    const el = containerRef.current
-    if (!el) return
-
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsInView(true)
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsInView(entry.isIntersecting)
-      },
-      {
-        root: null,
-        rootMargin: '200px 0px',
-        threshold: 0.01,
-      }
-    )
-
-    observer.observe(el)
-    return () => {
-      observer.disconnect()
-    }
-  }, [currentMode])
 
   // Single-player hover management: request preview on hover, cancel on leave
   useEffect(() => {
@@ -455,16 +427,9 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   // Resolve static thumbnail (works for images, streams, YouTube, canvas SVGs, community wallpapers, custom video posters)
   const staticThumbUrl = capturedPoster || resolveWallpaperThumbnail(wallpaper)
 
-  // Compute media preview based on thumbnailMode:
-  // - 'off': Never show preview media (pure zero-RAM vector badges)
-  // - 'hover': Only show preview media while hovered (low RAM)
-  // - 'always': Always show preview media (continuous artwork surface)
-  const shouldShowMedia =
-    currentMode === 'always' ||
-    (currentMode === 'hover' && isHovered)
-
+  // STATIC POSTER: Always visible at rest whenever a poster exists (lightweight <img>, zero video decoders)
   let staticMedia = null
-  if (shouldShowMedia && currentMode !== 'off' && staticThumbUrl && !imgLoadError) {
+  if (staticThumbUrl && !imgLoadError) {
     staticMedia = (
       <img
         src={staticThumbUrl}
@@ -478,35 +443,33 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
           objectFit: 'cover',
           display: 'block',
           zIndex: 1,
-          animation: 'fadeIn 0.2s ease forwards',
         }}
       />
     )
   }
 
-  let videoMedia = null
-  if (currentMode !== 'off' && isVideo && videoSrc) {
-    const isPlaying = isThisPreviewActive && isHovered
-    // In 'always' mode: mount video poster if card is in view and static thumb not yet ready.
-    // In 'hover' mode: mount video ONLY when active preview is granted.
-    const shouldMountVideo =
-      isPlaying ||
-      (currentMode === 'always' && isInView && !staticThumbUrl)
+  // LIVE PREVIEW: Only active when hover requested and PreviewManager grants the single preview slot
+  const isPreviewActive = currentMode !== 'off' && isVideo && isThisPreviewActive && Boolean(activePreview.activeSrc) && isHovered
 
-    if (shouldMountVideo) {
-      videoMedia = (
-        <VideoPosterFrame
-          videoSrc={videoSrc}
-          isHovered={isHovered}
-          isPlaying={isPlaying}
-          onPosterReady={(dataUrl) => {
-            if (rawVideoPath) videoPosterMemoryCache.set(rawVideoPath, dataUrl)
-            if (videoSrc) videoPosterMemoryCache.set(videoSrc, dataUrl)
-            setCapturedPoster(dataUrl)
-          }}
-        />
-      )
-    }
+  let videoMedia = null
+  if (isPreviewActive && videoSrc) {
+    videoMedia = (
+      <VideoPosterFrame
+        videoSrc={videoSrc}
+        onPosterReady={(dataUrl) => {
+          if (wallpaper.id) videoPosterMemoryCache.set(wallpaper.id, dataUrl)
+          if (rawVideoPath) videoPosterMemoryCache.set(rawVideoPath, dataUrl)
+          if (videoSrc) videoPosterMemoryCache.set(videoSrc, dataUrl)
+          setCapturedPoster(dataUrl)
+          try {
+            const updateInstalled = useStore.getState().updateInstalledWallpaper
+            if (updateInstalled) {
+              updateInstalled(wallpaper.id, { thumbnail: dataUrl })
+            }
+          } catch {}
+        }}
+      />
+    )
   }
 
   const previewMedia = (staticMedia || videoMedia) ? (
