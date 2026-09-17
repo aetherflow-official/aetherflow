@@ -39,6 +39,9 @@ use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DwmGetWindowAttri
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+#[cfg(windows)]
+mod thumbnail_extractor;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct SystemPowerStatus {
@@ -3837,6 +3840,127 @@ fn load_custom_wallpapers(app: AppHandle) -> Vec<serde_json::Value> {
     recovered
 }
 
+#[tauri::command]
+fn get_or_create_video_thumbnail(app: AppHandle, wallpaper_id: String, video_path: String) -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let base = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let thumb_dir = base.join("thumbnails");
+        let _ = std::fs::create_dir_all(&thumb_dir);
+        let out_file = thumb_dir.join(format!("{}.jpg", wallpaper_id));
+
+        if out_file.exists() {
+            if let Ok(meta) = std::fs::metadata(&out_file) {
+                if meta.len() > 1000 {
+                    return Ok(out_file.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        let vpath = std::path::Path::new(&video_path);
+        if !vpath.exists() {
+            return Err(format!("Video file does not exist: {}", video_path));
+        }
+
+        thumbnail_extractor::extract_shell_thumbnail(vpath, &out_file, 640, 360)?;
+        Ok(out_file.to_string_lossy().to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("Native thumbnail extraction is only supported on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+fn sync_all_custom_video_thumbnails(app: AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let app_handle = app.clone();
+        std::thread::spawn(move || {
+            let path = get_custom_wallpapers_file(&app_handle);
+            if !path.exists() {
+                return;
+            }
+
+            let base = app_handle.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let thumb_dir = base.join("thumbnails");
+            let _ = std::fs::create_dir_all(&thumb_dir);
+
+            let data = match std::fs::read_to_string(&path) {
+                Ok(d) => d,
+                Err(_) => return,
+            };
+
+            let mut items: Vec<serde_json::Value> = match serde_json::from_str(&data) {
+                Ok(it) => it,
+                Err(_) => return,
+            };
+
+            let mut any_updated = false;
+
+            for item in items.iter_mut() {
+                let id = match item.get("id").and_then(|v| v.as_str()) {
+                    Some(s) => s.to_string(),
+                    None => continue,
+                };
+
+                let is_video = item.get("engine").and_then(|v| v.as_str()) == Some("video-player")
+                    || item.get("mediaType").and_then(|v| v.as_str()) == Some("video")
+                    || item.get("config").and_then(|c| c.get("videoPath")).is_some();
+
+                if !is_video {
+                    continue;
+                }
+
+                // Check if current thumbnail is valid and file exists
+                let current_thumb = item.get("thumbnail").and_then(|v| v.as_str()).unwrap_or("");
+                if !current_thumb.is_empty() && std::path::Path::new(current_thumb).exists() {
+                    continue;
+                }
+
+                let video_path = match item.get("config").and_then(|c| c.get("videoPath")).and_then(|v| v.as_str()) {
+                    Some(p) => p,
+                    None => continue,
+                };
+
+                let vpath = std::path::Path::new(video_path);
+                if !vpath.exists() {
+                    continue;
+                }
+
+                let out_file = thumb_dir.join(format!("{}.jpg", id));
+                let need_extract = !out_file.exists() || std::fs::metadata(&out_file).map(|m| m.len() < 1000).unwrap_or(true);
+
+                if need_extract {
+                    if let Err(e) = thumbnail_extractor::extract_shell_thumbnail(vpath, &out_file, 640, 360) {
+                        eprintln!("[Thumbnails] Extraction failed for {}: {}", id, e);
+                        continue;
+                    }
+                }
+
+                if out_file.exists() {
+                    let thumb_str = out_file.to_string_lossy().to_string();
+                    item["thumbnail"] = serde_json::Value::String(thumb_str);
+                    any_updated = true;
+                }
+            }
+
+            if any_updated {
+                if let Ok(new_data) = serde_json::to_string_pretty(&items) {
+                    let _ = std::fs::write(&path, new_data);
+                }
+                let _ = app_handle.emit("custom_thumbnails_updated", items);
+                println!("[Thumbnails] Successfully synced native video thumbnails for custom wallpapers");
+            }
+        });
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
+}
+
 /// Query active wallpaper state for a specific monitor window upon mounting
 #[tauri::command]
 fn get_monitor_active_wallpaper(app: AppHandle, label: String) -> Option<serde_json::Value> {
@@ -5395,12 +5519,15 @@ fn main() {
             dismiss_screensaver,
             get_screensaver_active_wallpaper,
             get_grid_detection_state,
+            get_or_create_video_thumbnail,
+            sync_all_custom_video_thumbnails,
         ])
         .setup(|app| {
             #[cfg(windows)]
             {
                 mpv::kill_all_mpv_processes();
                 let _ = mpv::ensure_mpv_job();
+                let _ = sync_all_custom_video_thumbnails(app.handle().clone());
             }
 
             let is_minimized = is_minimized_boot();

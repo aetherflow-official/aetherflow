@@ -349,7 +349,30 @@ export default function LibraryPage() {
     }
   }, [])
 
+  // Native Windows Shell thumbnail sync (runs on background OS thread in Rust, zero WebView2 video decoders)
+  useEffect(() => {
+    let unlistenUpdated
+    tauriInvoke('sync_all_custom_video_thumbnails').catch(() => {})
 
+    safeListen('custom_thumbnails_updated', (event) => {
+      if (Array.isArray(event?.payload)) {
+        const updatedMap = new Map(event.payload.map(i => [i.id, i]))
+        useStore.setState(s => ({
+          installed: (s.installed || []).map(w => {
+            const match = updatedMap.get(w.id)
+            if (match && match.thumbnail && match.thumbnail !== w.thumbnail) {
+              return { ...w, thumbnail: match.thumbnail }
+            }
+            return w
+          })
+        }))
+      }
+    }).then(fn => { unlistenUpdated = fn })
+
+    return () => {
+      if (unlistenUpdated) unlistenUpdated()
+    }
+  }, [])
 
   // Fetch monitors
   useEffect(() => {

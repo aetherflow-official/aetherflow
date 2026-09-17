@@ -176,6 +176,39 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Sync native Windows video thumbnails on App startup (Wallpaper Engine style)
+  React.useEffect(() => {
+    let unlisten = null
+    async function initNativeThumbnails() {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const { listen } = await import('@tauri-apps/api/event')
+
+        unlisten = await listen('custom_thumbnails_updated', (event) => {
+          if (Array.isArray(event.payload)) {
+            const state = useStore.getState()
+            const currentInstalled = state.installed || []
+            const currentMap = new Map(currentInstalled.map(i => [i.id, i]))
+            for (const item of event.payload) {
+              if (currentMap.has(item.id)) {
+                currentMap.set(item.id, { ...currentMap.get(item.id), ...item })
+              }
+            }
+            useStore.setState({ installed: Array.from(currentMap.values()) })
+          }
+        })
+
+        await invoke('sync_all_custom_video_thumbnails').catch(() => {})
+      } catch {
+        // Outside Tauri
+      }
+    }
+    initNativeThumbnails()
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [])
+
   // Broadcast global volume/mute changes to all active wallpaper windows & MPV
   React.useEffect(() => {
     async function broadcastAudio() {

@@ -286,8 +286,24 @@ export async function addCustomMediaWallpaper(path, customName = null, pinToHome
 
   const isImg = /\.(png|jpe?g|webp|bmp|gif|avif)$/i.test(finalPath)
 
+  const itemId = 'local-' + Date.now()
+  let thumbnail = null
+  if (!isImg) {
+    try {
+      const generatedThumb = await tauriInvoke('get_or_create_video_thumbnail', {
+        wallpaperId: itemId,
+        videoPath: finalPath,
+      })
+      if (generatedThumb) {
+        thumbnail = generatedThumb
+      }
+    } catch (thumbErr) {
+      console.warn('[AetherFlow] Native thumbnail generation failed on import:', thumbErr)
+    }
+  }
+
   const item = isImg ? {
-    id: 'local-' + Date.now(),
+    id: itemId,
     type: 'wallpaper',
     name: customName?.trim() || cleanName || filename,
     engine: 'image-player',
@@ -297,10 +313,11 @@ export async function addCustomMediaWallpaper(path, customName = null, pinToHome
     isCustom: true,
     mediaType: 'image',
   } : {
-    id: 'local-' + Date.now(),
+    id: itemId,
     type: 'wallpaper',
     name: customName?.trim() || cleanName || filename,
     engine: 'video-player',
+    thumbnail,
     config: { videoPath: finalPath, speedMultiplier: 1 },
     tags: ['custom', 'video'],
     installedAt: new Date().toISOString(),
