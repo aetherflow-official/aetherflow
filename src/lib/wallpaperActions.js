@@ -15,8 +15,20 @@ export function isTauri() {
  */
 export function safeConvertFileSrc(filePath) {
   if (!filePath) return ''
-  const normalized = filePath.replace(/\\/g, '/')
-  if (normalized.startsWith('http://') || normalized.startsWith('https://') || normalized.startsWith('data:') || normalized.startsWith('blob:')) {
+  let cleanPath = typeof filePath === 'string' ? filePath.trim() : String(filePath)
+  if (cleanPath.startsWith('file:///')) {
+    cleanPath = cleanPath.slice(8)
+  } else if (cleanPath.startsWith('file://')) {
+    cleanPath = cleanPath.slice(7)
+  }
+  const normalized = cleanPath.replace(/\\/g, '/')
+  if (
+    normalized.startsWith('http://') ||
+    normalized.startsWith('https://') ||
+    normalized.startsWith('data:') ||
+    normalized.startsWith('blob:') ||
+    normalized.startsWith('/')
+  ) {
     return normalized
   }
   if (isTauri()) {
@@ -28,7 +40,7 @@ export function safeConvertFileSrc(filePath) {
       console.warn('[AetherFlow] convertFileSrc error:', e)
     }
   }
-  return `/api/local-file?path=${encodeURIComponent(filePath)}`
+  return `/api/local-file?path=${encodeURIComponent(cleanPath)}`
 }
 
 export const convertFileSrc = safeConvertFileSrc

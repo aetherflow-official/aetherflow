@@ -106,14 +106,51 @@ export function extractYouTubeId(url) {
 export function resolveWallpaperThumbnail(wallpaper) {
   if (!wallpaper) return null
 
-  // 1. Explicit preview or thumbnail image URL
-  const explicitPreview = wallpaper.preview || wallpaper.thumbnail
-  if (explicitPreview && typeof explicitPreview === 'string' && explicitPreview.trim()) {
-    const trimmed = explicitPreview.trim()
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
-      return trimmed
+  // 1. Explicit preview, thumbnail, poster, or artwork URL/path across all supported data shapes
+  const explicitCandidate =
+    wallpaper.preview ||
+    wallpaper.thumbnail ||
+    wallpaper.poster ||
+    wallpaper.posterPath ||
+    wallpaper.thumbnailPath ||
+    wallpaper.previewUrl ||
+    wallpaper.thumbnailUrl ||
+    wallpaper.config?.preview ||
+    wallpaper.config?.thumbnail ||
+    wallpaper.config?.poster ||
+    wallpaper.config?.posterPath ||
+    wallpaper.config?.thumbnailPath ||
+    wallpaper.config?.previewUrl ||
+    wallpaper.config?.thumbnailUrl ||
+    wallpaper.defaultConfig?.preview ||
+    wallpaper.defaultConfig?.thumbnail ||
+    wallpaper.defaultConfig?.poster ||
+    wallpaper.defaultConfig?.posterPath ||
+    wallpaper.communityMeta?.preview ||
+    wallpaper.communityMeta?.thumbnail ||
+    wallpaper.communityMeta?.poster ||
+    (typeof wallpaper.communityMeta?.source === 'string' && /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(wallpaper.communityMeta.source) ? wallpaper.communityMeta.source : null)
+
+  if (explicitCandidate) {
+    let candidateStr = ''
+    if (typeof explicitCandidate === 'string') {
+      candidateStr = explicitCandidate.trim()
+    } else if (typeof explicitCandidate === 'object' && explicitCandidate !== null) {
+      candidateStr = (explicitCandidate.url || explicitCandidate.src || explicitCandidate.path || '').trim()
     }
-    return safeConvertFileSrc(trimmed)
+
+    if (candidateStr) {
+      if (
+        candidateStr.startsWith('http://') ||
+        candidateStr.startsWith('https://') ||
+        candidateStr.startsWith('data:') ||
+        candidateStr.startsWith('blob:') ||
+        candidateStr.startsWith('/')
+      ) {
+        return candidateStr
+      }
+      return safeConvertFileSrc(candidateStr)
+    }
   }
 
   // 2. YouTube ID from config
@@ -127,7 +164,7 @@ export function resolveWallpaperThumbnail(wallpaper) {
   const imgPath = wallpaper.config?.imagePath || (wallpaper.engine === 'image-player' ? wallpaper.config?.url : '')
   if (imgPath && typeof imgPath === 'string' && imgPath.trim()) {
     const trimmed = imgPath.trim()
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('/')) {
       return trimmed
     }
     return safeConvertFileSrc(trimmed)
@@ -296,7 +333,8 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   // Single-player hover management: request preview on hover, cancel on leave
   useEffect(() => {
-    if (currentMode !== 'hover') return
+    // If preview mode is off, hover never triggers decoders or live previews
+    if (currentMode === 'off') return
 
     if (isHovered && isVideo) {
       const videoPath = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath || ''
@@ -341,48 +379,49 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const accentColor = isYouTube ? '#ef4444' : theme.color
   const badgeText = isYouTube ? 'YOUTUBE' : theme.badge
 
-  // Resolve static thumbnail (works for images, streams, YouTube, canvas SVGs, community wallpapers)
+  // Resolve static thumbnail (works for images, streams, YouTube, canvas SVGs, community wallpapers, custom video posters)
   const staticThumbUrl = resolveWallpaperThumbnail(wallpaper)
 
   // Compute media preview based on thumbnailMode:
-  // - Static image thumbnail is ALWAYS rendered as baseline (zero decoders)
-  // - Video preview ONLY mounts if previewManager granted this card the single active preview slot
-  let previewMedia = null
-
-  if (currentMode !== 'off' && !imgLoadError) {
-    if (staticThumbUrl) {
-      previewMedia = (
-        <img
-          src={staticThumbUrl}
-          alt={wallpaper.name}
-          onError={() => setImgLoadError(true)}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-            zIndex: 1,
-            animation: 'fadeIn 0.2s ease forwards',
-          }}
-        />
-      )
-    }
-
-    // Overlay single active video preview when granted
-    if (isVideo && isThisPreviewActive && activePreview.activeSrc) {
-      previewMedia = (
-        <>
-          {previewMedia}
-          <VideoPosterFrame
-            videoSrc={activePreview.activeSrc}
-            isHovered={isHovered}
-          />
-        </>
-      )
-    }
+  // - Static image/poster thumbnail is ALWAYS rendered as baseline if available (zero decoders, works even when mode === 'off')
+  // - Live video preview ONLY mounts if preview mode is NOT off AND previewManager granted this card the single active preview slot
+  let staticMedia = null
+  if (staticThumbUrl && !imgLoadError) {
+    staticMedia = (
+      <img
+        src={staticThumbUrl}
+        alt={wallpaper.name}
+        onError={() => setImgLoadError(true)}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          zIndex: 1,
+          animation: 'fadeIn 0.2s ease forwards',
+        }}
+      />
+    )
   }
+
+  let livePreviewMedia = null
+  if (currentMode !== 'off' && isVideo && isThisPreviewActive && activePreview.activeSrc) {
+    livePreviewMedia = (
+      <VideoPosterFrame
+        videoSrc={activePreview.activeSrc}
+        isHovered={isHovered}
+      />
+    )
+  }
+
+  const previewMedia = (staticMedia || livePreviewMedia) ? (
+    <>
+      {staticMedia}
+      {livePreviewMedia}
+    </>
+  ) : null
 
   return (
     <div
