@@ -282,6 +282,7 @@ export default function LibraryPage() {
   const setWallpaperName        = useStore(s => s.setWallpaperName)
   const setActiveWallpaper      = useStore(s => s.setActiveWallpaper)
   const thumbnailMode           = useStore(s => s.thumbnailMode) || 'hover'
+  const setThumbnailMode        = useStore(s => s.setThumbnailMode)
 
   const [monitors, setMonitors] = useState([])
   const [selectedMonitorLabel, setSelectedMonitorLabel] = useState(null)
@@ -696,6 +697,28 @@ export default function LibraryPage() {
             <option value="name-desc">Sort: Name (Z-A)</option>
             <option value="liked">Sort: Most Liked</option>
           </select>
+
+          {/* Thumbnail / Preview Mode Selector (Synchronized with Home) */}
+          <div className="segmented-control" title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)">
+            <span style={{ fontSize: 10, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
+              PREVIEWS:
+            </span>
+            {[
+              { id: 'always', label: 'On', title: 'Always Show Thumbnails' },
+              { id: 'hover', label: 'Hover', title: 'Show Previews on Hover (Low RAM)' },
+              { id: 'off', label: 'Off', title: 'Off — Clean Vector Badges (Zero RAM)' },
+            ].map(m => (
+              <button
+                key={m.id}
+                className={`segmented-item ${thumbnailMode === m.id ? 'active' : ''}`}
+                onClick={() => setThumbnailMode(m.id)}
+                title={m.title}
+                style={{ fontSize: 11, padding: '3px 8px' }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
 
           <div className="library-view-switcher">
             <button
