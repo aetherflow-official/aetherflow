@@ -2758,3 +2758,30 @@
      - `AetherFlow.exe` (7.60 MB / 7,607,296 bytes).
 - **Build status:** ✅ Frontend and native release binaries built cleanly with 0 errors.
 ---
+
+## Session: 2026-09-18 01:30 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Resolve Video Wallpaper Previews in Always-On Mode
+- **Completed:**
+  1. **Root Cause Analysis**:
+     - Custom video wallpapers without explicit `.preview` or `.thumbnail` paths returned `null` from `resolveWallpaperThumbnail`.
+     - In `WallpaperThumbnail`, `livePreviewMedia` strictly required `isHovered` to be true.
+     - As a result, when Preview mode was set to "On" (`always`), cards for custom videos rendered the vector badge ("VIDEO WALLPAPER") when idle, only revealing preview media on hover.
+  2. **Resolution & Poster Caching (`src/components/WallpaperThumbnail/index.jsx`)**:
+     - Upgraded `WallpaperThumbnail` to support idle video poster frame rendering when `thumbnailMode === 'always'`.
+     - In `always` mode: video cards in the viewport mount `<VideoPosterFrame>` with `preload="metadata"` and automatically seek to `0.5s` to display crisp poster frames immediately.
+     - Automatically captures the 0.5s frame into `videoPosterMemoryCache` using a lightweight 480px canvas.
+     - Once captured, the card automatically unmounts the `<video>` element and renders a standard zero-RAM `<img>` tag, releasing all hardware decoders.
+     - Hovering activates `previewManager`'s single-slot coordinator, seamlessly playing the live video loop on top without text collision or blanking.
+     - Unhovering returns to the cached static poster image.
+  3. **Library Preview Modal Hardening (`src/pages/Library.jsx`)**:
+     - Expanded `videoPath` candidate resolution across all data shapes (`config?.videoPath`, `videoPath`, `source`, `path`, `config?.path`, `config?.url`).
+  4. **Production Build & Packaging**:
+     - Recompiled release binaries via `cargo build --release` and `npm run tauri:build`.
+     - Updated standalone executable at workspace root: `AetherFlow.exe` (7.60 MB, built 1:30 AM).
+     - Packaged NSIS setup installer: `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe` (54.72 MB).
+     - Packaged MSI installer: `src-tauri/target/release/bundle/msi/AetherFlow_1.0.7_x64_en-US.msi` (68.21 MB).
+- **Build status:** ✅ `npm run build` passed in 354ms; release executable and installer bundles successfully updated.
+---
+

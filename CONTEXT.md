@@ -3,20 +3,23 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-17 21:25 IST — Fixed Preview Options (On, Hover, Off) & Preview Modal:
-1. **Enforced Preview Options Semantics (`src/components/WallpaperThumbnail/index.jsx`)**:
-   - Resolved bug where `staticMedia` was rendered unconditionally, breaking `Off` and making `On` and `Hover` indistinguishable.
-   - `Off` Mode: Pure zero-RAM vector badges with ambient theme glow and category icon; zero media/decoders.
-   - `Hover` Mode: Zero-RAM vector badges when idle; dynamically streams preview artwork / video on mouse hover.
-   - `On` Mode: Continuous high-definition artwork / posters / SVG previews visible across all cards; streams live video on hover via `previewManager`.
-   - Hidden redundant bottom-left badge in `WallpaperThumbnail` when artwork is active to prevent colliding with card title overlay.
-2. **Library Preview Modal Enhancements (`src/pages/Library.jsx`)**:
-   - Fixed `WallpaperPlayer` props (`config={...}` and `preview`) so Canvas 2D engines render at 60fps across the full modal preview stage.
-   - Added YouTube stream embed with auto-healed stream URLs and complete decoder cleanup on modal close.
-3. **Synchronized State & Verification**:
-   - Preference synchronized between Home, Library, and Personalization via Zustand `thumbnailMode`.
-   - Visual inspection verified across all 3 modes in Chrome DevTools.
-   - `npm run build`: Passes in 561ms with 0 errors.
+2026-09-18 01:30 IST — Resolved Video Previews in Always-On Mode & Packaged Release Bundles:
+1. **Resolved Video Wallpaper Previews When Preview is ON (`src/components/WallpaperThumbnail/index.jsx`)**:
+   - **Root Cause**: For custom video wallpapers without explicit thumbnail image files, `resolveWallpaperThumbnail` returned `null`, and `VideoPosterFrame` only rendered if `isHovered` was true. When the user set Preview mode to "On" (`always`), video cards rendered the vector placeholder badge ("VIDEO WALLPAPER") when idle, only revealing preview media on hover.
+   - **Fix**:
+     - Upgraded `WallpaperThumbnail` and `VideoPosterFrame` to handle both idle poster display and active hover loop playback.
+     - In `always` mode: visible video cards mount `<VideoPosterFrame>` with `preload="metadata"` and seek to `0.5s` to display crisp poster frames immediately.
+     - Automatically extracts the 0.5s frame to `videoPosterMemoryCache` via a lightweight 480px canvas, instantly caching the poster data URL.
+     - Once cached, the card automatically transitions to a standard `<img>` tag and unmounts the `<video>` element, immediately releasing all hardware video decoders.
+     - While hovering, `previewManager` activates the single active preview slot and plays the video loop smoothly on top.
+     - When unhovered, it reverts seamlessly to the cached static poster image with zero flicker and zero placeholder fallback.
+2. **Library Preview Modal Resilience (`src/pages/Library.jsx`)**:
+   - Enhanced `videoPath` resolution to handle all possible data shapes (`config?.videoPath`, `videoPath`, `source`, `path`, `config?.path`, `config?.url`, `defaultConfig?.videoPath`).
+3. **Production Binaries Packaged**:
+   - Root standalone executable: [`AetherFlow.exe`](file:///c:/Users/Yashpreet_o7/Desktop/AetherFlow/AetherFlow.exe) (7.60 MB, built 1:30 AM).
+   - NSIS installer: `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe` (54.72 MB).
+   - MSI package: `src-tauri/target/release/bundle/msi/AetherFlow_1.0.7_x64_en-US.msi` (68.21 MB).
+   - `npm run build`: Passes in 354ms with 0 errors.
 
 ---
 
