@@ -3,26 +3,20 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-17 19:45 IST — Final Wallpaper Card Polish & Home Consistency:
-1. **Continuous Artwork Surface (The Wallpaper IS The Card)**:
-   - Full edge-to-edge artwork continuous underneath the subtle multi-stop bottom scrim.
-   - Zero hard horizontal divisions or separate solid metadata panels.
-2. **Subtle Non-Obtrusive Hover State**:
-   - Removed centered button overlay; center of the artwork remains 100% visible at all times.
-   - Artwork dims very slightly (`brightness(0.92)`).
-   - Contextual `[ 👁 Preview ]` pill fades in smoothly beside `[ ▶ Apply ]` in the bottom-right action cluster on hover.
-   - Click-to-preview opens full high-definition inspection modal.
-3. **Shared Card Architecture**:
-   - Both **Library** (Featured Hero 2-column card + standard grid cards) and **Home** (Home Favorites) use the exact same `WallpaperCard` component (`src/components/WallpaperCard/index.jsx`).
-   - Top-left: Small restrained type indicator (`IMAGE`, `VIDEO`, `YOUTUBE`, `WEB`, `CANVAS`).
-   - Top-right: Floating `[ ♡ ]`, `[ 📌 ]` (when pinned), and `[ ⋯ ]` more menu.
-   - Bottom-left: Title, creator (`by {author}` / `by AetherFlow`), and quiet `#tags`.
-   - Bottom-right: Floating `[ ▶ Apply ]` pill and `[ ● Active ]` indicator when live.
-4. **Memory & Decoder Teardown Benchmark**:
-   - JS Heap memory stays rock-solid between 66 MB and 74 MB across hover cycles, rapid switching, and modal lifecycles. Zero memory leak regression.
-5. **Theme Adaptability & Branch Isolation**:
-   - Tested and verified across Aether Dark and Aether Light themes.
-   - Isolated and committed to branch `feature/library-redesign-preview-overhaul`. Clean build in 441ms.
+2026-09-17 21:25 IST — Fixed Preview Options (On, Hover, Off) & Preview Modal:
+1. **Enforced Preview Options Semantics (`src/components/WallpaperThumbnail/index.jsx`)**:
+   - Resolved bug where `staticMedia` was rendered unconditionally, breaking `Off` and making `On` and `Hover` indistinguishable.
+   - `Off` Mode: Pure zero-RAM vector badges with ambient theme glow and category icon; zero media/decoders.
+   - `Hover` Mode: Zero-RAM vector badges when idle; dynamically streams preview artwork / video on mouse hover.
+   - `On` Mode: Continuous high-definition artwork / posters / SVG previews visible across all cards; streams live video on hover via `previewManager`.
+   - Hidden redundant bottom-left badge in `WallpaperThumbnail` when artwork is active to prevent colliding with card title overlay.
+2. **Library Preview Modal Enhancements (`src/pages/Library.jsx`)**:
+   - Fixed `WallpaperPlayer` props (`config={...}` and `preview`) so Canvas 2D engines render at 60fps across the full modal preview stage.
+   - Added YouTube stream embed with auto-healed stream URLs and complete decoder cleanup on modal close.
+3. **Synchronized State & Verification**:
+   - Preference synchronized between Home, Library, and Personalization via Zustand `thumbnailMode`.
+   - Visual inspection verified across all 3 modes in Chrome DevTools.
+   - `npm run build`: Passes in 561ms with 0 errors.
 
 ---
 

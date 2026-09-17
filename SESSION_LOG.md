@@ -2720,3 +2720,27 @@
      - Git commit: `f092ee6 feat(ui): refine shared artwork-first wallpaper cards`.
 - **Build status:** ✅ Passes in 441ms with 0 errors.
 ---
+
+## Session: 2026-09-17 21:25 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Fix Preview Options (On, Hover, Off) & Preview Modal
+- **Completed:**
+  1. **Root Cause Analysis & Diagnosis**:
+     - Identified that `WallpaperThumbnail` was rendering `staticMedia` unconditionally (`if (staticThumbUrl && !imgLoadError) staticMedia = ...`), ignoring `thumbnailMode`. As a result, switching between `On`, `Hover`, and `Off` did not alter card appearance (images still rendered in `Off`, and `On` vs `Hover` were visually indistinguishable).
+     - Found that `WallpaperThumbnail` was rendering a redundant persistent pill badge at `bottom: 8, left: 8; zIndex: 3` that collided directly with `WallpaperCard`'s title overlay.
+     - Discovered `LibraryPreviewModal` was passing `options` instead of `config` and `preview={true}` to `WallpaperPlayer`, preventing Canvas 2D engine previews from rendering full-size, and lacked live stream preview integration.
+  2. **Enforced Preview Options Semantics (`src/components/WallpaperThumbnail/index.jsx`)**:
+     - **`Off` Mode ("Off — Clean Vector Badges (Zero RAM)")**: No `<img>`, no `<video>`, zero media decoders, zero memory. Renders sleek, ambient vector badges with glowing category icons and labels.
+     - **`Hover` Mode ("Show Previews on Hover (Low RAM)")**: Zero RAM vector badges when idle; dynamically streams artwork / single-slot video preview on mouse hover.
+     - **`On` Mode ("Always Show Thumbnails")**: Continuous high-definition artwork / posters / SVG previews visible across all cards; streams live video on hover via `previewManager`.
+     - Restricted persistent bottom-left badge in `WallpaperThumbnail` to vector badge fallback mode (`!previewMedia`), eliminating text collisions with card title overlays.
+  3. **Library Preview Modal Refinement (`src/pages/Library.jsx`)**:
+     - Corrected `WallpaperPlayer` props (`config={wallpaper.config || {}} preview`) so Canvas 2D engines render at 60fps across the full modal preview stage.
+     - Integrated `extractYouTubeId` and clean embedded stream preview iframe for YouTube/web streams.
+  4. **Verification & Visual QA**:
+     - Tested in Chrome DevTools with screenshots across all 3 preview modes (`On`, `Hover`, `Off`) on both Library and Home.
+     - Verified modal previews for Canvas 2D, videos, pictures, and streams with zero decoder leaks on close.
+     - `npm run build`: ✅ Passes cleanly in 561ms with 0 errors.
+---
+
