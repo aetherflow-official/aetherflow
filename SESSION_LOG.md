@@ -2866,7 +2866,9 @@
      - Visual inspection: confirmed in Playwright screenshots for both Library and Home.
      - `npm run build`: Passes in 540ms with 0 errors.
      - `cargo check`: Passes in 3.48s with 0 errors.
+     - `cargo build --release --bin aetherflow`: Finished in 2m 39s with 0 errors.
+     - Deployed fresh standalone binary to `AetherFlow.exe` in project root and launched.
      - Committed to `feature/library-redesign-preview-overhaul` (`119483c`).
-- **Build status:** ✅ Frontend and cargo check pass cleanly with 0 errors.
+- **Build status:** ✅ Standalone release executable and frontend bundle built cleanly with 0 errors.
 ---
 
