@@ -2669,3 +2669,29 @@
      - RAM spikes eliminated: rapid sweeping across cards results in 0 extra decoders and 0 memory leaks.
      - `npm run build`: Passes in 484ms with 0 errors.
 ---
+
+## Session: 2026-09-17 19:35 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Wallpaper Card System Redesign (Continuous Artwork Surface)
+- **Completed:**
+  1. **Core Principle Implemented — The Wallpaper IS The Card**:
+     - Removed hard visual split between thumbnail and lower metadata container.
+     - Entire card surface is 100% continuous wallpaper artwork with 14px rounded corners.
+     - Implemented multi-stop bottom gradient scrim (`--wp-scrim-gradient`) ensuring high text readability without blocking the artwork.
+     - Floating overlaid controls: top-left media badge (`[ 🖼 PICTURE ]`, `[ 🎬 VIDEO ]`, `[ 🌐 STREAM ]`, `[ ⚡ CANVAS ]`), top-right heart `♡` and context menu `⋯`, bottom-left title, creator credit (`by {author}`), subtle tag chips, and bottom-right resting `[ ▶ Apply ]` button.
+     - Restrained hover state: artwork dims softly (`rgba(5,7,12,0.32)`), resting apply button fades out cleanly, and centered floating actions (`[ ▶ Preview ]` and `[ ▶ Apply to Desktop ]`) appear smoothly without giant black overlays.
+  2. **Unified Base Component (`src/components/WallpaperCard/index.jsx`)**:
+     - Created shared, reusable `WallpaperCard` component supporting normal cards and 2-column featured hero cards.
+     - Adopted across both **Library** (gallery grid) and **Home** (Home Favorites) ensuring product-wide consistency.
+  3. **Theme & CSS System Updates (`src/styles/index.css`, `src/styles/themes.css`)**:
+     - Added `.wp-overlay-card`, `.wp-overlay-thumb`, `.wp-overlay-badge-tl`, `.wp-overlay-badge-tr`, `.wp-overlay-scrim`, `.wp-glass-pill`, `.wp-glass-icon-btn`, `.wp-pill-apply-resting`, `.wp-overlay-hover-actions`.
+     - Added semantic tokens `--wp-scrim-gradient`, `--wp-text-title`, and `--wp-text-creator` to both Aether Dark and Aether Light themes.
+  4. **Performance & Memory Protection Intact**:
+     - Central `previewManager` preserved: single active hardware video decoder (`MAX = 1`), 250ms debounce, monotonic cancellation, and strict teardown.
+  5. **Verification & Visual QA**:
+     - `npm run build`: Passes in 535ms with 0 errors.
+     - Playwright visual verification across Library gallery, Library card hover, Home Favorites, Light theme, and responsive viewports (1280×800, 1024×768).
+     - Screenshots saved to artifact storage and recorded in `walkthrough.md`.
+- **Build status:** ✅ Passes cleanly in 535ms.
+---

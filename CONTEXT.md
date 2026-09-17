@@ -3,27 +3,25 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-17 17:25 IST — Personalization / Theme System Refinement:
-1. **Spatial Composition Redesign (`src/pages/Personalization.jsx`)**:
-   - Converted Personalization from disconnected card dashboard into a unified, continuous application surface matching Audio and Displays (`settings-page-container`, `settings-page-header`, `SettingSection`, `SettingRow`).
-   - Replaced bouncing cards with restrained `.theme-preset-tile`s emphasizing visual previews, clean typography, and subtle selected states without garish glow.
-2. **Display Name Cleanup (Zero ID Breaking)**:
-   - Stripped "Aether" and "Sovereign" prefixes from user-facing theme display labels across `BUILTIN_THEMES`, `Personalization.jsx`, `StatusBar`, and `Settings.jsx`.
-   - Preserved all internal IDs strictly intact (`aether-dark`, `aether-light`, `sovereign-onyx`, `sovereign-slate`, `sovereign-studio`, `sovereign-obsidian`, `sovereign-manifesto`, `sovereign-light`).
-   - Display names mapped cleanly: Dark, Light, Onyx, Slate, Studio, Obsidian, Manifesto, Light Classic.
-3. **Theme Studio Closable Workspace (`src/pages/Personalization.jsx`)**:
-   - Elevated Custom Theme Studio into a dedicated, high-productivity editor workspace.
-   - Implemented sticky Live Preview Stage with mock window, mini sidebar, sample application surface, and real-time token rendering.
-   - Added dirty state tracking (`hasUnsavedChanges`), unsaved changes confirmation modal ("Discard unsaved changes? Keep Editing / Discard & Exit"), and clean teardown of temporary inline CSS variables.
-4. **Save Custom Themes as Presets under MY PRESETS (`src/pages/Personalization.jsx`, `src/store/useStore.js`)**:
-   - Implemented `SavePresetModal` with name validation (non-empty, max 32 chars) and graceful duplicate collision detection/overwrite prompt.
-   - User-saved presets render seamlessly in the preset browser under "MY PRESETS" with mini wireframe, accent dot, checkmark indicator, Edit in Studio, Rename (`RenamePresetModal`), Export JSON, and Delete (`DeletePresetModal` with confirmation; built-ins protected).
-   - Full backward compatibility with existing `themes` map in Zustand store and localStorage.
-5. **Verification & Cross-Theme Testing**:
-   - Built frontend bundle via `npm run build` (571ms, 0 errors).
-   - Verified Rust backend via `cargo check` (3.54s, 0 errors).
-   - Verified in browser via Playwright across Dark, Light, and custom themes ("Midnight Glass Pro").
-   - Responsive verification passed at 1440×900, 1280×800, and 1024×768.
+2026-09-17 19:30 IST — Wallpaper Card System Redesign (Continuous Artwork Surface):
+1. **Core Principle — The Wallpaper IS The Card**:
+   - Eliminated the previous hard visual split (thumbnail on top, separate dark metadata panel on the bottom).
+   - Entire card surface is now 100% continuous wallpaper artwork with 14px border radius.
+   - All metadata, tags, and action buttons float naturally over a subtle bottom readability gradient (`--wp-scrim-gradient`).
+2. **Unified `WallpaperCard` Shared Component (`src/components/WallpaperCard/index.jsx`)**:
+   - Created reusable base component used across both **Library** (Featured Hero 2-column card + standard grid cards) and **Home** (Home Favorites).
+   - Top-left: compact frosted media type pill (`[ 🖼 PICTURE ]`, `[ 🎬 VIDEO ]`, `[ 🌐 STREAM ]`, `[ ⚡ CANVAS ]`).
+   - Top-right: frosted glass Heart `♡` and context menu `⋯`.
+   - Bottom overlay: crisp title, creator line (`by {author}`), subtle tag chips (`#tag`), resting floating action `[ ▶ Apply ]`.
+   - Hover state: subtle backdrop dimming (`rgba(5,7,12,0.32)`), resting apply cleanly fades out, and centered floating actions (`[ ▶ Preview ]` and `[ ▶ Apply to Desktop ]`) appear without obscuring the artwork.
+3. **Hardware Decoder & Preview Protection**:
+   - Preserved centralized `previewManager` (`src/lib/previewManager.js`): single active preview slot (`MAX = 1`), 250ms hover debounce, and strict video decoder teardown (`pause()`, `removeAttribute('src')`, `load()`).
+4. **Theme Semantics & Multi-Theme Adaptability**:
+   - Integrated semantic tokens `--wp-scrim-gradient`, `--wp-text-title`, and `--wp-text-creator` into `themes.css` for both Aether Dark and Aether Light.
+5. **Verification**:
+   - Clean `npm run build` (535ms).
+   - Playwright visual verification across Library gallery, Library card hover, Home Favorites, Light theme, and responsive viewports (1280×800, 1024×768).
+   - Preserved on dedicated feature branch `feature/library-redesign-preview-overhaul`.
 
 ---
 
@@ -230,6 +228,7 @@ npm run tauri:dev
 | 2026-09-17 | Antigravity (Google DeepMind) | Home, Library & Community UX/UI Redesign: Eliminated intrusive 50px browser preview banner with floating 12px pill; created full-window application surface (.content-page-container, max-width 1380px); redesigned Home with 16:9 cinematic wallpaper stage and compact horizontal active engine parameter strip; redesigned Library with 4-column responsive grid, restrained type badges, and clear button hierarchy; redesigned Community with 3-tier discovery toolbar, editorial cards, prominent creator credits (by {author}), and clean action pair ([+ Library] and [Apply]); verified in Aether Dark & Light across 1440x900, 1280x800, and 1024x768 with Playwright screenshots, npm run build (652ms), and cargo check (3.81s). |
 | 2026-09-17 | Antigravity (Google DeepMind) | Production Release Build of Standalone AetherFlow.exe: Built production bundle via `npm run build` (766ms), compiled release binary via `cargo build --release` (2m 18s), deployed fresh 7.25MB standalone `AetherFlow.exe`, and launched running process (PID 24172) with native WorkerW desktop wallpaper pinning and MPV/WebStream integration. |
 | 2026-09-17 | Antigravity (Google DeepMind) | Resolved Custom Theme Studio Crash & Home Wallpaper Disappearance: Fixed undefined `handleToggleLivePreview` & `handleLoadStarterPreset` in `Personalization.jsx`; restored automatic re-pinning of custom wallpapers in `useStore.js` and auto-healing in `Home.jsx`; hardened `ErrorBoundary` cache reset against data wipes; recompiled & deployed updated `AetherFlow.exe` (PID 29156). |
+| 2026-09-17 | Antigravity (Google DeepMind) | Wallpaper Card System Redesign: Eliminated hard split / solid metadata box underneath cards; transformed cards into 100% continuous artwork surfaces with subtle multi-stop bottom scrim gradients; created unified WallpaperCard component across Library (featured & standard) and Home (favorites); implemented compact type badges, top-right controls, resting apply button, and clean hover actions without blacking out artwork; preserved central single-slot PreviewManager; verified across Dark/Light themes and viewports. |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 
