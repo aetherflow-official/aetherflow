@@ -2644,3 +2644,28 @@
   - Rebuilt frontend bundle (`npm run build`) to ensure clean distribution output.
 - **Build status:** ✅ Passes cleanly.
 ---
+## Session: 2026-09-17 18:50 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul` (Baseline: 127bb01)
+- **Task:** Flagship Library Redesign + Hover Preview Overhaul
+- **Completed:**
+  1. **Editorial Asymmetric Gallery Composition (`src/pages/Library.jsx`, `src/styles/index.css`)**:
+     - Redesigned Library to match flagship visual reference (`media_1789650585280.jpg`).
+     - Asymmetric 2-column featured hero card in Row 1 (`.library-featured-card`), panoramic artwork, tags, and direct Apply action.
+     - Split Add button `[ + Add Wallpaper | ⌄ ]` with options for Local Media and Web Stream.
+     - Two-tier toolbar: full-width search input, `All Types` dropdown, `Sort` dropdown, view switcher (`[ ⊞ ] [ ☰ ]`), and pill filters with dynamic item counts.
+     - Hover overlay with `[ 👁 Preview ]` (translucent dark pill) and `[ ▶ Apply to Desktop ]` (vibrant blue pill).
+     - Context menu (`···`) for Pin to Home, Rename, and Delete.
+     - High-definition `LibraryPreviewModal` with instant cleanup on close.
+  2. **Central Single-Slot `previewManager` (`src/lib/previewManager.js`, `src/components/WallpaperThumbnail/index.jsx`)**:
+     - Hard constraint enforced: `MAX ACTIVE HOVER PREVIEW MEDIA PLAYERS = 1`.
+     - 250ms hover debounce prevents hardware video decoder allocation during rapid cursor sweeps.
+     - Monotonic request counter eliminates race conditions.
+     - Strict teardown: `pause()`, `removeAttribute('src')`, `load()`, and DOM detachment.
+     - YouTube/Web Streams strictly use high-resolution static posters on hover (zero iframes/WebView2).
+  3. **Verification & Performance**:
+     - Verified in browser with Playwright across 1440×900, 1280×800, 1024×768, and Light Theme.
+     - Verified modal workflows (Preview, Add Web Stream, List/Grid toggle).
+     - RAM spikes eliminated: rapid sweeping across cards results in 0 extra decoders and 0 memory leaks.
+     - `npm run build`: Passes in 484ms with 0 errors.
+---
