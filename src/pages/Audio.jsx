@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
-import {
-  Volume2, VolumeX, Mic, Monitor, Music, Shield, Play, Square, Check
-} from 'lucide-react'
+import { Monitor, Play, Square } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
-import { SettingRow, SliderRow } from '../components/Settings/SettingRow.jsx'
+import {
+  SettingSection,
+  SettingRow,
+  SliderRow,
+  AetherToggle,
+  AetherSelect,
+  AetherSegmented,
+} from '../components/Settings/SettingsUI.jsx'
 
 export default function AudioPage() {
   const audioVolume = useStore(s => s.audioVolume) ?? 50
@@ -27,7 +32,7 @@ export default function AudioPage() {
   const visualizerAudioDeviceId = useStore(s => s.visualizerAudioDeviceId) || 'default'
   const setVisualizerAudioDeviceId = useStore(s => s.setVisualizerAudioDeviceId)
   const [audioInputDevices, setAudioInputDevices] = useState([
-    { deviceId: 'default', label: 'Default (Follows Windows System Default)' }
+    { deviceId: 'default', label: 'Windows Default' }
   ])
   const [isTestingAudio, setIsTestingAudio] = useState(false)
   const [testAudioLevel, setTestAudioLevel] = useState(0)
@@ -78,7 +83,7 @@ export default function AudioPage() {
         if (!active) return
         const inputs = devs.filter(d => d.kind === 'audioinput')
         const list = [
-          { deviceId: 'default', label: 'Default (Follows Windows System Default)' }
+          { deviceId: 'default', label: 'Windows Default' }
         ]
         inputs.forEach((d, idx) => {
           if (d.deviceId && d.deviceId !== 'default') {
@@ -240,38 +245,19 @@ export default function AudioPage() {
   }
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 48 }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
-            Audio & Spectrum
-          </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
-            Master volume output, audio-reactive frequency analysis, hardware input devices, and per-display sound routing
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="telemetry-chip font-mono" style={{ color: audioMuted ? 'var(--color-rose)' : 'var(--color-emerald)' }}>
-            {audioMuted ? 'SOUND MUTED' : `VOLUME: ${audioVolume}%`}
-          </span>
-        </div>
-      </div>
+    <div className="settings-page-container animate-fadeIn">
+      {/* Page Header */}
+      <header className="settings-page-header">
+        <h1 className="settings-page-title">Audio</h1>
+        <p className="settings-page-desc">
+          Master playback volume, reactive visualizer input, and per-display sound routing.
+        </p>
+      </header>
 
-      {/* Card 1: Master Volume & Audio Reactivity */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Mic size={16} style={{ color: 'var(--color-rose)' }} />
-            <span className="text-sm font-semibold">Audio & Reactive Engine</span>
-          </div>
-          <span className="telemetry-chip font-mono" style={{ color: audioMuted ? 'var(--color-rose)' : 'var(--color-emerald)' }}>
-            {audioMuted ? 'MUTED' : `${audioVolume}%`}
-          </span>
-        </div>
-
+      {/* SECTION 1: MASTER PLAYBACK */}
+      <SettingSection title="Master playback">
         <SliderRow
-          label="Master Wallpaper Volume"
+          label="Wallpaper volume"
           desc="Controls audio output across all active video and YouTube wallpapers"
           value={audioVolume}
           set={handleVolumeChange}
@@ -287,184 +273,143 @@ export default function AudioPage() {
         />
 
         <SettingRow
-          label="Mute All Wallpapers"
-          desc="Silences all audio immediately without changing slider level"
+          label="Mute all wallpapers"
+          desc="Silences all audio immediately without changing the volume level"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={audioMuted} onChange={handleMuteToggle} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={audioMuted}
+            onChange={handleMuteToggle}
+            ariaLabel="Mute all wallpapers"
+          />
         </SettingRow>
 
         <SettingRow
-          label="Audio Reactive Mode"
+          label="Audio reactive"
           desc="Enables visual pulses and particle reactions synchronized to real-time audio input"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={audioReactive} onChange={toggleAudioReactive} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={audioReactive}
+            onChange={toggleAudioReactive}
+            ariaLabel="Audio reactive mode"
+          />
         </SettingRow>
 
         {audioReactive && (
-          <div style={{ padding: '14px 18px', background: 'rgba(255,255,255,0.02)' }}>
-            <div className="text-sm font-semibold" style={{ marginBottom: 4 }}>Reactive Audio Source</div>
-            <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
-              Choose which input stream drives audio reactive visual effects
-            </div>
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={`segmented-item ${audioSource === 'mic' ? 'active-brand' : ''}`}
-                onClick={() => setAudioSource('mic')}
-              >
-                Microphone
-              </button>
-              <button
-                type="button"
-                className={`segmented-item ${audioSource === 'system' ? 'active-brand' : ''}`}
-                onClick={() => setAudioSource('system')}
-              >
-                System Audio (CAVA)
-              </button>
-            </div>
-          </div>
+          <SettingRow
+            label="Reactive audio source"
+            desc="Choose which input stream drives audio reactive visual effects"
+          >
+            <AetherSegmented
+              items={[
+                { id: 'mic', label: 'Microphone' },
+                { id: 'system', label: 'System Audio (CAVA)' },
+              ]}
+              value={audioSource}
+              onChange={setAudioSource}
+            />
+          </SettingRow>
         )}
-      </div>
+      </SettingSection>
 
-      {/* Card 2: Audio Hardware Input Device & Live VU Meter */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Music size={16} style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-sm font-semibold">Visualizer Audio Source Device</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Hardware Input</span>
-        </div>
+      {/* SECTION 2: VISUALIZER INPUT */}
+      <SettingSection title="Visualizer input">
+        <SettingRow
+          label="Input device"
+          desc="Select the specific recording device or virtual loopback interface used by audio visualizers"
+        >
+          <AetherSelect
+            value={visualizerAudioDeviceId}
+            onChange={e => handleVisualizerDeviceSelect(e.target.value)}
+            options={audioInputDevices.map(dev => ({ value: dev.deviceId, label: dev.label }))}
+            style={{ width: '100%', maxWidth: 360 }}
+          />
+        </SettingRow>
 
-        <div style={{ padding: '16px 18px' }}>
-          <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
-            Select the specific audio recording device or virtual loopback interface used by audio visualizers.
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <label className="text-xs font-semibold" style={{ display: 'block', marginBottom: 6, color: 'var(--text-main)' }}>
-              Hardware Input Device
-            </label>
-            <select
-              className="select-input"
-              value={visualizerAudioDeviceId}
-              onChange={e => handleVisualizerDeviceSelect(e.target.value)}
-              style={{ width: '100%', maxWidth: 460 }}
+        <SettingRow
+          label="Signal level"
+          desc={`Real-time hardware input level · ${isTestingAudio ? 'Testing Signal (10s)' : 'Standby'}`}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 260, justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                width: 130,
+                height: 6,
+                background: 'var(--control-bg)',
+                borderRadius: 3,
+                overflow: 'hidden',
+                border: '1px solid var(--border-subtle)',
+              }}
             >
-              {audioInputDevices.map(dev => (
-                <option key={dev.deviceId} value={dev.deviceId}>
-                  {dev.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Real-time Hardware Audio VU Meter */}
-          <div style={{
-            padding: '12px 14px',
-            borderRadius: 8,
-            background: 'color-mix(in srgb, var(--border-main) 20%, var(--bg-card))',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10
-          }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold" style={{ color: 'var(--text-main)' }}>Hardware Signal Decibel Meter</span>
-                <span className="text-xs text-muted">({isTestingAudio ? 'Testing Signal' : 'Standby'})</span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ fontSize: 11, padding: '3px 10px', height: 24, display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                onClick={toggleAudioTest}
-              >
-                {isTestingAudio ? <Square size={11} /> : <Play size={11} />}
-                {isTestingAudio ? 'Stop 10s Test' : 'Test Audio Input'}
-              </button>
-            </div>
-
-            <div style={{
-              width: '100%',
-              height: 10,
-              background: '#000000',
-              borderRadius: 5,
-              overflow: 'hidden',
-              position: 'relative',
-              border: '1px solid var(--border-main)'
-            }}>
               <div
                 style={{
                   height: '100%',
-                  width: `${testAudioLevel}%`,
+                  width: '100%',
+                  transform: `scaleX(${testAudioLevel / 100})`,
+                  transformOrigin: 'left center',
                   background: testAudioLevel > 80
-                    ? 'linear-gradient(90deg, #10b981, #f59e0b, #ef4444)'
+                    ? 'linear-gradient(90deg, var(--color-emerald), var(--color-amber), var(--color-rose))'
                     : testAudioLevel > 50
-                    ? 'linear-gradient(90deg, #10b981, #f59e0b)'
+                    ? 'linear-gradient(90deg, var(--color-emerald), var(--color-amber))'
                     : 'var(--color-brand)',
-                  borderRadius: 4,
-                  transition: 'width 0.08s ease',
-                  boxShadow: isTestingAudio ? '0 0 10px var(--color-brand)' : 'none'
+                  borderRadius: 3,
+                  transition: 'transform 0.08s ease',
                 }}
               />
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Card 3: Multi-Monitor Audio Routing by Display */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Volume2 size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Audio Output by Display</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>
-            {preferredAudioMonitor === 'auto'
-              ? 'Auto (Primary)'
-              : (monitors.find(m => m.label === preferredAudioMonitor)?.displayName || monitors.find(m => m.label === preferredAudioMonitor)?.name || 'Custom Display')}
-          </span>
-        </div>
-
-        <div style={{ padding: '16px 18px' }}>
-          <div className="text-xs text-muted" style={{ marginBottom: 14, lineHeight: 1.5 }}>
-            Select which monitor's wallpaper outputs sound. In multi-monitor setups, other displays are automatically muted to prevent audio desync and echo.
-          </div>
-
-          <div className="segmented-control" style={{ marginBottom: 16 }}>
             <button
               type="button"
-              className={`segmented-item ${preferredAudioMonitor === 'auto' ? 'active-brand' : ''}`}
-              onClick={() => handlePreferredAudioMonitorChange('auto')}
+              className="aether-preset-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                fontSize: 11.5,
+              }}
+              onClick={toggleAudioTest}
             >
-              Auto (Primary Screen)
+              {isTestingAudio ? <Square size={11} /> : <Play size={11} />}
+              <span>{isTestingAudio ? 'Stop Test' : 'Test Audio Input'}</span>
             </button>
-            <button
-              type="button"
-              className={`segmented-item ${preferredAudioMonitor !== 'auto' ? 'active-brand' : ''}`}
-              onClick={() => {
+          </div>
+        </SettingRow>
+      </SettingSection>
+
+      {/* SECTION 3: AUDIO OUTPUT */}
+      <SettingSection title="Audio output">
+        <SettingRow
+          label="Audio output mode"
+          desc="Choose whether audio follows the primary display or is assigned to a specific screen"
+        >
+          <AetherSegmented
+            items={[
+              { id: 'auto', label: 'Auto (Primary Screen)' },
+              { id: 'specific', label: 'Specific Display' },
+            ]}
+            value={preferredAudioMonitor === 'auto' ? 'auto' : 'specific'}
+            onChange={mode => {
+              if (mode === 'auto') {
+                handlePreferredAudioMonitorChange('auto')
+              } else {
                 const first = monitors[0]?.label || 'wallpaper_0'
                 handlePreferredAudioMonitorChange(first)
-              }}
-            >
-              Specific Display ({monitors.length > 1 ? `${monitors.length} Displays` : 'Per-Screen'})
-            </button>
+              }
+            }}
+          />
+        </SettingRow>
+
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="settings-item-label" style={{ marginBottom: 3 }}>
+            Audio output display
+          </div>
+          <div className="settings-item-desc" style={{ marginBottom: 12 }}>
+            Select which display provides wallpaper audio. In multi-monitor setups, other displays are automatically muted to prevent audio desync and echo.
           </div>
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`,
-            gap: 12,
-            marginBottom: 16,
+            gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`,
+            gap: 10,
           }}>
             {(monitors.length > 0 ? monitors : [
               { label: 'wallpaper_0', name: '\\\\.\\DISPLAY1', width: 1920, height: 1080, isPrimary: true }
@@ -477,123 +422,79 @@ export default function AudioPage() {
                 <div
                   key={m.label || idx}
                   onClick={() => handlePreferredAudioMonitorChange(m.label)}
-                  className={`option-card ${isSelected ? 'selected' : ''}`}
-                  style={{
-                    padding: '14px 16px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    minHeight: 100,
-                    position: 'relative',
-                    background: isSelected
-                      ? 'color-mix(in srgb, var(--color-brand) 12%, var(--bg-card))'
-                      : 'var(--bg-card)',
-                    borderColor: isSelected ? 'var(--color-brand)' : 'var(--border-subtle)',
-                    boxShadow: isSelected ? '0 0 16px -4px var(--color-brand)' : 'none',
-                    transition: 'all 0.2s ease',
-                  }}
+                  className={`display-card-compact ${isSelected ? 'selected' : ''}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Monitor size={14} style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-muted)' }} />
-                      <span className="font-semibold text-xs" style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
-                        {m.displayName || `Display ${m.displayNumber || idx + 1}`}
-                      </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Monitor size={15} style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-muted)' }} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 500, color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
+                          {m.displayName || `Display ${m.displayNumber || idx + 1}`}
+                        </span>
+                        {m.isPrimary && (
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 600,
+                            letterSpacing: '0.04em',
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            background: 'color-mix(in srgb, var(--color-brand) 18%, transparent)',
+                            color: 'var(--color-brand)',
+                          }}>
+                            PRIMARY
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
+                        {m.width} × {m.height}
+                      </div>
                     </div>
-                    {m.isPrimary && (
-                      <span className="badge" style={{ fontSize: 9, padding: '1px 5px' }}>Primary</span>
-                    )}
                   </div>
 
-                  <div style={{ margin: '10px 0' }}>
-                    <div className="text-xs font-mono" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
-                      {m.width} × {m.height}
-                    </div>
-                    <div className="text-xs text-muted" style={{ fontSize: 10, marginTop: 2 }}>
-                      {m.name || m.label}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between" style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border-subtle)' }}>
-                    <span style={{ fontSize: 10.5, color: isSelected ? 'var(--color-brand)' : 'var(--text-muted)', fontWeight: isSelected ? 600 : 400 }}>
-                      {isSelected ? 'Sound Active' : 'Muted'}
+                  <div>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: isSelected ? 'var(--color-brand)' : 'var(--text-muted)'
+                    }}>
+                      {isSelected ? 'Active' : 'Muted'}
                     </span>
-                    {isSelected ? (
-                      <span
-                        style={{
-                          width: 22, height: 22, borderRadius: '50%',
-                          background: 'var(--color-brand)',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff',
-                        }}
-                        title="Active sound emitter"
-                      >
-                        <Volume2 size={12} strokeWidth={2.5} />
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', opacity: 0.4 }}>
-                        <VolumeX size={14} />
-                      </span>
-                    )}
                   </div>
                 </div>
               )
             })}
           </div>
-
-          <div className="flex items-center justify-between" style={{
-            padding: '12px 14px',
-            background: 'rgba(255,255,255,0.02)',
-            borderRadius: 8,
-            border: '1px solid var(--border-subtle)',
-            marginBottom: 12,
-          }}>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium" style={{ color: 'var(--text-main)' }}>
-                Play audio only when desktop is focused
-              </span>
-              <span className="text-xs text-muted" style={{ fontSize: 10.5, marginTop: 2 }}>
-                Mutes wallpaper audio as soon as another window or game is active
-              </span>
-            </div>
-            <label className="toggle" style={{ margin: 0 }}>
-              <input
-                type="checkbox"
-                checked={audioPlaybackRule === 'mute-focused'}
-                onChange={() => {
-                  const nextRule = audioPlaybackRule === 'mute-focused' ? 'mute-covered' : 'mute-focused'
-                  handleAudioPlaybackRuleChange(nextRule)
-                }}
-              />
-              <div className="toggle-track" />
-              <div className="toggle-thumb" />
-            </label>
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted" style={{ marginBottom: 6 }}>
-              Audio Playback Policy
-            </div>
-            <div className="segmented-control" style={{ width: '100%' }}>
-              {[
-                { id: 'always',       label: 'Always Active (Recommended)' },
-                { id: 'mute-covered', label: 'Mute When Covered' },
-                { id: 'mute-focused', label: 'Mute When Focused' },
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`segmented-item ${audioPlaybackRule === opt.id ? 'active-brand' : ''}`}
-                  onClick={() => handleAudioPlaybackRuleChange(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
-      </div>
+
+        <SettingRow
+          label="Play audio only when desktop is focused"
+          desc="Mutes wallpaper audio as soon as another window or game is active"
+        >
+          <AetherToggle
+            checked={audioPlaybackRule === 'mute-focused'}
+            onChange={() => {
+              const nextRule = audioPlaybackRule === 'mute-focused' ? 'mute-covered' : 'mute-focused'
+              handleAudioPlaybackRuleChange(nextRule)
+            }}
+            ariaLabel="Play audio only when desktop is focused"
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Audio playback policy"
+          desc="Behavior when windows cover the wallpaper or lose focus"
+        >
+          <AetherSegmented
+            items={[
+              { id: 'always', label: 'Always Active' },
+              { id: 'mute-covered', label: 'Mute When Covered' },
+              { id: 'mute-focused', label: 'Mute When Focused' },
+            ]}
+            value={audioPlaybackRule}
+            onChange={handleAudioPlaybackRuleChange}
+          />
+        </SettingRow>
+      </SettingSection>
     </div>
   )
 }

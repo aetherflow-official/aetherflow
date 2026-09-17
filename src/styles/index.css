@@ -320,6 +320,29 @@ input:checked ~ .toggle-thumb {
   box-shadow: 0 0 0 1px var(--color-brand), 0 8px 24px -4px color-mix(in srgb, var(--color-brand) 30%, transparent) !important;
 }
 
+/* ── Theme Preset Tile (Restrained Desktop Preset Surface) ─────────────────── */
+.theme-preset-tile {
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--border-main) 14%, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  position: relative;
+  text-align: left;
+  user-select: none;
+}
+.theme-preset-tile:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--border-main) 26%, var(--bg-card));
+}
+.theme-preset-tile.selected {
+  border-color: var(--color-brand) !important;
+  background: color-mix(in srgb, var(--color-brand) 7%, var(--bg-card)) !important;
+}
+
 /* ── Settings Category Tabs ────────────────────────────────────────────────── */
 .settings-nav-bar {
   display: flex;
@@ -495,15 +518,15 @@ input:checked ~ .toggle-thumb {
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border: 1px solid var(--border-main);
-  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   overflow: hidden;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-card);
 }
 .mp-card:hover {
-  transform: translateY(-4px);
-  border-color: color-mix(in srgb, var(--color-brand) 50%, var(--border-main));
-  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.45), 0 0 0 1px color-mix(in srgb, var(--color-brand) 30%, transparent);
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .mp-thumb-container {
@@ -513,27 +536,24 @@ input:checked ~ .toggle-thumb {
   overflow: hidden;
   background: linear-gradient(135deg, rgba(var(--rgb-card), 0.8), rgba(var(--rgb-base), 0.95));
   cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .mp-thumb-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.mp-card:hover .mp-thumb-img {
-  transform: scale(1.05);
 }
 
 .mp-thumb-overlay {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
+  background: radial-gradient(circle at center, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%);
   opacity: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.18s ease;
   pointer-events: none;
 }
 .mp-card:hover .mp-thumb-overlay {
@@ -873,5 +893,460 @@ input:checked ~ .toggle-thumb {
 }
 .community-list-row:hover {
   border-color: color-mix(in srgb, var(--color-brand) 40%, var(--border-main));
-  transform: translateY(-1px);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   AETHER CONTENT LAYOUT SYSTEM (Home, Library, Community)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.content-page-container {
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 4px clamp(16px, 2.5vw, 36px) 64px;
+  box-sizing: border-box;
+}
+
+.content-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.content-page-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.content-page-subtitle {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 4px 0 0 0;
+}
+
+/* Desktop Wallpaper Stage */
+.wallpaper-stage-card {
+  position: relative;
+  width: 100%;
+  height: clamp(230px, 24vw, 300px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 20px;
+}
+
+/* Horizontal Engine Parameters Control Bar */
+.engine-params-surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 28px;
+  box-shadow: var(--shadow-card);
+}
+
+.engine-params-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   AETHER CONTINUOUS SETTINGS SYSTEM (Windows 11 Inspiration + Precision Craft)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.settings-page-container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0;
+  padding: 4px clamp(20px, 2.5vw, 40px) 80px;
+  box-sizing: border-box;
+}
+
+.settings-page-header {
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-page-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.settings-page-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 680px;
+}
+
+/* Section Header & Continuous Structure */
+.settings-section {
+  margin-bottom: 34px;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-main);
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Settings Group: Continuous surface with subtle dividers */
+.settings-group {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  box-shadow: none;
+}
+
+/* Settings Item Row: Consistent Left-to-Right Column Alignment */
+.settings-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.settings-item-row:hover {
+  background: var(--bg-hover);
+}
+
+.settings-item-info {
+  flex: 1;
+  min-width: 0;
+  max-width: 620px;
+}
+
+.settings-item-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+.settings-item-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.settings-item-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 260px;
+}
+
+/* Precision Slider Row: Left label/desc, Right aligned slider cluster */
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.settings-slider-row:hover {
+  background: var(--bg-hover);
+}
+
+.settings-slider-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 260px;
+}
+
+.settings-slider-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.settings-slider-value {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: var(--control-bg, color-mix(in srgb, var(--border-main) 30%, var(--bg-base)));
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  min-width: 44px;
+  text-align: center;
+}
+
+/* Precision Slider Element */
+.aether-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  min-width: 100px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--control-bg, color-mix(in srgb, var(--border-main) 50%, var(--bg-base)));
+  outline: none;
+  cursor: pointer;
+}
+.aether-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  transition: transform 0.1s ease;
+}
+.aether-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+.aether-slider:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.2);
+  background: var(--color-brand);
+}
+.aether-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+}
+
+/* Preset Buttons */
+.preset-btn, .aether-preset-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--control-bg, color-mix(in srgb, var(--border-main) 20%, var(--bg-base)));
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+.preset-btn:hover, .aether-preset-btn:hover {
+  background: var(--control-hover, color-mix(in srgb, var(--border-main) 40%, var(--bg-base)));
+  color: var(--text-main);
+  border-color: var(--border-main);
+}
+.preset-btn.active, .aether-preset-btn.active {
+  background: var(--color-brand);
+  color: #ffffff;
+  border-color: var(--color-brand);
+}
+
+/* Precision Toggle Switch */
+.aether-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.aether-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.aether-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--control-bg, color-mix(in srgb, var(--border-main) 50%, var(--bg-base)));
+  border: 1px solid var(--border-main);
+  border-radius: 10px;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.aether-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s ease;
+}
+.aether-toggle input:checked ~ .aether-toggle-track {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.aether-toggle input:checked ~ .aether-toggle-thumb {
+  transform: translateX(16px);
+}
+.aether-toggle input:focus-visible ~ .aether-toggle-track {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Precision Select Dropdown */
+.select-input, .aether-select {
+  height: 32px;
+  padding: 0 28px 0 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text-main);
+  background-color: var(--control-bg, color-mix(in srgb, var(--border-main) 25%, var(--bg-base)));
+  border: 1px solid var(--border-main);
+  border-radius: 6px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.15s ease;
+}
+.select-input:hover, .aether-select:hover {
+  border-color: var(--color-brand);
+}
+.select-input:focus, .aether-select:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 1px var(--color-brand);
+}
+.select-input option, .aether-select option {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+/* Precision Segmented Control */
+.aether-segmented {
+  display: inline-flex;
+  align-items: center;
+  background: var(--control-bg, color-mix(in srgb, var(--border-main) 30%, var(--bg-base)));
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.aether-segmented-btn {
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.aether-segmented-btn:hover {
+  color: var(--text-main);
+}
+.aether-segmented-btn.active {
+  background: var(--bg-card);
+  color: var(--text-main);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+}
+.aether-segmented-btn.active-brand {
+  background: var(--color-brand);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Precision Display Card */
+.display-card-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--border-main) 14%, var(--bg-card));
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.display-card-compact:hover {
+  background: color-mix(in srgb, var(--border-main) 28%, var(--bg-card));
+  border-color: var(--border-main);
+}
+.display-card-compact.selected {
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 9%, var(--bg-card));
+}
+
+@media (max-width: 768px) {
+  .settings-page-container {
+    padding: 16px 20px 48px 20px;
+  }
+  .settings-item-row,
+  .settings-slider-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .settings-item-control,
+  .settings-slider-control {
+    width: 100%;
+    justify-content: space-between;
+    min-width: 0;
+  }
+  .aether-slider {
+    flex: 1;
+    width: auto;
+  }
+}
+
+

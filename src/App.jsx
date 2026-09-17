@@ -381,7 +381,8 @@ export default function App() {
                     color: isActive ? 'var(--color-brand)' : 'var(--text-muted)',
                     background: isActive ? 'color-mix(in srgb, var(--color-brand) 12%, transparent)' : 'transparent',
                     border: isActive ? '1px solid color-mix(in srgb, var(--color-brand) 28%, transparent)' : '1px solid transparent',
-                    boxShadow: isActive ? '0 0 14px var(--color-glow), var(--bevel-highlight)' : 'none',
+                    boxShadow: isActive ? '0 1px 3px rgba(0, 0, 0, 0.08)' : 'none',
+                    fontWeight: isActive ? 600 : 500,
                     transition: 'all 0.15s ease',
                     cursor: 'pointer',
                     overflow: 'hidden',
@@ -391,7 +392,7 @@ export default function App() {
                   onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}}
                   >
                     <Icon size={17} style={{ flexShrink: 0 }} />
-                    {!sidebarCollapsed && <span className="text-sm font-medium">{label}</span>}
+                    {!sidebarCollapsed && <span className="text-sm">{label}</span>}
                   </div>
                 )}
               </NavLink>
@@ -419,10 +420,10 @@ export default function App() {
                     background: 'var(--bg-card)',
                     backdropFilter: 'blur(24px)',
                     WebkitBackdropFilter: 'blur(24px)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    border: '1px solid var(--border-main)',
                     borderRadius: 12,
                     padding: '12px',
-                    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+                    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--border-subtle)',
                     zIndex: 1000,
                   }}>
                     {/* User header */}
@@ -603,25 +604,29 @@ export default function App() {
           padding: '24px',
         }}>
           {!isTauri() && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '10px 16px',
-              marginBottom: 20,
-              borderRadius: 10,
-              background: 'rgba(59, 130, 246, 0.08)',
-              border: '1px solid rgba(59, 130, 246, 0.25)',
-              color: '#93c5fd',
-              fontSize: 12,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14 }}>🌐</span>
-                <span>
-                  <strong>Web Preview Mode (Browser):</strong> Wallpapers preview in the browser. To set live animated wallpapers on your Windows desktop and customize the Taskbar, run <strong>AetherFlow.exe</strong>.
-                </span>
-              </div>
+            <div
+              style={{
+                position: 'fixed',
+                bottom: 44,
+                right: 16,
+                zIndex: 9000,
+                background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 6,
+                padding: '3px 9px',
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                pointerEvents: 'none',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              }}
+              title="Running in browser dev preview. Launch AetherFlow.exe for native Windows desktop pinning."
+            >
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--color-brand)' }} />
+              <span>Browser Preview</span>
             </div>
           )}
 

@@ -3,7 +3,7 @@
    All theme tokens as CSS custom properties on [data-theme].
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Base defaults (Sovereign Onyx) ───────────────────────────────────────── */
+/* ── Base defaults (Aether Dark) ───────────────────────────────────────── */
 :root {
   --card-opacity: 0.92;
   --sidebar-opacity: 0.88;
@@ -16,38 +16,148 @@
   --font-display: 'Outfit', 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
-  --rgb-base:         9, 9, 11;
-  --rgb-sidebar:     17, 17, 20;
-  --rgb-card:        26, 26, 32;
-  --rgb-card-hover:  38, 38, 46;
+  --rgb-base:         13, 15, 20;
+  --rgb-sidebar:     17, 20, 27;
+  --rgb-card:        22, 26, 35;
+  --rgb-card-hover:  29, 34, 46;
 
   --bg-base:         rgb(var(--rgb-base));
   --bg-sidebar:      rgba(var(--rgb-sidebar), var(--sidebar-opacity));
   --bg-card:         rgba(var(--rgb-card), var(--card-opacity));
   --bg-card-hover:   rgba(var(--rgb-card-hover), calc(var(--card-opacity) + 0.08));
+  --bg-elevated:     #1a1f2c;
+  --bg-hover:        rgba(255, 255, 255, 0.05);
+  --bg-active:       rgba(255, 255, 255, 0.09);
 
-  --border-main:     #27272a;
+  --border-main:     #242a38;
+  --border-subtle:   rgba(255, 255, 255, 0.07);
+  --border-strong:   #343c50;
   --border-accent:   #3b82f6;
   --color-brand:     #3b82f6;
   --color-brand-hover: #2563eb;
-  --color-glow:      rgba(59, 130, 246, 0.4);
+  --color-glow:      rgba(59, 130, 246, 0.35);
   --color-accent:    #60a5fa;
   --color-highlight: #818cf8;
-  --color-cyan:      #67e8f9;
-  --color-emerald:   #34d399;
-  --color-amber:     #fbbf24;
-  --color-rose:      #fb7185;
-  --color-purple:    #a78bfa;
+  --color-cyan:      #38bdf8;
+  --color-emerald:   #10b981;
+  --color-amber:     #f59e0b;
+  --color-rose:      #f43f5e;
+  --color-purple:    #8b5cf6;
 
-  --text-main:       #fafafa;
-  --text-muted:      #a1a1aa;
-  --text-subtle:     #52525b;
+  --text-main:       #f3f4f6;
+  --text-secondary:  #9ca3af;
+  --text-muted:      #9ca3af;
+  --text-subtle:     #6b7280;
 
-  --surface-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --border-subtle: rgba(255, 255, 255, 0.06);
+  --control-bg:      #191e2a;
+  --control-hover:   #212837;
+  --control-border:  #2d3548;
+
+  --surface-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --border-card-hover: rgba(255, 255, 255, 0.16);
   --surface-glass: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+  --glow-shadow:     0 4px 16px -2px rgba(59, 130, 246, 0.25);
+  --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 0 0 1px #3b82f6, 0 8px 24px rgba(59, 130, 246, 0.2);
+  --bevel-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
+
+/* ── Aether Dark — Refined Titanium Neutral (Default) ──────────────────────── */
+[data-theme="aether-dark"] {
+  --rgb-base:         13, 15, 20;
+  --rgb-sidebar:     17, 20, 27;
+  --rgb-card:        22, 26, 35;
+  --rgb-card-hover:  29, 34, 46;
+
+  --bg-base:         rgb(var(--rgb-base));
+  --bg-sidebar:      rgba(var(--rgb-sidebar), var(--sidebar-opacity));
+  --bg-card:         rgba(var(--rgb-card), var(--card-opacity));
+  --bg-card-hover:   rgba(var(--rgb-card-hover), calc(var(--card-opacity) + 0.08));
+  --bg-elevated:     #1a1f2c;
+  --bg-hover:        rgba(255, 255, 255, 0.05);
+  --bg-active:       rgba(255, 255, 255, 0.09);
+
+  --border-main:     #242a38;
+  --border-subtle:   rgba(255, 255, 255, 0.07);
+  --border-strong:   #343c50;
+  --border-accent:   #3b82f6;
+  --color-brand:     #3b82f6;
+  --color-brand-hover: #2563eb;
+  --color-glow:      rgba(59, 130, 246, 0.35);
+  --color-accent:    #60a5fa;
+  --color-highlight: #818cf8;
+  --color-cyan:      #38bdf8;
+  --color-emerald:   #10b981;
+  --color-amber:     #f59e0b;
+  --color-rose:      #f43f5e;
+  --color-purple:    #8b5cf6;
+
+  --text-main:       #f3f4f6;
+  --text-secondary:  #9ca3af;
+  --text-muted:      #9ca3af;
+  --text-subtle:     #6b7280;
+
+  --control-bg:      #191e2a;
+  --control-hover:   #212837;
+  --control-border:  #2d3548;
+
+  --glow-shadow:     0 4px 16px -2px rgba(59, 130, 246, 0.25);
+  --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 0 0 1px #3b82f6, 0 8px 24px rgba(59, 130, 246, 0.2);
+  --bevel-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --surface-bevel:   inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --border-card-hover: rgba(255, 255, 255, 0.16);
+  --surface-glass:   linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+/* ── Aether Light — Calm, Precise, High-Contrast Modern Canvas ─────────────── */
+[data-theme="aether-light"] {
+  --rgb-base:        246, 248, 250;
+  --rgb-sidebar:     255, 255, 255;
+  --rgb-card:        255, 255, 255;
+  --rgb-card-hover:  241, 244, 248;
+
+  --bg-base:         rgb(var(--rgb-base));
+  --bg-sidebar:      rgba(var(--rgb-sidebar), var(--sidebar-opacity));
+  --bg-card:         rgba(var(--rgb-card), var(--card-opacity));
+  --bg-card-hover:   rgba(var(--rgb-card-hover), calc(var(--card-opacity) + 0.05));
+  --bg-elevated:     #ffffff;
+  --bg-hover:        rgba(0, 0, 0, 0.04);
+  --bg-active:       rgba(0, 0, 0, 0.08);
+
+  --border-main:     #d0d7de;
+  --border-subtle:   rgba(0, 0, 0, 0.08);
+  --border-strong:   #afb8c1;
+  --border-accent:   #2563eb;
+  --color-brand:     #2563eb;
+  --color-brand-hover: #1d4ed8;
+  --color-glow:      rgba(37, 99, 235, 0.2);
+  --color-accent:    #0284c7;
+  --color-highlight: #6366f1;
+  --color-cyan:      #0891b2;
+  --color-emerald:   #059669;
+  --color-amber:     #d97706;
+  --color-rose:      #e11d48;
+  --color-purple:    #7c3aed;
+
+  --text-main:       #111827;
+  --text-secondary:  #4b5563;
+  --text-muted:      #4b5563;
+  --text-subtle:     #6b7280;
+
+  --control-bg:      #f0f2f5;
+  --control-hover:   #e5e8ed;
+  --control-border:  #cbd5e1;
+
+  --glow-shadow:     0 4px 16px -2px rgba(37, 99, 235, 0.15);
+  --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 0 0 1px #2563eb, 0 4px 16px rgba(37, 99, 235, 0.12);
+  --bevel-highlight: none;
+  --surface-bevel:   inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --border-card-hover: rgba(37, 99, 235, 0.4);
+  --surface-glass:   linear-gradient(180deg, rgba(0, 0, 0, 0.015) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
 
 /* ── Sovereign Onyx — Pure Titanium Black ─────────────────────────────────── */
 [data-theme="sovereign-onyx"] {

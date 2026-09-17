@@ -166,10 +166,13 @@ export const WALLPAPER_LIST = Object.values(ENGINES).filter(
 
 /** Prebuilt themes shipped with the app */
 export const BUILTIN_THEMES = [
-  { id: 'sovereign-onyx',       name: 'Sovereign Onyx',       accent: '#3b82f6', bg: '#09090b', category: 'dark' },
-  { id: 'sovereign-slate',      name: 'Sovereign Slate',       accent: '#6366f1', bg: '#0c0f17', category: 'dark' },
-  { id: 'sovereign-studio',     name: 'Sovereign Studio',      accent: '#10b981', bg: '#0a0e0f', category: 'dark' },
-  { id: 'sovereign-obsidian',   name: 'Sovereign Obsidian',    accent: '#f59e0b', bg: '#0e0b08', category: 'dark' },
-  { id: 'sovereign-manifesto',  name: 'Sovereign Manifesto',   accent: '#d42b2b', bg: '#f5f0e8', category: 'light' },
-  { id: 'sovereign-light',      name: 'Sovereign Light',       accent: '#2563eb', bg: '#f8fafc', category: 'light' },
+  { id: 'aether-dark',          name: 'Dark',          accent: '#3b82f6', bg: '#0d0f14', category: 'dark', isDefault: true },
+  { id: 'aether-light',         name: 'Light',         accent: '#2563eb', bg: '#f6f8fa', category: 'light' },
+  { id: 'sovereign-onyx',       name: 'Onyx',          accent: '#3b82f6', bg: '#09090b', category: 'dark' },
+  { id: 'sovereign-slate',      name: 'Slate',         accent: '#6366f1', bg: '#0c0f17', category: 'dark' },
+  { id: 'sovereign-studio',     name: 'Studio',        accent: '#10b981', bg: '#0a0e0f', category: 'dark' },
+  { id: 'sovereign-obsidian',   name: 'Obsidian',      accent: '#f59e0b', bg: '#0e0b08', category: 'dark' },
+  { id: 'sovereign-manifesto',  name: 'Manifesto',     accent: '#d42b2b', bg: '#f5f0e8', category: 'light' },
+  { id: 'sovereign-light',      name: 'Light Classic', accent: '#2563eb', bg: '#f8fafc', category: 'light' },
 ]
+

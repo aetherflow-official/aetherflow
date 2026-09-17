@@ -53,7 +53,7 @@ document.addEventListener('visibilitychange', () => {
 
 // Apply persisted theme to DOM before first paint
 const state = useStore.getState()
-const savedTheme = state.activeTheme
+const savedTheme = state.activeTheme || 'aether-dark'
 document.documentElement.setAttribute('data-theme', savedTheme)
 
 if (state.themes && state.themes[savedTheme]) {

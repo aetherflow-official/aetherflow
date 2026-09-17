@@ -1,52 +1,57 @@
 import React, { useState, useEffect } from 'react'
 import {
   Monitor, Zap, Battery, LayoutTemplate, RefreshCw,
-  ExternalLink, CheckCircle2, Check, Layers, AlertCircle, Eye
+  ExternalLink, CheckCircle2, Check, Layers
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
-import { SettingRow, SliderRow } from '../components/Settings/SettingRow.jsx'
+import {
+  SettingSection,
+  SettingRow,
+  SliderRow,
+  AetherToggle,
+  AetherSegmented,
+} from '../components/Settings/SettingsUI.jsx'
 
 function TaskbarWireframeIllustration({ styleId, isSelected }) {
   return (
     <div
       style={{
         width: '100%',
-        height: 64,
-        borderRadius: 6,
+        height: 52,
+        borderRadius: 5,
         position: 'relative',
         overflow: 'hidden',
-        border: `1px solid ${isSelected ? 'var(--color-brand)' : 'rgba(255,255,255,0.08)'}`,
-        boxShadow: isSelected ? '0 0 14px rgba(var(--rgb-brand), 0.25)' : 'none',
-        background: 'linear-gradient(135deg, #070e1d 0%, #150a26 50%, #0a1f24 100%)',
+        border: `1px solid ${isSelected ? 'var(--color-brand)' : 'var(--border-subtle)'}`,
+        background: 'linear-gradient(135deg, #070e1d 0%, #120a22 50%, #0a1b20 100%)',
         marginBottom: 8,
         pointerEvents: 'none',
       }}
     >
-      {/* Desktop Wallpaper simulated glow elements */}
+      {/* Subtle simulated desktop ambient colors */}
       <div
         style={{
           position: 'absolute',
-          top: 6,
-          left: 12,
-          width: 32,
-          height: 32,
+          top: 4,
+          left: 10,
+          width: 24,
+          height: 24,
           borderRadius: '50%',
           background: 'radial-gradient(circle, #38bdf8 0%, rgba(56,189,248,0) 70%)',
-          filter: 'blur(4px)',
-          opacity: 0.7,
+          filter: 'blur(3px)',
+          opacity: 0.5,
         }}
       />
       <div
         style={{
           position: 'absolute',
-          top: 10,
-          right: 16,
-          width: 38,
-          height: 38,
+          top: 8,
+          right: 14,
+          width: 28,
+          height: 28,
           borderRadius: '50%',
           background: 'radial-gradient(circle, #ec4899 0%, rgba(236,72,153,0) 70%)',
-          filter: 'blur(5px)',
-          opacity: 0.5,
+          filter: 'blur(4px)',
+          opacity: 0.4,
         }}
       />
 
@@ -57,12 +62,12 @@ function TaskbarWireframeIllustration({ styleId, isSelected }) {
           bottom: 0,
           left: 0,
           right: 0,
-          height: 18,
+          height: 16,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 3.5,
-          padding: '0 8px',
+          gap: 3,
+          padding: '0 6px',
           ...(styleId === 'default' && {
             background: 'rgba(15, 18, 26, 0.95)',
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
@@ -83,11 +88,11 @@ function TaskbarWireframeIllustration({ styleId, isSelected }) {
           }),
         }}
       >
-        <div style={{ width: 6, height: 6, borderRadius: 1.5, background: '#0ea5e9' }} />
-        <div style={{ width: 6, height: 6, borderRadius: 1.5, background: '#f59e0b' }} />
-        <div style={{ width: 6, height: 6, borderRadius: 1.5, background: 'var(--color-brand)' }} />
-        <div style={{ width: 6, height: 6, borderRadius: 1.5, background: '#10b981' }} />
-        <div style={{ width: 6, height: 6, borderRadius: 1.5, background: 'rgba(255,255,255,0.7)' }} />
+        <div style={{ width: 5, height: 5, borderRadius: 1, background: '#0ea5e9' }} />
+        <div style={{ width: 5, height: 5, borderRadius: 1, background: '#f59e0b' }} />
+        <div style={{ width: 5, height: 5, borderRadius: 1, background: 'var(--color-brand)' }} />
+        <div style={{ width: 5, height: 5, borderRadius: 1, background: '#10b981' }} />
+        <div style={{ width: 5, height: 5, borderRadius: 1, background: 'rgba(255,255,255,0.7)' }} />
 
         <div
           style={{
@@ -98,8 +103,8 @@ function TaskbarWireframeIllustration({ styleId, isSelected }) {
             gap: 2,
           }}
         >
-          <div style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.4)' }} />
-          <div style={{ width: 10, height: 2.5, borderRadius: 1.5, background: 'rgba(255,255,255,0.3)' }} />
+          <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: 'rgba(255,255,255,0.4)' }} />
+          <div style={{ width: 8, height: 2, borderRadius: 1, background: 'rgba(255,255,255,0.3)' }} />
         </div>
       </div>
     </div>
@@ -251,97 +256,78 @@ export default function DisplaysPage() {
   }
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 48 }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
-            Displays & Workspace
-          </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
-            Multi-monitor hardware detection, refresh rate limits, intelligent window occlusion, and Windows Taskbar glass styling
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="telemetry-chip">
-            <Monitor size={14} style={{ color: 'var(--color-brand)' }} />
-            <span>{monitors.length > 0 ? `${monitors.length} Display${monitors.length > 1 ? 's' : ''} Detected` : '1 Display'}</span>
-          </span>
-        </div>
-      </div>
+    <div className="settings-page-container animate-fadeIn">
+      {/* Page Header */}
+      <header className="settings-page-header">
+        <h1 className="settings-page-title">Displays & Workspace</h1>
+        <p className="settings-page-desc">
+          Multi-monitor arrangement, rendering frame rate limits, intelligent window occlusion, and Windows Taskbar styling.
+        </p>
+      </header>
 
-      {/* Card: Multi-Display Wallpaper Arrangement */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Monitor size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Multi-Display Wallpaper Arrangement</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>
-            {monitors.length > 1 ? `${monitors.length} Displays` : 'Single Display'}
-          </span>
-        </div>
-
+      {/* SECTION 1: OVERVIEW */}
+      <SettingSection title="Overview">
         <SettingRow
-          label="Display Arrangement Mode"
-          desc={screenArrangement === 'duplicate'
-            ? 'Duplicate Across All: Mirrors the selected active wallpaper across all connected monitors with synchronous timing.'
-            : 'Distinct Per-Screen: Enables separate wallpaper assignment per display. Target monitor selectors are unlocked on Home and Library.'}
+          label="Displays detected"
+          desc="Connected hardware displays recognized by the system compositor"
         >
-          <div className="segmented-control">
-            <button
-              type="button"
-              className={`segmented-item ${screenArrangement === 'duplicate' ? 'active-brand' : ''}`}
-              onClick={() => setScreenArrangement('duplicate')}
-            >
-              Duplicate Across All
-            </button>
-            <button
-              type="button"
-              className={`segmented-item ${screenArrangement === 'per-screen' ? 'active-brand' : ''}`}
-              onClick={() => setScreenArrangement('per-screen')}
-            >
-              Distinct Per-Screen
-            </button>
-          </div>
+          <span style={{
+            fontFamily: 'var(--font-mono, monospace)',
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--text-main)',
+            background: 'color-mix(in srgb, var(--border-main) 30%, var(--bg-base))',
+            padding: '2px 8px',
+            borderRadius: 4,
+            border: '1px solid var(--border-subtle)',
+          }}>
+            {monitors.length > 0 ? `${monitors.length} Display${monitors.length > 1 ? 's' : ''}` : '1 Display'}
+          </span>
+        </SettingRow>
+      </SettingSection>
+
+      {/* SECTION 2: MULTI-DISPLAY */}
+      <SettingSection title="Multi-display">
+        <SettingRow
+          label="Display arrangement"
+          desc={screenArrangement === 'duplicate'
+            ? 'Duplicate across all: Mirrors the active wallpaper across all connected displays with synchronous timing.'
+            : 'Distinct per screen: Unlocks independent wallpaper assignment for each screen on Home and Library.'}
+        >
+          <AetherSegmented
+            items={[
+              { id: 'duplicate', label: 'Duplicate across all' },
+              { id: 'per-screen', label: 'Distinct per screen' },
+            ]}
+            value={screenArrangement}
+            onChange={setScreenArrangement}
+          />
         </SettingRow>
 
         {screenArrangement === 'per-screen' && (
-          <div style={{ padding: '0 18px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: '100%',
-              padding: '10px 14px',
-              borderRadius: 8,
-              background: 'rgba(var(--rgb-brand), 0.08)',
-              border: '1px solid rgba(var(--rgb-brand), 0.2)',
-              fontSize: 12,
-              color: 'var(--text-main)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}>
-              <CheckCircle2 size={15} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
-              <span>
-                Per-Screen mode is active. You can now select individual monitors on the <strong>Home</strong> and <strong>Library</strong> pages to set different wallpapers per screen.
-              </span>
-            </div>
+          <div style={{
+            padding: '10px 16px',
+            borderBottom: '1px solid var(--border-subtle)',
+            background: 'color-mix(in srgb, var(--color-brand) 5%, transparent)',
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <CheckCircle2 size={14} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
+            <span>
+              Per-screen mode active. Target monitor selectors are unlocked on <strong>Home</strong> and <strong>Library</strong>.
+            </span>
           </div>
         )}
-      </div>
+      </SettingSection>
 
-      {/* Card 1: Engine Performance & Occlusion Rules */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Zap size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Engine & Display Performance</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Active</span>
-        </div>
-
+      {/* SECTION 3: PLAYBACK */}
+      <SettingSection title="Playback">
         <SliderRow
-          label="Rendering Frame Cap"
-          desc="Target frame rate limit for Canvas 2D engines & video renderers (Unlimited syncs with your monitor's native refresh rate, e.g. 144Hz, 240Hz+)"
+          label="Frame rate"
+          desc="Rendering frame limit for Canvas 2D engines & video players"
           value={fps <= 0 ? 240 : fps}
           set={v => handleFpsChange(v >= 240 ? 0 : v)}
           min={15}
@@ -349,111 +335,210 @@ export default function DisplaysPage() {
           step={15}
           fmt={v => (v <= 0 || v >= 240) ? 'Unlimited (Native Hz)' : `${v} FPS`}
           presets={[
-            { label: '30 FPS', val: 30 },
-            { label: '60 FPS', val: 60 },
-            { label: '120 FPS', val: 120 },
-            { label: '144 FPS', val: 144 },
+            { label: '30', val: 30 },
+            { label: '60', val: 60 },
+            { label: '120', val: 120 },
+            { label: '144', val: 144 },
             { label: 'Unlimited', val: 240 },
           ]}
         />
 
         <SettingRow
-          label="Pause on Battery Power"
-          desc="Automatically suspends live animation and hardware video decoding when unplugged to conserve battery life"
+          label="Pause on battery"
+          desc="Suspends animations and video decoding when unplugged to conserve power"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={pauseOnBattery} onChange={handleTogglePauseOnBattery} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={pauseOnBattery}
+            onChange={handleTogglePauseOnBattery}
+            ariaLabel="Pause on battery"
+          />
         </SettingRow>
 
         <SettingRow
-          label="Pause on Fullscreen Applications"
-          desc="Halt wallpaper rendering while 3D games or fullscreen applications are active to maximize GPU resources"
+          label="Pause on fullscreen"
+          desc="Halts rendering when games or fullscreen applications are active"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={pauseOnFullscreen} onChange={handleTogglePauseOnFullscreen} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={pauseOnFullscreen}
+            onChange={handleTogglePauseOnFullscreen}
+            ariaLabel="Pause on fullscreen"
+          />
         </SettingRow>
 
         <SettingRow
-          label="Pause on Maximized Windows"
-          desc="Suspend wallpaper rendering when standard desktop applications (Brave, Chrome, VS Code) are maximized to save power"
+          label="Pause on maximized windows"
+          desc="Suspends rendering when normal desktop applications are maximized"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={pauseOnMaximized} onChange={handleTogglePauseOnMaximized} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={pauseOnMaximized}
+            onChange={handleTogglePauseOnMaximized}
+            ariaLabel="Pause on maximized windows"
+          />
         </SettingRow>
 
         <SettingRow
-          label="Multi-Monitor Playback Behavior"
+          label="Multi-monitor playback"
           desc={multiMonitorPauseMode === 'isolated'
-            ? 'Isolated (Per-Display): Only the monitor covered by a fullscreen or maximized window pauses. Other monitors continue animating.'
-            : 'Global (All Displays): When any single monitor is covered, all connected monitors pause rendering simultaneously.'}
+            ? 'Isolated: Only the monitor covered by a window pauses. Other displays stay active.'
+            : 'Global: When any display is covered, all connected monitors pause together.'}
         >
-          <div className="segmented-control">
-            <button
-              type="button"
-              className={`segmented-item ${multiMonitorPauseMode === 'isolated' ? 'active-brand' : ''}`}
-              onClick={() => handleMultiMonitorPauseModeChange('isolated')}
-            >
-              Isolated (Per-Display)
-            </button>
-            <button
-              type="button"
-              className={`segmented-item ${multiMonitorPauseMode === 'global' ? 'active-brand' : ''}`}
-              onClick={() => handleMultiMonitorPauseModeChange('global')}
-            >
-              Global (All Displays)
-            </button>
-          </div>
+          <AetherSegmented
+            items={[
+              { id: 'isolated', label: 'Isolated per display' },
+              { id: 'global',   label: 'Global' },
+            ]}
+            value={multiMonitorPauseMode}
+            onChange={handleMultiMonitorPauseModeChange}
+          />
         </SettingRow>
+      </SettingSection>
+
+      {/* SECTION 4: SYNCHRONIZATION */}
+      <SettingSection title="Synchronization">
+        <SettingRow
+          label="Wallpaper synchronization"
+          desc="Synchronize compatible wallpapers when starting or resuming playback after being covered."
+        >
+          <AetherToggle
+            checked={wallpaperSyncOnResume}
+            onChange={() => handleWallpaperSyncChange(!wallpaperSyncOnResume)}
+            ariaLabel="Wallpaper synchronization"
+          />
+        </SettingRow>
+      </SettingSection>
+
+      {/* SECTION 5: WINDOWS TASKBAR */}
+      <SettingSection title="Windows taskbar">
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="settings-item-label" style={{ marginBottom: 3 }}>
+            Taskbar appearance
+          </div>
+          <div className="settings-item-desc" style={{ marginBottom: 12 }}>
+            Native Win32 transparency and frosted acrylic styling for the Windows taskbar.
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+            {[
+              { id: 'default', label: 'Default', desc: 'Windows standard' },
+              { id: 'clear',   label: 'Clear (100%)', desc: 'Transparent glass' },
+              { id: 'acrylic', label: 'Acrylic Blur', desc: 'Frosted acrylic' },
+              { id: 'blur',    label: 'Soft Blur', desc: 'Gaussian blur' },
+            ].map(style => {
+              const isSelected = taskbarStyle === style.id
+              return (
+                <div
+                  key={style.id}
+                  className={`display-card-compact ${isSelected ? 'selected' : ''}`}
+                  style={{ flexDirection: 'column', alignItems: 'stretch', cursor: 'pointer', padding: '10px 12px' }}
+                  onClick={() => setTaskbarStyle(style.id)}
+                >
+                  <TaskbarWireframeIllustration styleId={style.id} isSelected={isSelected} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 500, color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
+                      {style.label}
+                    </span>
+                    {isSelected && (
+                      <span style={{
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: 'var(--color-brand)',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', flexShrink: 0
+                      }}>
+                        <Check size={10} strokeWidth={3} />
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {style.desc}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
 
         <SettingRow
-          label="Wallpaper Synchronization"
-          desc="When multiple monitors display the same video wallpaper, automatically synchronize playback on startup and when resuming after being covered"
+          label="Taskbar top border line"
+          desc={taskbarBorder ? '1px subtle top border line visible' : 'Clean borderless edge with zero top line'}
         >
-          <div className="segmented-control">
-            <button
-              type="button"
-              className={`segmented-item ${!wallpaperSyncOnResume ? 'active-brand' : ''}`}
-              onClick={() => handleWallpaperSyncChange(false)}
-            >
-              OFF
-            </button>
-            <button
-              type="button"
-              className={`segmented-item ${wallpaperSyncOnResume ? 'active-brand' : ''}`}
-              onClick={() => handleWallpaperSyncChange(true)}
-            >
-              ON
-            </button>
-          </div>
+          <AetherToggle
+            checked={taskbarBorder}
+            onChange={() => setTaskbarBorder(!taskbarBorder)}
+            ariaLabel="Taskbar top border line"
+          />
         </SettingRow>
-      </div>
 
-      {/* Card 2: Desktop Occlusion Diagnostics (16x8 Grid Visualizer) */}
-      {gridReports && gridReports.length > 0 && (
-        <div className="setting-card">
-          <div className="setting-card-header">
-            <div className="flex items-center gap-2.5">
-              <Layers size={16} style={{ color: 'var(--color-accent)' }} />
-              <span className="text-sm font-semibold">16×8 Grid Desktop Coverage Diagnostic</span>
-            </div>
-            <span className="badge font-mono" style={{ fontSize: 10 }}>Live Occlusion</span>
+        {/* TranslucentTB helper status & recovery row */}
+        <div style={{
+          padding: '12px 16px',
+          background: 'color-mix(in srgb, var(--border-main) 12%, var(--bg-card))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1, minWidth: 240, lineHeight: 1.45 }}>
+            <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>Windows 11 Glass: </span>
+            For 100% invisible glass on Windows 11 22H2+, install TranslucentTB.
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className="preset-btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px' }}
+              onClick={() => {
+                import('@tauri-apps/api/core').then(({ invoke }) => {
+                  invoke('open_url', { url: 'ms-windows-store://pdp/?ProductId=9PF4KZ2VN4W9' })
+                    .catch(() => {
+                      invoke('open_url', { url: 'https://apps.microsoft.com/detail/9pf4kz2vn4w9' }).catch(() => {})
+                    })
+                }).catch(() => {
+                  window.open('https://apps.microsoft.com/detail/9pf4kz2vn4w9', '_blank')
+                })
+              }}
+            >
+              <ExternalLink size={12} />
+              <span>Microsoft Store</span>
+            </button>
+            <button
+              type="button"
+              className="preset-btn"
+              disabled={restartingTaskbar}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px' }}
+              onClick={async () => {
+                setRestartingTaskbar(true)
+                await restartTaskbar()
+                setTimeout(() => setRestartingTaskbar(false), 1200)
+              }}
+            >
+              <RefreshCw size={11} className={restartingTaskbar ? 'animate-spin' : ''} />
+              <span>{restartingTaskbar ? 'Recovering…' : 'Recover'}</span>
+            </button>
+            <span style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono, monospace)',
+              color: translucentTbInstalled && translucentTbRunning ? 'var(--color-emerald)' : 'var(--text-muted)',
+              padding: '2px 6px',
+              borderRadius: 4,
+              background: 'color-mix(in srgb, var(--border-main) 30%, var(--bg-base))',
+              border: '1px solid var(--border-subtle)',
+            }}>
+              {translucentTbInstalled && translucentTbRunning ? 'SYNCED' : 'STANDALONE'}
+            </span>
+          </div>
+        </div>
+      </SettingSection>
 
-          <div style={{ padding: '16px 18px' }}>
-            <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
-              Real-time hardware window occlusion telemetry. Each screen is divided into 128 sampling cells (16 columns × 8 rows) to accurately detect when desktop surface is obscured.
+      {/* SECTION 6: OCCLUSION DIAGNOSTICS (if available) */}
+      {gridReports && gridReports.length > 0 && (
+        <SettingSection title="Occlusion diagnostics">
+          <div style={{ padding: '14px 16px' }}>
+            <div className="settings-item-desc" style={{ marginBottom: 14 }}>
+              Real-time hardware window occlusion telemetry. Displays are divided into 128 sampling cells (16×8) to detect desktop obscuration.
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))`, gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(260px, 1fr))`, gap: 12 }}>
               {gridReports.map((rep, rIdx) => {
                 const matchedMon = monitors.find(m => m.label === rep.label)
                 const monTitle = matchedMon?.displayName || rep.label || `Display ${rIdx + 1}`
@@ -466,32 +551,39 @@ export default function DisplaysPage() {
                   <div
                     key={rep.label || rIdx}
                     style={{
-                      background: 'color-mix(in srgb, var(--border-main) 20%, var(--bg-card))',
-                      borderRadius: 10,
-                      padding: 14,
+                      background: 'color-mix(in srgb, var(--border-main) 20%, var(--bg-base))',
+                      borderRadius: 6,
+                      padding: 12,
                       border: '1px solid var(--border-subtle)',
                     }}
                   >
-                    <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
-                        <div className="text-xs font-semibold" style={{ color: 'var(--text-main)' }}>{monTitle}</div>
-                        <div className="text-[10px] text-muted font-mono" style={{ marginTop: 2 }}>
-                          {coveredCount}/128 Tiles ({coveragePct}% Covered)
+                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-main)' }}>{monTitle}</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', marginTop: 2 }}>
+                          {coveredCount}/128 Cells ({coveragePct}%)
                         </div>
                       </div>
-                      <span className={`badge ${isOccluded ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: 10 }}>
-                        {isOccluded ? 'OCCLUDED (PAUSED)' : 'ACTIVE'}
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: 3,
+                        color: isOccluded ? '#f59e0b' : '#10b981',
+                        background: isOccluded ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                      }}>
+                        {isOccluded ? 'OCCLUDED' : 'ACTIVE'}
                       </span>
                     </div>
 
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: 'repeat(16, 1fr)',
-                      gap: 2,
-                      background: '#000000',
-                      padding: 6,
-                      borderRadius: 6,
-                      border: '1px solid var(--border-main)',
+                      gap: 1.5,
+                      background: '#090a0f',
+                      padding: 4,
+                      borderRadius: 4,
+                      border: '1px solid var(--border-subtle)',
                       aspectRatio: '16 / 8',
                     }}>
                       {Array.from({ length: 128 }).map((_, cellIdx) => {
@@ -499,13 +591,12 @@ export default function DisplaysPage() {
                         return (
                           <div
                             key={cellIdx}
-                            title={`Tile ${cellIdx + 1}: ${isCovered ? 'Covered by window' : 'Clear desktop'}`}
+                            title={`Cell ${cellIdx + 1}: ${isCovered ? 'Covered' : 'Clear'}`}
                             style={{
-                              borderRadius: 1.5,
+                              borderRadius: 1,
                               background: isCovered
                                 ? 'rgba(239, 68, 68, 0.85)'
-                                : 'rgba(16, 185, 129, 0.45)',
-                              boxShadow: isCovered ? '0 0 4px rgba(239, 68, 68, 0.4)' : 'none',
+                                : 'rgba(16, 185, 129, 0.4)',
                               transition: 'background 0.15s ease',
                             }}
                           />
@@ -517,133 +608,8 @@ export default function DisplaysPage() {
               })}
             </div>
           </div>
-        </div>
+        </SettingSection>
       )}
-
-      {/* Card 3: Windows Taskbar Customization & TranslucentTB */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <LayoutTemplate size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Windows Taskbar Customization</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Win32 Hook</span>
-        </div>
-
-        <div style={{ padding: '16px 18px' }}>
-          <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
-            Apply high-performance native transparency or frosted acrylic blur to Windows taskbars on all connected displays.
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-            {[
-              { id: 'default', label: 'Default', desc: 'Windows standard style' },
-              { id: 'clear',   label: 'Clear (100%)', desc: '100% transparent glass' },
-              { id: 'acrylic', label: 'Acrylic Blur', desc: 'Frosted acrylic with noise' },
-              { id: 'blur',    label: 'Soft Blur', desc: 'Smooth Gaussian blur' },
-            ].map(style => {
-              const isSelected = taskbarStyle === style.id
-              return (
-                <div
-                  key={style.id}
-                  className={`option-card ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setTaskbarStyle(style.id)}
-                >
-                  <TaskbarWireframeIllustration styleId={style.id} isSelected={isSelected} />
-                  <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-                    <span className="font-semibold text-sm" style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
-                      {style.label}
-                    </span>
-                    {isSelected && (
-                      <span
-                        style={{
-                          width: 18, height: 18, borderRadius: '50%',
-                          background: 'var(--color-brand)',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', flexShrink: 0
-                        }}
-                      >
-                        <Check size={11} strokeWidth={3} />
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted">
-                    {style.desc}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Taskbar Top Border Separator */}
-        <SettingRow
-          label="Taskbar Top Border Separator"
-          desc={taskbarBorder ? 'Showing thin 1px top border line' : 'Clean borderless edge with zero top separator line'}
-        >
-          <button
-            type="button"
-            className={`btn ${taskbarBorder ? 'btn-ghost' : 'btn-primary'}`}
-            style={{ fontSize: 12, padding: '6px 14px', height: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}
-            onClick={() => setTaskbarBorder(!taskbarBorder)}
-          >
-            {!taskbarBorder && <CheckCircle2 size={13} />}
-            {taskbarBorder ? 'Border: Visible' : 'Borderless Edge'}
-          </button>
-        </SettingRow>
-
-        {/* Prominent TranslucentTB Notice and Microsoft Store Integration */}
-        <div style={{
-          margin: '14px 18px 18px',
-          padding: '16px 18px',
-          background: 'color-mix(in srgb, var(--border-main) 22%, var(--bg-card))',
-          borderRadius: 10,
-          border: '1px solid var(--border-subtle)',
-        }}>
-          <div style={{ marginBottom: 10, fontSize: 12.5, color: 'var(--text-main)', lineHeight: 1.55 }}>
-            💡 <strong>Windows 11 Notice & Transparency Requirement:</strong> On recent Windows 11 builds (22H2 / 23H2 / 24H2), Microsoft draws an opaque XAML brush over the taskbar. While AetherFlow's native Win32 API tints the taskbar, <strong>100% invisible crystal-clear glass</strong> requires the free Microsoft Store utility <strong>TranslucentTB</strong>. When installed, AetherFlow automatically synchronizes with it without conflicts.
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ padding: '7px 16px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 7, borderRadius: 8 }}
-              onClick={() => {
-                import('@tauri-apps/api/core').then(({ invoke }) => {
-                  invoke('open_url', { url: 'ms-windows-store://pdp/?ProductId=9PF4KZ2VN4W9' })
-                    .catch(() => {
-                      invoke('open_url', { url: 'https://apps.microsoft.com/detail/9pf4kz2vn4w9' }).catch(() => {})
-                    })
-                }).catch(() => {
-                  window.open('https://apps.microsoft.com/detail/9pf4kz2vn4w9', '_blank')
-                })
-              }}
-            >
-              <ExternalLink size={13} /> Get TranslucentTB on Microsoft Store (Free)
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={restartingTaskbar}
-              style={{ padding: '7px 14px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-main)', borderRadius: 8 }}
-              onClick={async () => {
-                setRestartingTaskbar(true)
-                await restartTaskbar()
-                setTimeout(() => setRestartingTaskbar(false), 1200)
-              }}
-            >
-              <RefreshCw size={12} className={restartingTaskbar ? 'animate-spin' : ''} />
-              {restartingTaskbar ? 'Recovering…' : 'Recover Taskbar'}
-            </button>
-
-            <span className={`badge ${translucentTbInstalled && translucentTbRunning ? 'badge-brand' : translucentTbInstalled ? 'badge-amber' : 'badge-ghost'}`} style={{ fontSize: 11, padding: '4px 10px' }}>
-              {translucentTbInstalled && translucentTbRunning ? 'TranslucentTB: Active & Synced' : translucentTbInstalled ? 'TranslucentTB: Installed (Stopped)' : 'TranslucentTB: Not Installed'}
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

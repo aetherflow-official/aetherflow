@@ -18,6 +18,30 @@ import {
   safeListen,
 } from '../lib/wallpaperActions.js'
 
+function getWallpaperTypeInfo(wallpaper) {
+  const engineId = wallpaper.engine || wallpaper.id
+  const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
+  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
+  const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
+
+  if (isStream) {
+    const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
+    const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)
+    return {
+      label: isYt ? 'YouTube' : 'Web Stream',
+      color: isYt ? 'var(--color-rose)' : 'var(--color-cyan)',
+      type: isYt ? 'youtube' : 'stream',
+    }
+  }
+  if (isImage) {
+    return { label: 'Picture', color: 'var(--color-emerald)', type: 'image' }
+  }
+  if (isVideo) {
+    return { label: 'Video', color: 'var(--color-brand)', type: 'video' }
+  }
+  return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas' }
+}
+
 export default function LibraryPage() {
   const installed            = useStore(s => s.installed)
   const activeWallpaper      = useStore(s => s.activeWallpaper)
@@ -42,7 +66,7 @@ export default function LibraryPage() {
   const [hoveredId, setHoveredId]   = useState(null)
 
   // Filters & Search
-  const [filterCategory, setFilterCategory] = useState('all') // 'all' | 'builtin' | 'custom' | 'pinned'
+  const [filterCategory, setFilterCategory] = useState('all') // 'all' | 'liked' | 'pinned' | 'builtin' | 'custom' | 'stream'
   const [searchQuery, setSearchQuery]       = useState('')
 
   // Modals state
@@ -241,30 +265,54 @@ export default function LibraryPage() {
   }, [allWallpapers, filterCategory, searchQuery, homeWallpaperIds, likedWallpaperIds])
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 960, margin: '0 auto' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+    <div className="content-page-container animate-fadeIn">
+      {/* Top Application Header */}
+      <div className="content-page-header">
         <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>Wallpaper Library</h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
-            Master collection of all wallpapers — select what you want to appear on your Home screen
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <h1 className="content-page-title">Library</h1>
+            <span className="badge font-mono" style={{ fontSize: 11 }}>{allWallpapers.length} items</span>
+          </div>
+          <p className="content-page-subtitle">
+            Master wallpaper repository — organize, preview, and pin to your Home dashboard
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn btn-ghost" onClick={() => setAddStreamModal(true)}>
-            <Globe size={15} /> Add Web Stream
+          <button
+            className="btn btn-ghost"
+            onClick={() => setAddStreamModal(true)}
+            style={{ height: 34, fontSize: 12, padding: '0 12px' }}
+          >
+            <Globe size={14} /> Add Web Stream
           </button>
-          <button className="btn btn-primary" onClick={handleOpenImportDialog}>
-            <Plus size={15} /> Add Local Wallpaper
+          <button
+            className="btn btn-primary"
+            onClick={handleOpenImportDialog}
+            style={{ height: 34, fontSize: 12, padding: '0 14px' }}
+          >
+            <Plus size={14} /> Add Local Wallpaper
           </button>
         </div>
       </div>
 
-      {/* Target Screen Bar (for multi-monitor) */}
+      {/* Target Screen Bar (for multi-monitor per-screen arrangement) */}
       {screenArrangement === 'per-screen' && monitors.length > 1 && (
-        <div className="card p-3" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div
+          style={{
+            marginBottom: 18,
+            padding: '10px 14px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
+          }}
+        >
           <div className="flex items-center gap-2">
-            <Monitor size={16} className="text-brand" />
+            <Monitor size={14} className="text-brand" />
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Target Screen:</span>
           </div>
           <div className="flex gap-2">
@@ -275,7 +323,7 @@ export default function LibraryPage() {
                 <button
                   key={m.label}
                   className={`btn ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
-                  style={{ padding: '4px 12px', fontSize: 12, height: 'auto' }}
+                  style={{ padding: '4px 10px', fontSize: 11.5, height: 'auto', borderRadius: 6 }}
                   onClick={() => setSelectedMonitorLabel(m.label)}
                 >
                   Screen {i + 1} {monWp ? `(${monWp.name})` : ''}
@@ -287,11 +335,17 @@ export default function LibraryPage() {
       )}
 
       {/* Filter and Search Bar */}
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 18 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-base">All Wallpapers</h2>
-            <span className="badge font-mono">{filteredWallpapers.length}</span>
+            <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>
+              {filterCategory === 'all' ? 'All Wallpapers' :
+               filterCategory === 'liked' ? 'Liked Wallpapers' :
+               filterCategory === 'pinned' ? 'Pinned to Home' :
+               filterCategory === 'builtin' ? 'Built-in Canvas Engines' :
+               filterCategory === 'custom' ? 'Custom Media' : 'Web Streams'}
+            </h2>
+            <span className="badge font-mono" style={{ fontSize: 11 }}>{filteredWallpapers.length}</span>
           </div>
 
           <div style={{ position: 'relative', width: 220 }}>
@@ -305,7 +359,7 @@ export default function LibraryPage() {
                 width: '100%',
                 padding: '6px 26px 6px 30px',
                 background: 'var(--bg-card)',
-                border: '1px solid var(--border-main)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 color: 'var(--text-main)',
                 fontSize: 12,
@@ -325,53 +379,48 @@ export default function LibraryPage() {
         </div>
 
         {/* Filter Pills & Thumbnail Mode Selector */}
-        <div className="flex items-center justify-between gap-2" style={{ flexWrap: 'wrap' }}>
-          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+        <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
+          <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
             {[
-              { id: 'all', label: `All (${allWallpapers.length})` },
-              { id: 'liked', label: `Liked (${allWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length})`, icon: Heart },
-              { id: 'pinned', label: `Pinned (${homeWallpaperIds.length})` },
-              { id: 'builtin', label: `Built-in Canvas (${WALLPAPER_LIST.length})` },
-              { id: 'custom', label: `Custom Media (${allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length})` },
-              { id: 'stream', label: `Web Streams (${allWallpapers.filter(w => w.config?.streamUrl).length})` },
-            ].map(cat => (
-              <button
-                key={cat.id}
-                className={`badge ${filterCategory === cat.id ? 'badge-brand' : ''}`}
-                style={{
-                  cursor: 'pointer',
-                  padding: '5px 12px',
-                  fontSize: 11,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  color: filterCategory === cat.id && cat.id === 'liked' ? 'var(--color-rose)' : undefined,
-                  borderColor: filterCategory === cat.id && cat.id === 'liked' ? 'var(--color-rose)' : undefined,
-                  background: filterCategory === cat.id && cat.id === 'liked' ? 'color-mix(in srgb, var(--color-rose) 15%, transparent)' : undefined,
-                }}
-                onClick={() => setFilterCategory(cat.id)}
-              >
-                {cat.icon && <cat.icon size={11} fill={filterCategory === cat.id ? 'currentColor' : 'none'} />}
-                <span>{cat.label}</span>
-              </button>
-            ))}
+              { id: 'all', label: 'All', count: allWallpapers.length },
+              { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
+              { id: 'pinned', label: 'Pinned', count: homeWallpaperIds.length, icon: Pin },
+              { id: 'builtin', label: 'Built-in', count: WALLPAPER_LIST.length },
+              { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
+              { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length },
+            ].map(cat => {
+              const isActive = filterCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '4px 10px',
+                    fontSize: 11.5,
+                    fontWeight: isActive ? 600 : 500,
+                    borderRadius: 6,
+                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
+                    color: isActive ? (cat.id === 'liked' ? 'var(--color-rose)' : 'var(--color-brand)') : 'var(--text-muted)',
+                    border: isActive ? (cat.id === 'liked' ? '1px solid var(--color-rose)' : '1px solid var(--color-brand)') : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onClick={() => setFilterCategory(cat.id)}
+                >
+                  {cat.icon && <cat.icon size={11} fill={isActive ? 'currentColor' : 'none'} />}
+                  <span>{cat.label}</span>
+                  <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
+                </button>
+              )
+            })}
           </div>
 
           {/* Thumbnail / Preview Mode Selector */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 3,
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid var(--border-main)',
-              borderRadius: 8,
-              padding: '3px 4px',
-            }}
-            title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)"
-          >
-            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', paddingLeft: 4, paddingRight: 3, fontWeight: 500 }}>
-              Thumbnails:
+          <div className="segmented-control" title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)">
+            <span style={{ fontSize: 10, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
+              PREVIEWS:
             </span>
             {[
               { id: 'always', label: 'On', title: 'Always Show Thumbnails' },
@@ -380,16 +429,10 @@ export default function LibraryPage() {
             ].map(m => (
               <button
                 key={m.id}
-                className={`btn ${thumbnailMode === m.id ? 'btn-primary' : 'btn-ghost'}`}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: 10.5,
-                  height: 22,
-                  borderRadius: 5,
-                  fontWeight: thumbnailMode === m.id ? 700 : 500,
-                }}
+                className={`segmented-item ${thumbnailMode === m.id ? 'active' : ''}`}
                 onClick={() => setThumbnailMode(m.id)}
                 title={m.title}
+                style={{ fontSize: 11, padding: '3px 8px' }}
               >
                 {m.label}
               </button>
@@ -400,123 +443,191 @@ export default function LibraryPage() {
 
       {/* Wallpapers Grid */}
       {filteredWallpapers.length === 0 ? (
-        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-subtle)', marginBottom: 36 }}>
-          <Search size={24} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
-          <div className="text-sm">No wallpapers found matching your filter</div>
-          <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={() => { setSearchQuery(''); setFilterCategory('all'); }}>
+        <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)', marginBottom: 36, border: '1.5px dashed var(--border-main)', background: 'transparent' }}>
+          <Search size={26} className="text-brand" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+          <div className="text-base font-semibold" style={{ color: 'var(--text-main)', marginBottom: 4 }}>
+            No wallpapers match your filter
+          </div>
+          <p className="text-xs text-muted" style={{ maxWidth: 360, margin: '0 auto 16px' }}>
+            Try selecting another category or clear your search term to see wallpapers in your library.
+          </p>
+          <button
+            className="btn btn-ghost"
+            style={{ margin: '0 auto', fontSize: 12 }}
+            onClick={() => { setSearchQuery(''); setFilterCategory('all'); }}
+          >
             Reset Filters
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14, marginBottom: 36 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18, marginBottom: 36 }}>
           {filteredWallpapers.map(item => {
             const activeStatus = getActiveStatus(item)
             const isLive = Boolean(activeStatus)
             const isApplying = applyingId === item.id
             const isPinnedToHome = homeWallpaperIds.includes(item.id)
-            const engineIdToLoad = item.engine || item.id
-
             const isLiked = (likedWallpaperIds || []).includes(item.id)
+            const typeInfo = getWallpaperTypeInfo(item)
 
             return (
               <div
                 key={item.id}
-                className={`card wp-card ${isLive ? 'card-active' : ''}`}
+                className="mp-card"
+                style={{
+                  border: isLive ? '1px solid var(--color-emerald)' : '1px solid var(--border-subtle)',
+                  boxShadow: isLive ? '0 0 0 1px var(--color-emerald), 0 8px 24px rgba(0,0,0,0.3)' : undefined,
+                }}
                 onMouseEnter={() => setHoveredId(item.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 onDoubleClick={() => handleApply(item)}
               >
                 {/* Thumbnail Preview */}
-                <div style={{ height: 118, position: 'relative', background: '#000' }}>
-                  <WallpaperThumbnail wallpaper={item} isHovered={hoveredId === item.id} mode={thumbnailMode} />
+                <div
+                  className="mp-thumb-container"
+                  title={`Double-click to apply ${item.name}`}
+                >
+                  <WallpaperThumbnail
+                    wallpaper={item}
+                    isHovered={hoveredId === item.id}
+                    mode={thumbnailMode}
+                  />
 
-                  {/* Active Indicator Badge */}
-                  {isLive && (
-                    <div style={{
-                      position: 'absolute', top: 6, right: 6,
-                      background: 'rgba(16, 185, 129, 0.9)',
-                      backdropFilter: 'blur(4px)',
-                      borderRadius: 999,
-                      padding: '2px 8px',
-                      fontSize: 9,
-                      fontWeight: 700,
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      zIndex: 3,
-                    }}>
-                      <div className="status-dot-live" />
-                      {activeStatus[0] === 'all' ? 'LIVE' : activeStatus.join(', ')}
-                    </div>
-                  )}
-
-                  {/* Top-Left: Pin & Heart Badges */}
-                  <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', gap: 4, zIndex: 3 }}>
-                    <button
-                      className="btn-icon"
+                  {/* Top-Left: Type Badge */}
+                  <div className="mp-badge-top-left">
+                    <div
+                      className="mp-pill-badge"
                       style={{
-                        background: isPinnedToHome ? 'var(--color-brand)' : 'rgba(0,0,0,0.6)',
-                        color: '#fff', padding: 4, borderRadius: 6,
-                        backdropFilter: 'blur(4px)',
+                        background: 'rgba(10, 10, 14, 0.75)',
+                        color: typeInfo.color,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        fontSize: 10,
                       }}
-                      title={isPinnedToHome ? 'Pinned to Home (Click to remove)' : 'Pin to Home'}
-                      onClick={(e) => { e.stopPropagation(); togglePinToHome(item.id) }}
                     >
-                      <Pin size={12} fill={isPinnedToHome ? '#fff' : 'none'} />
-                    </button>
+                      <span>{typeInfo.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Top-Right: Active Indicator, Heart & Pin */}
+                  <div className="mp-badge-top-right flex items-center gap-1">
+                    {isLive && (
+                      <div
+                        className="mp-pill-badge"
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.92)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        <div className="status-dot-live" />
+                        <span>{activeStatus[0] === 'all' ? 'LIVE' : activeStatus.join(', ')}</span>
+                      </div>
+                    )}
 
                     <button
                       className="btn-icon"
                       style={{
-                        background: isLiked ? 'color-mix(in srgb, var(--color-rose) 30%, rgba(0,0,0,0.7))' : 'rgba(0,0,0,0.6)',
-                        color: isLiked ? 'var(--color-rose)' : '#fff',
-                        padding: 4, borderRadius: 6,
-                        backdropFilter: 'blur(4px)',
-                        border: isLiked ? '1px solid var(--color-rose)' : 'none',
+                        background: isLiked ? 'color-mix(in srgb, var(--color-rose) 30%, rgba(0,0,0,0.7))' : 'rgba(0,0,0,0.65)',
+                        color: isLiked ? 'var(--color-rose)' : 'rgba(255,255,255,0.85)',
+                        padding: 5,
+                        borderRadius: 6,
+                        backdropFilter: 'blur(8px)',
+                        border: isLiked ? '1px solid var(--color-rose)' : '1px solid rgba(255,255,255,0.14)',
                         transition: 'all 0.15s ease',
                       }}
                       title={isLiked ? 'Unlike wallpaper' : 'Like wallpaper'}
-                      onClick={(e) => { e.stopPropagation(); toggleLikeWallpaper(item.id) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleLikeWallpaper(item.id)
+                      }}
                     >
                       <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
                     </button>
-                  </div>
 
-                  {/* Hover Overlay with Quick Actions */}
-                  <div className="wp-hover-overlay">
                     <button
-                      className="btn btn-primary"
-                      style={{ padding: '6px 14px', fontSize: 12, boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}
-                      onClick={(e) => { e.stopPropagation(); handleApply(item) }}
-                      disabled={isApplying}
+                      className="btn-icon"
+                      style={{
+                        background: isPinnedToHome ? 'var(--color-brand)' : 'rgba(0,0,0,0.65)',
+                        color: '#fff',
+                        padding: 5,
+                        borderRadius: 6,
+                        backdropFilter: 'blur(8px)',
+                        border: isPinnedToHome ? '1px solid var(--color-brand)' : '1px solid rgba(255,255,255,0.12)',
+                      }}
+                      title={isPinnedToHome ? 'Pinned to Home (Click to remove)' : 'Pin to Home'}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        togglePinToHome(item.id)
+                      }}
                     >
-                      <Play size={12} fill="#fff" />
-                      {isApplying ? 'Applying…' : isLive ? 'Re-apply' : 'Apply to Desktop'}
+                      <Pin size={12} fill={isPinnedToHome ? '#fff' : 'none'} />
                     </button>
-                    {isLive && (
-                      <button
-                        className="btn btn-ghost"
-                        style={{ padding: '4px 10px', fontSize: 11, background: 'rgba(239,68,68,0.2)', color: '#fca5a5', borderColor: 'rgba(239,68,68,0.4)' }}
-                        onClick={(e) => { e.stopPropagation(); handleStop() }}
-                      >
-                        <Square size={10} fill="#fca5a5" /> Stop
-                      </button>
-                    )}
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>Double-click to apply</span>
                   </div>
                 </div>
 
-                {/* Card Info & Actions */}
-                <div style={{ padding: '10px 12px' }}>
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="font-medium text-sm truncate" title={item.name}>
+                {/* Card Content & Hierarchy */}
+                <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <h3
+                      className="font-semibold"
+                      style={{
+                        fontSize: 13.5,
+                        lineHeight: '1.3',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        color: 'var(--text-main)',
+                      }}
+                      title={item.name}
+                    >
                       {item.name}
+                    </h3>
+                    <div className="text-xs text-muted" style={{ marginTop: 2 }}>
+                      {item.communityMeta?.author
+                        ? `by ${item.communityMeta.author}`
+                        : item.isCustom
+                        ? `Custom ${typeInfo.label}`
+                        : `Built-in Canvas Engine`}
                     </div>
-                    <div className="flex items-center">
+                  </div>
+
+                  {/* Secondary actions row */}
+                  <div
+                    className="flex items-center justify-between"
+                    style={{
+                      paddingTop: 8,
+                      paddingBottom: 10,
+                      borderTop: '1px solid var(--border-subtle)',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div className="flex items-center gap-1 text-xs text-subtle truncate" style={{ maxWidth: '60%' }}>
+                      {item.tags && item.tags.length > 0 ? (
+                        item.tags.slice(0, 2).map(tag => (
+                          <span
+                            key={tag}
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              background: 'var(--bg-card-hover)',
+                              border: '1px solid var(--border-subtle)',
+                              fontSize: 9.5,
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            #{tag}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 10.5, color: 'var(--text-subtle)' }}>60 FPS Native</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1">
                       <button
                         className="btn-icon"
-                        style={{ padding: 3 }}
+                        style={{ padding: '3px 5px', color: 'var(--text-muted)' }}
                         title="Rename Wallpaper"
                         onClick={(e) => {
                           e.stopPropagation()
@@ -525,11 +636,12 @@ export default function LibraryPage() {
                       >
                         <Pencil size={11} />
                       </button>
+
                       {item.isCustom && (
                         <button
                           className="btn-icon"
-                          style={{ padding: 3 }}
-                          title="Delete Wallpaper"
+                          style={{ padding: '3px 5px', color: 'var(--color-rose)' }}
+                          title="Delete custom wallpaper"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (isLive) handleStop()
@@ -542,44 +654,36 @@ export default function LibraryPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2" style={{ marginTop: 8 }}>
-                    <button
-                      className={`btn ${isLive ? 'btn-ghost' : 'btn-primary'}`}
-                      style={{ flex: 1, padding: '5px 8px', fontSize: 11, justifyContent: 'center' }}
-                      onClick={() => handleApply(item)}
-                      disabled={isApplying}
-                    >
-                      {isLive ? <Check size={11} className="text-brand" /> : <Play size={11} />}
-                      {isApplying ? 'Applying…' : isLive ? 'Live' : 'Apply'}
-                    </button>
-
-                    <button
-                      className="btn btn-ghost"
-                      style={{
-                        padding: '5px 8px', fontSize: 11,
-                        color: isLiked ? 'var(--color-rose)' : 'var(--text-muted)',
-                        borderColor: isLiked ? 'var(--color-rose)' : 'var(--border-main)',
-                        background: isLiked ? 'color-mix(in srgb, var(--color-rose) 12%, transparent)' : 'transparent',
-                      }}
-                      title={isLiked ? 'Unlike wallpaper' : 'Like wallpaper'}
-                      onClick={() => toggleLikeWallpaper(item.id)}
-                    >
-                      <Heart size={11} fill={isLiked ? 'currentColor' : 'none'} />
-                    </button>
-
-                    <button
-                      className="btn btn-ghost"
-                      style={{
-                        padding: '5px 8px', fontSize: 11,
-                        color: isPinnedToHome ? 'var(--color-brand)' : 'var(--text-muted)',
-                        borderColor: isPinnedToHome ? 'var(--color-brand)' : 'var(--border-main)',
-                      }}
-                      title={isPinnedToHome ? 'Remove from Home' : 'Show on Home'}
-                      onClick={() => togglePinToHome(item.id)}
-                    >
-                      <Pin size={11} fill={isPinnedToHome ? 'currentColor' : 'none'} />
-                      {isPinnedToHome ? 'On Home' : 'Pin'}
-                    </button>
+                  {/* Primary Action Button */}
+                  <div style={{ marginTop: 'auto' }}>
+                    {isLive ? (
+                      <div
+                        className="btn btn-success mp-btn-action w-full"
+                        style={{
+                          cursor: 'default',
+                          background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
+                          borderColor: 'var(--color-emerald)',
+                          color: 'var(--color-emerald)',
+                          height: 32,
+                          fontSize: 12,
+                        }}
+                      >
+                        <Check size={13} /> Active on Desktop
+                      </div>
+                    ) : (
+                      <button
+                        className="btn btn-secondary mp-btn-action w-full"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleApply(item)
+                        }}
+                        disabled={isApplying}
+                        title="Apply to Windows desktop"
+                        style={{ height: 32, fontSize: 12 }}
+                      >
+                        <Play size={12} fill="currentColor" /> {isApplying ? 'Applying…' : 'Apply to Desktop'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -44,3 +44,4 @@ __pycache__/
 !.env.example
 cyberpunk_rain_city.jpg
 Sanctum/
+screenshot-*.png

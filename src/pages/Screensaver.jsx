@@ -7,6 +7,13 @@ import {
 import { useStore } from '../store/useStore.js'
 import { ENGINES } from '../engines/index.js'
 import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
+import {
+  SettingSection,
+  SettingRow,
+  SliderRow,
+  AetherToggle,
+  AetherSegmented,
+} from '../components/Settings/SettingsUI.jsx'
 
 export default function Screensaver() {
   const screensaverEnabled = useStore(s => s.screensaverEnabled)
@@ -116,24 +123,22 @@ export default function Screensaver() {
   ]
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 48 }}>
+    <div className="settings-page-container animate-fadeIn">
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+      <header className="settings-page-header">
         <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
-            Screensaver Studio
-          </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
+          <h1 className="settings-page-title">Screensaver</h1>
+          <p className="settings-page-desc">
             Automate ambient visuals, luxury OLED clock HUDs, and display burn-in protection when your PC is idle
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`badge ${screensaverEnabled ? 'badge-emerald' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }}>
+          <span className="telemetry-chip">
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: screensaverEnabled ? 'var(--color-emerald)' : 'var(--text-subtle)' }} />
-            {screensaverEnabled ? 'Screensaver Active' : 'Screensaver Disabled'}
+            <span>{screensaverEnabled ? 'Automation Active' : 'Automation Off'}</span>
           </span>
         </div>
-      </div>
+      </header>
 
       {/* Information Tip Banner */}
       <div style={{
@@ -274,198 +279,95 @@ export default function Screensaver() {
         </div>
       </div>
 
-      {/* Setting Card 1: Activation & Timing */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Clock size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Activation & Timing</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Win32 IdleHook</span>
-        </div>
+      {/* Section 1: Activation & Timing */}
+      <SettingSection title="Activation & timing">
+        <SettingRow
+          label="Enable screensaver automation"
+          desc="Automatically engages the screensaver across all connected displays when no user input is detected"
+        >
+          <AetherToggle
+            checked={screensaverEnabled}
+            onChange={toggleScreensaverEnabled}
+            ariaLabel="Enable screensaver automation"
+          />
+        </SettingRow>
 
-        {/* Master Toggle */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Enable Screensaver Automation</div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Automatically engages the screensaver across all connected displays when no user input is detected
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverEnabled}
-              onChange={toggleScreensaverEnabled}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
+        <SliderRow
+          label="Idle activation timeout"
+          desc="Minutes of system inactivity before screensaver engages"
+          value={screensaverTimeoutMins}
+          set={setScreensaverTimeoutMins}
+          min={1}
+          max={60}
+          step={1}
+          fmt={v => `${v} min${v > 1 ? 's' : ''}`}
+          presets={[
+            { label: '1m', val: 1 },
+            { label: '5m', val: 5 },
+            { label: '10m', val: 10 },
+            { label: '15m', val: 15 },
+            { label: '30m', val: 30 },
+          ]}
+        />
 
-        {/* Inactivity Timeout Slider */}
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-            <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Idle Activation Timeout</div>
-              <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                Minutes of system inactivity before screensaver activates
-              </div>
-            </div>
-            <span className="telemetry-chip font-mono" style={{ color: 'var(--color-brand)' }}>
-              {screensaverTimeoutMins} min{screensaverTimeoutMins > 1 ? 's' : ''}
-            </span>
-          </div>
+        <SliderRow
+          label="Activation grace period"
+          desc="Initial immunity duration to prevent accidental tray launch clicks or micro-jitters from dismissing screensaver"
+          value={screensaverGracePeriodSecs}
+          set={setScreensaverGracePeriodSecs}
+          min={1}
+          max={10}
+          step={1}
+          fmt={v => `${v}s`}
+          presets={[
+            { label: '2s', val: 2 },
+            { label: '5s', val: 5 },
+            { label: '10s', val: 10 },
+          ]}
+        />
+      </SettingSection>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
-            <input
-              type="range"
-              min={1}
-              max={60}
-              step={1}
-              value={screensaverTimeoutMins}
-              onChange={e => setScreensaverTimeoutMins(Number(e.target.value))}
-              style={{ flex: 1 }}
-            />
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[1, 5, 10, 15, 30].map(mins => (
-                <button
-                  key={mins}
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{
-                    padding: '2px 8px',
-                    fontSize: 10.5,
-                    height: 22,
-                    background: screensaverTimeoutMins === mins ? 'color-mix(in srgb, var(--color-brand) 18%, transparent)' : 'transparent',
-                    color: screensaverTimeoutMins === mins ? 'var(--color-brand)' : 'var(--text-muted)',
-                    border: screensaverTimeoutMins === mins ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
-                  }}
-                  onClick={() => setScreensaverTimeoutMins(mins)}
-                >
-                  {mins}m
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* Section 2: Smart Trigger & Media Suppression */}
+      <SettingSection title="Smart trigger & media suppression">
+        <SettingRow
+          label="Do not activate when fullscreen app is running"
+          desc="Prevents screensaver engagement while watching full-screen movies, video streams, or playing games"
+        >
+          <AetherToggle
+            checked={screensaverInhibitFullscreen}
+            onChange={toggleScreensaverInhibitFullscreen}
+            ariaLabel="Inhibit on fullscreen"
+          />
+        </SettingRow>
 
-        {/* Launch Grace Period */}
-        <div style={{ padding: '14px 18px' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-            <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Activation Grace Period</div>
-              <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                Initial immunity duration to prevent accidental tray launch clicks or micro-jitters from instantly dismissing the screensaver
-              </div>
-            </div>
-            <span className="telemetry-chip font-mono" style={{ color: 'var(--color-brand)' }}>
-              {screensaverGracePeriodSecs}s
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              step={1}
-              value={screensaverGracePeriodSecs}
-              onChange={e => setScreensaverGracePeriodSecs(Number(e.target.value))}
-              style={{ flex: 1 }}
-            />
-          </div>
-        </div>
-      </div>
+        <SettingRow
+          label="Do not activate when window is maximized"
+          desc="Suppresses screensaver when any active application window is maximized on your workspace"
+        >
+          <AetherToggle
+            checked={screensaverInhibitMaximized}
+            onChange={toggleScreensaverInhibitMaximized}
+            ariaLabel="Inhibit on maximized"
+          />
+        </SettingRow>
 
-      {/* Setting Card 2: Smart Trigger & Media Suppression */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Shield size={16} style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-sm font-semibold">Smart Trigger & Media Suppression</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Intelligent Sleep</span>
-        </div>
+        <SettingRow
+          label="Do not activate during media & audio playback"
+          desc="Suppresses screensaver while audio or video dialogue is playing through your default audio output"
+        >
+          <AetherToggle
+            checked={screensaverInhibitMediaPlayback}
+            onChange={toggleScreensaverInhibitMediaPlayback}
+            ariaLabel="Inhibit on audio playback"
+          />
+        </SettingRow>
+      </SettingSection>
 
-        {/* Inhibit on Fullscreen */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <span>Do Not Activate When Fullscreen App is Running</span>
-              <span className="badge font-mono" style={{ fontSize: 9 }}>Video & Games</span>
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Prevents the screensaver from turning on while watching anime, movies, YouTube, or playing video games in fullscreen mode
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverInhibitFullscreen}
-              onChange={toggleScreensaverInhibitFullscreen}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
-
-        {/* Inhibit on Maximized */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <span>Do Not Activate When Window is Maximized</span>
-              <span className="badge font-mono" style={{ fontSize: 9 }}>Desktop Work</span>
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Suppresses screensaver when any active application window is maximized (e.g. streaming anime in a maximized browser window)
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverInhibitMaximized}
-              onChange={toggleScreensaverInhibitMaximized}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
-
-        {/* Inhibit on Audio / Media Playback */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <span>Do Not Activate During Media & Audio Playback</span>
-              <span className="badge font-mono" style={{ fontSize: 9 }}>WASAPI Audio</span>
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Suppresses screensaver while audio or video dialogue is playing through your speakers, preventing screensaver interruptions
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverInhibitMediaPlayback}
-              onChange={toggleScreensaverInhibitMediaPlayback}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
-      </div>
-
-      {/* Setting Card 3: Visual Engine & Mode */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Sparkles size={16} style={{ color: 'var(--color-purple)' }} />
-            <span className="text-sm font-semibold">Visual Engine & Presentation</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Display Modes</span>
-        </div>
-
-        <div style={{ padding: '16px 18px' }}>
-          <div className="text-xs text-muted" style={{ marginBottom: 14 }}>
+      {/* Section 3: Visual Engine & Presentation */}
+      <SettingSection title="Visual engine & presentation">
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="settings-item-label" style={{ marginBottom: 4 }}>Screensaver presentation mode</div>
+          <div className="settings-item-desc" style={{ marginBottom: 14 }}>
             Choose whether the screensaver mirrors your active desktop wallpaper or runs a specialized procedural Canvas 2D engine.
           </div>
 
@@ -494,10 +396,11 @@ export default function Screensaver() {
               return (
                 <div
                   key={mode.id}
-                  className={`option-card ${isSelected ? 'selected' : ''}`}
+                  className={`display-card-compact ${isSelected ? 'selected' : ''}`}
                   onClick={() => setScreensaverMode(mode.id)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}
                 >
-                  <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                  <div className="flex items-center justify-between" style={{ width: '100%' }}>
                     <span className="font-semibold text-sm" style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
                       {mode.label}
                     </span>
@@ -524,10 +427,10 @@ export default function Screensaver() {
             })}
           </div>
 
-          {/* Specific Engine Grid (Shown when screensaverMode === 'specific') */}
+          {/* Specific Engine Grid */}
           {screensaverMode === 'specific' && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
-              <div className="text-xs font-semibold" style={{ marginBottom: 10, color: 'var(--text-main)' }}>
+              <div className="settings-item-label" style={{ marginBottom: 10 }}>
                 Select Procedural Ambient Engine
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
@@ -536,14 +439,14 @@ export default function Screensaver() {
                   return (
                     <div
                       key={eng.id}
-                      className={`option-card ${isSelected ? 'selected' : ''}`}
-                      style={{ padding: '10px 12px' }}
+                      className={`display-card-compact ${isSelected ? 'selected' : ''}`}
+                      style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}
                       onClick={() => {
                         setScreensaverMode('specific')
                         setScreensaverSpecificEngine(eng.id)
                       }}
                     >
-                      <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                      <div className="flex items-center justify-between" style={{ width: '100%' }}>
                         <span className="font-semibold text-xs" style={{ color: isSelected ? 'var(--color-brand)' : 'var(--text-main)' }}>
                           {eng.name}
                         </span>
@@ -560,87 +463,48 @@ export default function Screensaver() {
           )}
         </div>
 
-        {/* Fade-in Transition Duration */}
-        <div style={{ padding: '14px 18px', borderTop: '1px solid var(--border-subtle)' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-            <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Fade-In Transition Duration</div>
-              <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                Duration of cinematic crossfade when screensaver engages
-              </div>
-            </div>
-            <span className="telemetry-chip font-mono" style={{ color: 'var(--color-brand)' }}>
-              {screensaverFadeInSecs}s
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
-            <input
-              type="range"
-              min={0.2}
-              max={4.0}
-              step={0.2}
-              value={screensaverFadeInSecs}
-              onChange={e => setScreensaverFadeInSecs(Number(e.target.value))}
-              style={{ flex: 1 }}
-            />
-          </div>
-        </div>
-      </div>
+        <SliderRow
+          label="Fade-in transition duration"
+          desc="Duration of cinematic crossfade when screensaver engages"
+          value={screensaverFadeInSecs}
+          set={setScreensaverFadeInSecs}
+          min={0.2}
+          max={4.0}
+          step={0.2}
+          fmt={v => `${v}s`}
+          presets={[
+            { label: '0.5s', val: 0.5 },
+            { label: '1s', val: 1.0 },
+            { label: '2s', val: 2.0 },
+            { label: '3s', val: 3.0 },
+          ]}
+        />
+      </SettingSection>
 
-      {/* Setting Card 3: Security & Audio Policies */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck size={16} style={{ color: 'var(--color-emerald)' }} />
-            <span className="text-sm font-semibold">Security & Audio Policies</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Protection</span>
-        </div>
+      {/* Section 4: Security & Audio Policies */}
+      <SettingSection title="Security & audio policies">
+        <SettingRow
+          label="Lock Windows on resume"
+          desc="Automatically locks the Windows workstation when user input wakes the display from screensaver"
+        >
+          <AetherToggle
+            checked={screensaverLockOnResume}
+            onChange={toggleScreensaverLockOnResume}
+            ariaLabel="Lock Windows on resume"
+          />
+        </SettingRow>
 
-        {/* Lock on Resume */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <span>Lock Windows on Resume</span>
-              <span className="badge font-mono" style={{ fontSize: 9 }}>Win+L Secure</span>
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Automatically locks the Windows workstation when user input wakes the display from screensaver
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverLockOnResume}
-              onChange={toggleScreensaverLockOnResume}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
-
-        {/* Mute Audio on Screensaver */}
-        <div className="setting-row">
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-            <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-main)' }}>
-              <span>Mute Audio during Screensaver</span>
-              <span className="badge font-mono" style={{ fontSize: 9 }}>Silent Sleep</span>
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 3 }}>
-              Immediately mutes all wallpaper and media playback while the screensaver is engaged
-            </div>
-          </div>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={screensaverMuteAudio}
-              onChange={toggleScreensaverMuteAudio}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
-        </div>
-      </div>
+        <SettingRow
+          label="Mute audio during screensaver"
+          desc="Immediately mutes all wallpaper and media playback while the screensaver is engaged"
+        >
+          <AetherToggle
+            checked={screensaverMuteAudio}
+            onChange={toggleScreensaverMuteAudio}
+            ariaLabel="Mute audio during screensaver"
+          />
+        </SettingRow>
+      </SettingSection>
     </div>
   )
 }

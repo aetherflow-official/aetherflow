@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom'
 import {
   Power, DownloadCloud, CheckCircle2, AlertCircle, ExternalLink,
   User, LogIn, LogOut, Shield, Globe, FolderOpen, RefreshCw,
-  Monitor, Palette, Volume2, ArrowRight
+  Monitor, Palette, Volume2, ArrowRight, Sparkles
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { checkForUpdate, openReleaseUrl, APP_VERSION } from '../lib/updater.js'
 import UserAvatar from '../components/UserAvatar/index.jsx'
 import { signOut, isOnline } from '../lib/supabase.js'
-import { SettingRow } from '../components/Settings/SettingRow.jsx'
+import {
+  SettingSection,
+  SettingRow,
+  AetherToggle,
+  AetherSegmented
+} from '../components/Settings/SettingsUI.jsx'
 
 export default function SettingsPage() {
   const autoStart = useStore(s => s.autoStart) || false
@@ -91,14 +96,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 880, margin: '0 auto', paddingBottom: 48 }}>
+    <div className="settings-page-container animate-fadeIn">
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <header className="settings-page-header">
         <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
+          <h1 className="settings-page-title">
             System & Preferences
           </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
+          <p className="settings-page-subtitle">
             Manage Windows startup, desktop shell behavior, software updates, and cloud account synchronization
           </p>
         </div>
@@ -108,35 +113,41 @@ export default function SettingsPage() {
             <span>v{APP_VERSION}</span>
           </span>
         </div>
-      </div>
+      </header>
 
-      {/* Quick Navigation Cards to Dedicated Sidebar Pages */}
+      {/* Quick Navigation Cards to Specialized Settings Subsystems */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: 12,
-        marginBottom: 24,
+        marginBottom: 32,
       }}>
         <Link to="/displays" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="card p-3" style={{
+          <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-            borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s ease',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+            borderRadius: 10, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s ease',
           }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-brand)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-brand)'
+            e.currentTarget.style.background = 'var(--bg-hover)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)'
+            e.currentTarget.style.background = 'var(--bg-surface)'
+          }}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'color-mix(in srgb, var(--color-brand) 15%, transparent)',
+                width: 34, height: 34, borderRadius: 8,
+                background: 'color-mix(in srgb, var(--color-brand) 14%, transparent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
               }}>
-                <Monitor size={16} style={{ color: 'var(--color-brand)' }} />
+                <Monitor size={17} style={{ color: 'var(--color-brand)' }} />
               </div>
               <div>
                 <div className="font-semibold text-xs" style={{ color: 'var(--text-main)' }}>Displays & Workspace</div>
-                <div className="text-muted" style={{ fontSize: 10.5 }}>Taskbar Glass, TranslucentTB & Occlusion</div>
+                <div className="text-muted" style={{ fontSize: 11 }}>Taskbar Glass, Multi-monitor & Occlusion</div>
               </div>
             </div>
             <ArrowRight size={14} className="text-muted" />
@@ -144,25 +155,31 @@ export default function SettingsPage() {
         </Link>
 
         <Link to="/personalization" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="card p-3" style={{
+          <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-            borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s ease',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+            borderRadius: 10, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s ease',
           }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-accent)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-accent)'
+            e.currentTarget.style.background = 'var(--bg-hover)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)'
+            e.currentTarget.style.background = 'var(--bg-surface)'
+          }}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+                width: 34, height: 34, borderRadius: 8,
+                background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
               }}>
-                <Palette size={16} style={{ color: 'var(--color-accent)' }} />
+                <Palette size={17} style={{ color: 'var(--color-accent)' }} />
               </div>
               <div>
                 <div className="font-semibold text-xs" style={{ color: 'var(--text-main)' }}>Personalization</div>
-                <div className="text-muted" style={{ fontSize: 10.5 }}>Themes, Colors & Custom Studio</div>
+                <div className="text-muted" style={{ fontSize: 11 }}>Dark, Light, Presets & Custom Studio</div>
               </div>
             </div>
             <ArrowRight size={14} className="text-muted" />
@@ -170,25 +187,31 @@ export default function SettingsPage() {
         </Link>
 
         <Link to="/audio" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="card p-3" style={{
+          <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-            borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s ease',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+            borderRadius: 10, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s ease',
           }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-emerald)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-emerald)'
+            e.currentTarget.style.background = 'var(--bg-hover)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)'
+            e.currentTarget.style.background = 'var(--bg-surface)'
+          }}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
+                width: 34, height: 34, borderRadius: 8,
+                background: 'color-mix(in srgb, var(--color-emerald) 14%, transparent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
               }}>
-                <Volume2 size={16} style={{ color: 'var(--color-emerald)' }} />
+                <Volume2 size={17} style={{ color: 'var(--color-emerald)' }} />
               </div>
               <div>
                 <div className="font-semibold text-xs" style={{ color: 'var(--text-main)' }}>Audio & Reactivity</div>
-                <div className="text-muted" style={{ fontSize: 10.5 }}>Master Volume, VU Meter & Inputs</div>
+                <div className="text-muted" style={{ fontSize: 11 }}>Master Volume, VU Meter & Inputs</div>
               </div>
             </div>
             <ArrowRight size={14} className="text-muted" />
@@ -196,70 +219,46 @@ export default function SettingsPage() {
         </Link>
       </div>
 
-      {/* Card 1: System Startup & Desktop Shell */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Power size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Startup & Windows Integration</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>OS Level</span>
-        </div>
-
+      {/* Section 1: Startup & Windows Integration */}
+      <SettingSection
+        title="Startup & Windows Integration"
+        badge="OS Level"
+      >
         <SettingRow
           label="Launch AetherFlow on System Startup"
           desc="Automatically start AetherFlow minimized to system tray when you log in to Windows"
         >
-          <label className="toggle">
-            <input type="checkbox" checked={autoStart} onChange={handleToggleAutoStart} />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle checked={autoStart} onChange={handleToggleAutoStart} />
         </SettingRow>
 
         <SettingRow
           label="Hide Windows Desktop Icons"
           desc="Keep desktop workspace pristine by concealing desktop shortcuts while live wallpapers are playing"
         >
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={hideDesktopIcons}
-              onChange={() => {
-                const nextVal = !hideDesktopIcons
-                toggleHideDesktopIcons()
-                import('@tauri-apps/api/core').then(({ invoke }) => {
-                  invoke('set_desktop_icons_visible', { visible: !nextVal }).catch(() => {})
-                }).catch(() => {})
-              }}
-            />
-            <div className="toggle-track" />
-            <div className="toggle-thumb" />
-          </label>
+          <AetherToggle
+            checked={hideDesktopIcons}
+            onChange={() => {
+              const nextVal = !hideDesktopIcons
+              toggleHideDesktopIcons()
+              import('@tauri-apps/api/core').then(({ invoke }) => {
+                invoke('set_desktop_icons_visible', { visible: !nextVal }).catch(() => {})
+              }).catch(() => {})
+            }}
+          />
         </SettingRow>
 
         <SettingRow
           label="YouTube Wallpaper Playback Engine"
           desc="Choose between native MPV hardware decoding (Zero YouTube UI, no Windows SMTC) or legacy WebView2 browser player"
         >
-          <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-main)', gap: 4 }}>
-            <button
-              type="button"
-              className={`btn ${youtubeBackend === 'mpv' ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ fontSize: 11, padding: '4px 10px', height: 'auto', borderRadius: '6px' }}
-              onClick={() => setYoutubeBackend('mpv')}
-            >
-              Native MPV (Zero UI)
-            </button>
-            <button
-              type="button"
-              className={`btn ${youtubeBackend === 'webview2' ? 'btn-primary' : 'btn-ghost'}`}
-              style={{ fontSize: 11, padding: '4px 10px', height: 'auto', borderRadius: '6px' }}
-              onClick={() => setYoutubeBackend('webview2')}
-            >
-              WebView2 (Fallback)
-            </button>
-          </div>
+          <AetherSegmented
+            options={[
+              { value: 'mpv', label: 'Native MPV' },
+              { value: 'webview2', label: 'WebView2' }
+            ]}
+            value={youtubeBackend}
+            onChange={val => setYoutubeBackend(val)}
+          />
         </SettingRow>
 
         {wallpaperDirectory && (
@@ -270,7 +269,15 @@ export default function SettingsPage() {
             <button
               type="button"
               className="btn btn-ghost"
-              style={{ fontSize: 12, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-main)' }}
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface)'
+              }}
               onClick={() => {
                 import('@tauri-apps/api/core').then(({ invoke }) => {
                   invoke('open_url', { url: wallpaperDirectory }).catch(() => {})
@@ -281,114 +288,106 @@ export default function SettingsPage() {
             </button>
           </SettingRow>
         )}
-      </div>
+      </SettingSection>
 
-      {/* Card 2: Software Updates & GitHub Releases */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <DownloadCloud size={16} style={{ color: 'var(--color-cyan)' }} />
-            <span className="text-sm font-semibold">Software Updates & Releases</span>
-          </div>
-          <span className="badge badge-brand font-mono" style={{ fontSize: 10 }}>v{APP_VERSION}</span>
-        </div>
+      {/* Section 2: Software Updates & Releases */}
+      <SettingSection
+        title="Software Updates & Releases"
+        badge={`v${APP_VERSION}`}
+      >
+        <SettingRow
+          label="Check for Updates"
+          desc="Query GitHub Releases for newer binary builds, security patches, and engine enhancements"
+        >
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={checkingUpdate}
+            style={{
+              fontSize: 12,
+              padding: '6px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              background: 'var(--bg-surface)'
+            }}
+            onClick={handleCheckUpdate}
+          >
+            <RefreshCw size={13} className={checkingUpdate ? 'animate-spin' : ''} />
+            {checkingUpdate ? 'Checking…' : 'Check Now'}
+          </button>
+        </SettingRow>
 
-        <div style={{ padding: '16px 18px' }}>
-          <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-            <div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Check for Updates</div>
-              <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                Query GitHub Releases for newer binary builds, security patches, and engine enhancements
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={checkingUpdate}
-              style={{ fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-main)', borderRadius: 8 }}
-              onClick={handleCheckUpdate}
-            >
-              <RefreshCw size={13} className={checkingUpdate ? 'animate-spin' : ''} />
-              {checkingUpdate ? 'Checking…' : 'Check Now'}
-            </button>
-          </div>
-
-          {updateResult && (
-            <div
-              className="animate-fadeIn"
-              style={{
-                marginTop: 14,
-                padding: '12px 14px',
-                borderRadius: 8,
-                background: updateResult.hasUpdate
-                  ? 'color-mix(in srgb, var(--color-brand) 12%, transparent)'
+        {updateResult && (
+          <div
+            className="animate-fadeIn"
+            style={{
+              padding: '14px 18px',
+              borderRadius: 8,
+              margin: '8px 0',
+              background: updateResult.hasUpdate
+                ? 'color-mix(in srgb, var(--color-brand) 10%, transparent)'
+                : updateResult.error
+                ? 'color-mix(in srgb, var(--color-rose) 10%, transparent)'
+                : 'color-mix(in srgb, var(--color-emerald) 10%, transparent)',
+              border: `1px solid ${
+                updateResult.hasUpdate
+                  ? 'var(--color-brand)'
                   : updateResult.error
-                  ? 'color-mix(in srgb, var(--color-rose) 12%, transparent)'
-                  : 'color-mix(in srgb, var(--color-emerald) 12%, transparent)',
-                border: `1px solid ${
-                  updateResult.hasUpdate
-                    ? 'var(--color-brand)'
-                    : updateResult.error
-                    ? 'var(--color-rose)'
-                    : 'var(--color-emerald)'
-                }`,
-              }}
-            >
-              {updateResult.hasUpdate ? (
-                <div>
-                  <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                    <Sparkles size={14} style={{ color: 'var(--color-brand)' }} />
-                    <span className="text-xs font-semibold" style={{ color: 'var(--color-brand)' }}>
-                      Update Available: v{updateResult.latestVersion}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
-                    {updateResult.releaseName || `AetherFlow v${updateResult.latestVersion} is ready to install.`}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ fontSize: 12, padding: '5px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => openReleaseUrl(updateResult.downloadUrl)}
-                  >
-                    <DownloadCloud size={13} /> Download Installer
-                  </button>
+                  ? 'var(--color-rose)'
+                  : 'var(--color-emerald)'
+              }`,
+            }}
+          >
+            {updateResult.hasUpdate ? (
+              <div>
+                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                  <Sparkles size={14} style={{ color: 'var(--color-brand)' }} />
+                  <span className="text-xs font-semibold" style={{ color: 'var(--color-brand)' }}>
+                    Update Available: v{updateResult.latestVersion}
+                  </span>
                 </div>
-              ) : updateResult.error ? (
-                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-rose)' }}>
-                  <AlertCircle size={14} />
-                  <span>Unable to check updates: {updateResult.error}</span>
+                <div className="text-xs text-muted" style={{ marginBottom: 10 }}>
+                  {updateResult.releaseName || `AetherFlow v${updateResult.latestVersion} is ready to install.`}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-emerald)' }}>
-                  <CheckCircle2 size={14} />
-                  <span>You are running the latest version of AetherFlow (v{APP_VERSION})</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Card 3: Account & Identity */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <User size={16} style={{ color: 'var(--color-brand)' }} />
-            <span className="text-sm font-semibold">Account & Community Identity</span>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontSize: 12, padding: '5px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => openReleaseUrl(updateResult.downloadUrl)}
+                >
+                  <DownloadCloud size={13} /> Download Installer
+                </button>
+              </div>
+            ) : updateResult.error ? (
+              <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-rose)' }}>
+                <AlertCircle size={14} />
+                <span>Unable to check updates: {updateResult.error}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-emerald)' }}>
+                <CheckCircle2 size={14} />
+                <span>You are running the latest version of AetherFlow (v{APP_VERSION})</span>
+              </div>
+            )}
           </div>
-          <span className={`badge ${isAuthenticated ? 'badge-brand' : ''}`} style={{ fontSize: 10 }}>
-            {isAuthenticated ? 'Authenticated' : 'Guest Mode'}
-          </span>
-        </div>
+        )}
+      </SettingSection>
 
-        <div style={{ padding: '16px 18px' }}>
+      {/* Section 3: Account & Community Identity */}
+      <SettingSection
+        title="Account & Community Identity"
+        badge={isAuthenticated ? 'Authenticated' : 'Guest Mode'}
+      >
+        <div style={{ padding: '16px 20px' }}>
           {isAuthenticated && authUser ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-                <UserAvatar user={authUser} size={52} />
+                <UserAvatar user={authUser} size={48} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="text-base font-bold" style={{ color: 'var(--text-main)' }}>
+                  <div className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>
                     {authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'AetherFlow Creator'}
                   </div>
                   <div className="text-xs text-muted" style={{ marginTop: 2 }}>
@@ -428,9 +427,14 @@ export default function SettingsPage() {
               </div>
             </div>
           ) : (
-            <div>
-              <div className="text-xs text-muted" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-                Sign in with your Google or GitHub account to publish creations to the Community Hub, sync liked wallpapers, and build your creator profile.
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+              <div style={{ maxWidth: 540 }}>
+                <div className="text-sm font-semibold" style={{ color: 'var(--text-main)', marginBottom: 4 }}>
+                  Connect Your Creator Account
+                </div>
+                <div className="text-xs text-muted" style={{ lineHeight: 1.5 }}>
+                  Sign in with your Google or GitHub account to publish creations to the Community Hub, sync liked wallpapers, and build your creator profile.
+                </div>
               </div>
               <button
                 type="button"
@@ -443,24 +447,19 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      </div>
+      </SettingSection>
 
-      {/* Card 4: Backend Infrastructure & Persistence */}
-      <div className="setting-card">
-        <div className="setting-card-header">
-          <div className="flex items-center gap-2.5">
-            <Globe size={16} style={{ color: 'var(--color-accent)' }} />
-            <span className="text-sm font-semibold">Backend Infrastructure & Diagnostics</span>
-          </div>
-          <span className="badge font-mono" style={{ fontSize: 10 }}>Diagnostics</span>
-        </div>
-
+      {/* Section 4: Backend Infrastructure & Diagnostics */}
+      <SettingSection
+        title="Backend Infrastructure & Diagnostics"
+        badge="Diagnostics"
+      >
         <SettingRow
           label="Supabase Cloud Connectivity"
           desc="Required for Community Hub browsing, publishing, and OAuth session synchronization"
         >
           <span
-            className={`badge ${isOnline() ? 'badge-emerald' : ''}`}
+            className="telemetry-chip"
             style={{
               fontSize: 11,
               display: 'inline-flex',
@@ -489,10 +488,10 @@ export default function SettingsPage() {
             Persisted (LocalStorage)
           </span>
         </SettingRow>
-      </div>
+      </SettingSection>
 
       {/* Footer credits */}
-      <div className="text-xs text-muted" style={{ textAlign: 'center', marginTop: 24 }}>
+      <div className="text-xs text-muted" style={{ textAlign: 'center', marginTop: 32, paddingBottom: 16 }}>
         AetherFlow v{APP_VERSION} · Sovereign Desktop Visual Engine · Lightweight & Fast (~30MB RAM)
       </div>
     </div>

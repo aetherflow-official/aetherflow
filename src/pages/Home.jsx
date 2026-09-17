@@ -603,6 +603,22 @@ export default function HomePage() {
     }
   }, [currentDesktopWallpaper])
 
+  // ── Auto-Heal Home Wallpapers if Missing After Cache Reset ────────────────
+  useEffect(() => {
+    if (installed && installed.length > 0) {
+      const customWallpapers = installed.filter(i => i && i.type === 'wallpaper')
+      if (customWallpapers.length > 0) {
+        const homeIds = homeWallpaperIds || []
+        const missing = customWallpapers.map(c => c.id).filter(id => !homeIds.includes(id))
+        if (missing.length > 0 && !customWallpapers.some(c => homeIds.includes(c.id))) {
+          useStore.setState({
+            homeWallpaperIds: [...homeIds, ...missing]
+          })
+        }
+      }
+    }
+  }, [installed, homeWallpaperIds])
+
   // ── Import file handler with naming modal ──────────────────────────────────
   const handleOpenImportDialog = async () => {
     try {
@@ -717,8 +733,18 @@ export default function HomePage() {
 
     const all = [...customs, ...builtins]
     const homeIds = homeWallpaperIds || []
-    // Filter to ONLY wallpapers pinned to Home (or all builtins if not yet initialized)
-    if (homeIds.length === 0) return builtins
+
+    // If homeIds is empty, display all
+    if (homeIds.length === 0) return all
+
+    // If customs exist but none are in homeIds (e.g. after cache reset before re-pinning),
+    // ensure customs are displayed on Home so user's wallpapers are never blank/missing
+    const hasCustomInHome = customs.some(c => homeIds.includes(c.id))
+    if (!hasCustomInHome && customs.length > 0) {
+      const activeBuiltins = builtins.filter(b => homeIds.includes(b.id))
+      return [...customs, ...activeBuiltins]
+    }
+
     return all.filter(w => homeIds.includes(w.id))
   }, [installed, homeWallpaperIds, customNames])
 
@@ -912,41 +938,57 @@ export default function HomePage() {
   const selectedIsLive = activeScreensForSelected.length > 0
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 960, margin: '0 auto' }}>
-      {/* Top Header */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+    <div className="content-page-container animate-fadeIn">
+      {/* Top Application Header */}
+      <div className="content-page-header">
         <div>
-          <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
-            Welcome to <span className="text-brand">AetherFlow</span>
-          </h1>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
-            Your curated desktop dashboard — pick or double-click any favorite wallpaper below
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <h1 className="content-page-title">Home</h1>
+            <div
+              className="telemetry-chip"
+              style={{
+                fontSize: 10.5,
+                padding: '2px 8px',
+                color: isWallpaperRunning ? 'var(--color-emerald)' : 'var(--text-muted)',
+                borderColor: isWallpaperRunning ? 'rgba(16, 185, 129, 0.35)' : 'var(--border-subtle)',
+                background: isWallpaperRunning ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+              }}
+            >
+              {isWallpaperRunning ? (
+                <>
+                  <span className="status-dot-live" style={{ width: 6, height: 6 }} />
+                  <span>DESKTOP ACTIVE</span>
+                </>
+              ) : (
+                <span>DESKTOP IDLE</span>
+              )}
+            </div>
+          </div>
+          <p className="content-page-subtitle">
+            Curated desktop dashboard — monitor, adjust, and switch live wallpapers
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn btn-ghost" onClick={() => setAddStreamModal(true)}>
-            <Globe size={15} /> Add Web Stream
+          <button
+            className="btn btn-ghost"
+            onClick={() => setAddStreamModal(true)}
+            style={{ height: 34, fontSize: 12, padding: '0 12px' }}
+          >
+            <Globe size={14} /> Add Web Stream
           </button>
-          <button className="btn btn-primary" onClick={handleOpenImportDialog}>
-            <Plus size={15} /> Add Media
+          <button
+            className="btn btn-primary"
+            onClick={handleOpenImportDialog}
+            style={{ height: 34, fontSize: 12, padding: '0 14px' }}
+          >
+            <Plus size={14} /> Add Media
           </button>
         </div>
       </div>
 
-      {/* Hero Preview Panel for Selected / Active Wallpaper */}
+      {/* Hero Wallpaper Stage for Selected / Active Wallpaper */}
       {activeWallpaper ? (
-        <div
-          className="card"
-          style={{
-            marginBottom: 24,
-            overflow: 'hidden',
-            position: 'relative',
-            height: 195,
-            borderRadius: 14,
-            border: '1px solid var(--border-subtle)',
-            boxShadow: 'var(--shadow-card), var(--surface-bevel)',
-          }}
-        >
+        <div className="wallpaper-stage-card">
           {!isTopPreviewPaused ? (
             <WallpaperPlayer
               key={activeWallpaper.id || activeWallpaper.name}
@@ -997,84 +1039,142 @@ export default function HomePage() {
               </div>
             </div>
           )}
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(to top, rgba(7, 10, 18, 0.94) 0%, rgba(7, 10, 18, 0.45) 55%, rgba(0, 0, 0, 0.1) 100%)',
-            display: 'flex', alignItems: 'flex-end', padding: '20px 22px',
-            zIndex: 10, pointerEvents: 'auto',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'flex-end', gap: 14 }}>
+
+          {/* Scrim Overlay & Control Surface */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(to top, rgba(7, 10, 18, 0.94) 0%, rgba(7, 10, 18, 0.4) 50%, rgba(0, 0, 0, 0.1) 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              zIndex: 10,
+              pointerEvents: 'auto',
+            }}
+          >
+            {/* Top Badges */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {selectedIsLive ? (
+                  <div
+                    className="badge"
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      color: '#34d399',
+                      border: '1px solid rgba(16, 185, 129, 0.45)',
+                      boxShadow: '0 0 14px rgba(16, 185, 129, 0.2)',
+                      gap: 6,
+                      padding: '4px 10px',
+                      fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      fontSize: 11,
+                    }}
+                  >
+                    <div className="status-dot-live" />
+                    <span>LIVE ON {activeScreensForSelected.join(', ').toUpperCase()}</span>
+                  </div>
+                ) : (
+                  <div
+                    className="badge"
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.6)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid var(--border-subtle)',
+                      letterSpacing: '0.04em',
+                      fontWeight: 600,
+                      fontSize: 11,
+                      color: 'var(--text-main)',
+                    }}
+                  >
+                    SELECTED PREVIEW
+                  </div>
+                )}
+                {activeWallpaper.config?.streamUrl ? (
+                  <div
+                    className="badge"
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      color: '#f87171',
+                      borderColor: 'rgba(239, 68, 68, 0.4)',
+                      fontSize: 11,
+                    }}
+                  >
+                    {activeWallpaper.config?.youtubeId ? 'YOUTUBE STREAM' : 'WEB STREAM'}
+                  </div>
+                ) : activeWallpaper.isCustom ? (
+                  <div className="badge badge-brand" style={{ fontSize: 11 }}>
+                    {activeWallpaper.engine === 'image-player' ? 'PICTURE' : 'VIDEO WALLPAPER'}
+                  </div>
+                ) : (
+                  <div
+                    className="badge"
+                    style={{
+                      background: 'rgba(168, 85, 247, 0.2)',
+                      color: '#c084fc',
+                      borderColor: 'rgba(168, 85, 247, 0.4)',
+                      fontSize: 11,
+                    }}
+                  >
+                    CANVAS 2D
+                  </div>
+                )}
+              </div>
+
+              {/* Pause/Resume Preview Toggle */}
+              <button
+                className="btn btn-ghost"
+                style={{
+                  height: 32,
+                  padding: '0 10px',
+                  fontSize: 11,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: isTopPreviewPaused ? 'rgba(59, 130, 246, 0.2)' : 'rgba(10, 14, 22, 0.75)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid var(--border-subtle)',
+                  color: isTopPreviewPaused ? 'var(--color-brand)' : 'var(--text-muted)',
+                  borderRadius: 6,
+                }}
+                onClick={() => {
+                  setIsTopPreviewPaused(p => !p)
+                  tauriInvoke('trim_memory').catch(() => {})
+                }}
+                title={isTopPreviewPaused ? 'Resume live animation' : 'Pause animation to save GPU/RAM'}
+              >
+                {isTopPreviewPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} />}
+                <span>{isTopPreviewPaused ? 'Resume' : 'Pause'}</span>
+              </button>
+            </div>
+
+            {/* Bottom Metadata & Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16 }}>
               <div>
-                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-                  {selectedIsLive ? (
-                    <div
-                      className="badge"
-                      style={{
-                        background: 'rgba(16, 185, 129, 0.18)',
-                        color: '#34d399',
-                        border: '1px solid rgba(16, 185, 129, 0.45)',
-                        boxShadow: '0 0 14px rgba(16, 185, 129, 0.25)',
-                        gap: 6,
-                        padding: '4px 10px',
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      <div className="status-dot-live" />
-                      <span>LIVE · {activeScreensForSelected.join(', ').toUpperCase()}</span>
-                    </div>
-                  ) : (
-                    <div className="badge" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-subtle)', letterSpacing: '0.04em', fontWeight: 600 }}>
-                      SELECTED PREVIEW
-                    </div>
-                  )}
-                  {activeWallpaper.config?.streamUrl ? (
-                    <div className="badge badge-brand" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)' }}>
-                      {activeWallpaper.config?.youtubeId ? 'YOUTUBE STREAM' : 'WEB STREAM'}
-                    </div>
-                  ) : activeWallpaper.isCustom && (
-                    <div className="badge badge-brand">VIDEO WALLPAPER</div>
-                  )}
-                </div>
-                <div className="font-bold text-lg flex items-center gap-2">
-                  <span style={{ letterSpacing: '-0.2px' }}>{(customNames || {})[activeWallpaper?.id] || activeWallpaper?.name}</span>
+                <div className="font-bold text-lg flex items-center gap-2" style={{ color: '#fff' }}>
+                  <span style={{ letterSpacing: '-0.2px' }}>
+                    {(customNames || {})[activeWallpaper?.id] || activeWallpaper?.name}
+                  </span>
                   <button
                     className="btn-icon"
-                    style={{ padding: 3 }}
+                    style={{ padding: 3, color: 'rgba(255,255,255,0.7)' }}
                     title="Rename Wallpaper"
                     onClick={() => setRenameModal({ isOpen: true, id: activeWallpaper.id, currentName: activeWallpaper.name })}
                   >
                     <Pencil size={12} />
                   </button>
                 </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                  {activeWallpaper.communityMeta?.author
+                    ? `by ${activeWallpaper.communityMeta.author}`
+                    : activeWallpaper.isCustom
+                    ? (activeWallpaper.engine === 'image-player' ? 'Custom High-Res Picture' : 'Custom Video')
+                    : `Built-in Canvas Engine · ${activeWallpaper.id}`}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {/* Pause / Resume Live Preview Button */}
-                <button
-                  className="btn btn-ghost"
-                  style={{
-                    height: 36,
-                    padding: '4px 12px',
-                    fontSize: 11.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: isTopPreviewPaused ? 'rgba(59, 130, 246, 0.18)' : 'rgba(10, 14, 22, 0.8)',
-                    border: '1px solid var(--border-subtle)',
-                    color: isTopPreviewPaused ? 'var(--color-brand)' : 'var(--text-muted)',
-                    boxShadow: 'var(--surface-bevel)',
-                    borderRadius: 8,
-                  }}
-                  onClick={() => {
-                    setIsTopPreviewPaused(p => !p)
-                    tauriInvoke('trim_memory').catch(() => {})
-                  }}
-                  title={isTopPreviewPaused ? "Resume live animated preview" : "Pause preview animation to save CPU & GPU memory"}
-                >
-                  {isTopPreviewPaused ? <Play size={13} fill="currentColor" /> : <Pause size={13} />}
-                  <span>{isTopPreviewPaused ? 'Resume Preview' : 'Pause Preview'}</span>
-                </button>
                 {isWallpaperRunning && (
                   <button
                     className="btn"
@@ -1082,9 +1182,10 @@ export default function HomePage() {
                       background: 'rgba(239,68,68,0.18)',
                       color: '#fca5a5',
                       border: '1px solid rgba(239,68,68,0.35)',
-                      height: 36,
+                      height: 34,
                       padding: '0 12px',
                       borderRadius: 8,
+                      fontSize: 12,
                     }}
                     onClick={handleStop}
                   >
@@ -1100,14 +1201,15 @@ export default function HomePage() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    minWidth: 145,
-                    height: 36,
+                    minWidth: 140,
+                    height: 34,
+                    fontSize: 12,
                     justifyContent: 'center',
                     borderRadius: 8,
                     boxShadow: '0 0 16px var(--color-glow)',
                   }}
                 >
-                  <MonitorPlay size={15} />
+                  <MonitorPlay size={14} />
                   {applying ? 'Applying…' : selectedIsLive ? 'Re-apply' : 'Apply to Desktop'}
                 </button>
               </div>
@@ -1118,45 +1220,43 @@ export default function HomePage() {
         <div
           className="card card-interactive"
           style={{
-            marginBottom: 28, padding: 36, textAlign: 'center',
-            border: '1.5px dashed var(--border-main)', background: 'transparent',
+            marginBottom: 20,
+            padding: 32,
+            textAlign: 'center',
+            border: '1.5px dashed var(--border-main)',
+            background: 'transparent',
           }}
           onClick={handleOpenImportDialog}
         >
-          <Plus size={28} className="text-brand" style={{ margin: '0 auto 10px', opacity: 0.8 }} />
+          <Plus size={24} className="text-brand" style={{ margin: '0 auto 8px', opacity: 0.8 }} />
           <div className="text-sm font-medium">Select a wallpaper below or click to import your own</div>
-          <div className="text-xs text-muted" style={{ marginTop: 4 }}>Supports pictures (PNG, JPG, WebP) and videos (MP4, WebM, MKV)</div>
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+            Supports pictures (PNG, JPG, WebP) and videos (MP4, WebM, MKV)
+          </div>
         </div>
       )}
 
-      {/* Property Controls (Opacity / Brightness / Speed or Fit) */}
+      {/* Property Controls: Compact Horizontal Engine Surface */}
       {activeWallpaper && (
-        <div
-          className="card p-4"
-          style={{
-            marginBottom: 24,
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: 'var(--shadow-card), var(--surface-bevel)',
-            borderRadius: 14,
-          }}
-        >
-          <div className="flex items-center justify-between" style={{ marginBottom: 18, paddingBottom: 12, borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="engine-params-surface">
+          <div className="engine-params-header">
             <div className="flex items-center gap-2">
-              <SlidersHorizontal size={14} style={{ color: 'var(--color-brand)' }} />
-              <span className="font-semibold text-xs uppercase tracking-wider text-muted">Active Engine Parameters</span>
+              <SlidersHorizontal size={13} style={{ color: 'var(--color-brand)' }} />
+              <span className="font-semibold text-xs uppercase tracking-wider text-muted">Active Wallpaper Controls</span>
             </div>
             <div className="telemetry-chip">
-              <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>{activeWallpaper.engine || activeWallpaper.id || 'native'}</span>
+              <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>
+                {activeWallpaper.engine || activeWallpaper.id || 'native'}
+              </span>
               <span style={{ opacity: 0.4 }}>•</span>
               <span>{fpsCap > 0 && fpsCap < 240 ? `${fpsCap} FPS CAP` : 'UNLIMITED FPS'}</span>
             </div>
           </div>
 
+          {/* Multi-monitor selector if per-screen mode */}
           {screenArrangement === 'per-screen' && monitors.length > 1 && (
-            <div style={{ marginBottom: 20, padding: 14, background: 'var(--bg-card)', borderRadius: 10, border: '1px solid var(--border-subtle)', boxShadow: 'var(--surface-bevel)' }}>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted" style={{ marginBottom: 10 }}>Target Monitor</div>
+            <div style={{ marginBottom: 14, padding: 10, background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted" style={{ marginBottom: 8 }}>Target Monitor</div>
               <div className="flex gap-2">
                 {monitors.map((m, i) => {
                   const isSelected = selectedMonitorLabel === m.label
@@ -1168,20 +1268,20 @@ export default function HomePage() {
                       onClick={() => handleSelectMonitor(m.label)}
                       style={{
                         flex: 1,
-                        padding: 10,
+                        padding: '6px 10px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 5,
+                        gap: 3,
                         alignItems: 'center',
-                        borderRadius: 8,
+                        borderRadius: 6,
                         border: isSelected ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
-                        boxShadow: isSelected ? '0 0 12px var(--color-glow)' : 'none',
+                        fontSize: 11,
                       }}
                     >
-                      <Monitor size={16} />
-                      <span style={{ fontSize: 11, fontWeight: 600 }}>{m.displayName || `Display ${m.displayNumber || i + 1}`}</span>
+                      <Monitor size={14} />
+                      <span style={{ fontWeight: 600 }}>{m.displayName || `Display ${m.displayNumber || i + 1}`}</span>
                       {monWp && (
-                        <span style={{ fontSize: 10, opacity: 0.8, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 9.5, opacity: 0.8, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {monWp.name}
                         </span>
                       )}
@@ -1192,9 +1292,10 @@ export default function HomePage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }}>
+            {/* Opacity */}
             <div>
-              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 8, userSelect: 'none' }}>
+              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
                 <span>Opacity</span>
                 <span className="text-brand font-mono">{Math.round(wallpaperOpacity * 100)}%</span>
               </div>
@@ -1210,8 +1311,9 @@ export default function HomePage() {
               />
             </div>
 
+            {/* Brightness */}
             <div>
-              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 8, userSelect: 'none' }}>
+              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
                 <span>Brightness</span>
                 <span className="text-brand font-mono">{Math.round(wallpaperBrightness * 100)}%</span>
               </div>
@@ -1227,10 +1329,11 @@ export default function HomePage() {
               />
             </div>
 
+            {/* Speed or Picture Fit */}
             {isCurrentWallpaperImage ? (
               <div>
-                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 8, userSelect: 'none' }}>
-                  <span>Choose a Fit</span>
+                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
+                  <span>Choose Fit</span>
                   <span className="text-brand font-mono capitalize">
                     {activeWallpaper.config?.fit === 'cover' ? 'fill' : (activeWallpaper.config?.fit === 'contain' ? 'fit' : (activeWallpaper.config?.fit || 'fill'))}
                   </span>
@@ -1249,7 +1352,7 @@ export default function HomePage() {
                       <button
                         key={id}
                         className={`btn ${isActive ? 'btn-primary' : 'btn-ghost'}`}
-                        style={{ flex: 1, minWidth: 50, padding: '5px 8px', fontSize: 11 }}
+                        style={{ flex: 1, minWidth: 44, padding: '4px 6px', fontSize: 10.5 }}
                         onClick={() => handleFit(id)}
                       >
                         {label}
@@ -1258,9 +1361,8 @@ export default function HomePage() {
                   })}
                 </div>
 
-                {/* Matte / Letterbox background color when Fit or Center is active */}
                 {['fit', 'contain', 'center'].includes((activeWallpaper.config?.fit || '').toLowerCase()) && (
-                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span className="text-xs text-muted">Matte Background</span>
                     <div className="flex items-center gap-1.5">
                       {['#000000', '#0a0e17', '#18181b', '#2d3748', '#ffffff'].map(c => (
@@ -1269,8 +1371,8 @@ export default function HomePage() {
                           type="button"
                           onClick={() => handleBackgroundColor(c)}
                           style={{
-                            width: 18,
-                            height: 18,
+                            width: 16,
+                            height: 16,
                             borderRadius: '50%',
                             background: c,
                             border: (activeWallpaper.config?.backgroundColor || '#000000') === c
@@ -1287,8 +1389,8 @@ export default function HomePage() {
                         value={activeWallpaper.config?.backgroundColor || '#000000'}
                         onChange={e => handleBackgroundColor(e.target.value)}
                         style={{
-                          width: 22,
-                          height: 22,
+                          width: 20,
+                          height: 20,
                           padding: 0,
                           borderRadius: 4,
                           border: '1px solid var(--border-main)',
@@ -1303,7 +1405,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div>
-                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 8, userSelect: 'none' }}>
+                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
                   <span>Speed</span>
                   <span className="text-brand font-mono">{parseFloat(wallpaperSpeed).toFixed(1)}×</span>
                 </div>
@@ -1320,8 +1422,9 @@ export default function HomePage() {
               </div>
             )}
 
+            {/* Volume */}
             <div>
-              <div className="flex justify-between items-center text-xs text-muted" style={{ marginBottom: 8, userSelect: 'none' }}>
+              <div className="flex justify-between items-center text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
                 <span className="flex items-center gap-1.5">
                   <button
                     className="btn-icon"
@@ -1330,7 +1433,7 @@ export default function HomePage() {
                       color: currentWallpaperAudio.muted ? 'var(--color-rose)' : 'var(--color-brand)',
                     }}
                     onClick={handleWallpaperMuteToggle}
-                    title={currentWallpaperAudio.muted ? "Unmute wallpaper" : "Mute wallpaper"}
+                    title={currentWallpaperAudio.muted ? 'Unmute wallpaper' : 'Mute wallpaper'}
                   >
                     {currentWallpaperAudio.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                   </button>
@@ -1357,22 +1460,22 @@ export default function HomePage() {
           </div>
 
           {isCurrentWallpaperImage && activeWallpaper?.config?.imagePath && (
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-main)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div className="text-xs text-muted">
                 Also set this picture as your Windows desktop system wallpaper (persists even when app closes)
               </div>
               <button
                 className={`btn ${winWallpaperSet ? 'btn-success' : 'btn-ghost'}`}
-                style={{ fontSize: 12, padding: '5px 14px' }}
+                style={{ fontSize: 11, padding: '4px 12px' }}
                 onClick={handleSetWindowsWallpaper}
               >
                 {winWallpaperSet ? (
                   <>
-                    <Check size={13} style={{ marginRight: 4 }} /> Set as System Wallpaper!
+                    <Check size={12} style={{ marginRight: 4 }} /> Set as System Wallpaper!
                   </>
                 ) : (
                   <>
-                    <ImageIcon size={13} style={{ marginRight: 4 }} /> Set as Windows Wallpaper
+                    <ImageIcon size={12} style={{ marginRight: 4 }} /> Set as Windows Wallpaper
                   </>
                 )}
               </button>
@@ -1381,15 +1484,15 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Wallpapers Section Header & Filter Bar */}
+      {/* Wallpapers Section Header & Filter Toolbar */}
       <div style={{ marginBottom: 16 }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
           <div className="flex items-center gap-3">
-            <h2 className="font-semibold text-base">Home Favorites</h2>
-            <span className="badge font-mono">{homeWallpapers.length}</span>
+            <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>Home Favorites</h2>
+            <span className="badge font-mono" style={{ fontSize: 11 }}>{homeWallpapers.length}</span>
             <button
               className="btn btn-ghost"
-              style={{ fontSize: 11, padding: '3px 10px', height: 'auto' }}
+              style={{ fontSize: 11, padding: '2px 8px', height: 'auto', color: 'var(--text-muted)' }}
               onClick={() => navigate('/library')}
             >
               Manage in Library <ArrowRight size={11} style={{ marginLeft: 3 }} />
@@ -1408,7 +1511,7 @@ export default function HomePage() {
                 width: '100%',
                 padding: '6px 26px 6px 30px',
                 background: 'var(--bg-card)',
-                border: '1px solid var(--border-main)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: 8,
                 color: 'var(--text-main)',
                 fontSize: 12,
@@ -1429,43 +1532,45 @@ export default function HomePage() {
 
         {/* Category Filters & Thumbnail Mode Selector */}
         <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
-          <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap', background: 'color-mix(in srgb, var(--text-main) 4%, transparent)', padding: 3, borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
+          <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
             {[
               { id: 'all', label: 'All Favorites', count: homeWallpapers.length },
               { id: 'liked', label: 'Liked', count: homeWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
               { id: 'builtin', label: 'Built-in Canvas', count: homeWallpapers.filter(w => !w.isCustom).length },
               { id: 'custom', label: 'Custom Media', count: homeWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
               { id: 'stream', label: 'Web Streams', count: homeWallpapers.filter(w => w.config?.streamUrl).length },
-            ].map(cat => (
-              <button
-                key={cat.id}
-                style={{
-                  cursor: 'pointer',
-                  padding: '5px 12px',
-                  fontSize: 11.5,
-                  fontWeight: filterCategory === cat.id ? 600 : 500,
-                  borderRadius: 7,
-                  background: filterCategory === cat.id ? 'var(--bg-card-hover)' : 'transparent',
-                  color: filterCategory === cat.id ? (cat.id === 'liked' ? 'var(--color-rose)' : 'var(--color-brand)') : 'var(--text-muted)',
-                  border: filterCategory === cat.id ? (cat.id === 'liked' ? '1px solid var(--color-rose)' : '1px solid var(--color-brand)') : '1px solid transparent',
-                  boxShadow: filterCategory === cat.id ? `0 0 12px ${cat.id === 'liked' ? 'rgba(244,63,94,0.3)' : 'var(--color-glow)'}` : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'all 0.15s ease',
-                }}
-                onClick={() => setFilterCategory(cat.id)}
-              >
-                {cat.icon && <cat.icon size={12} fill={filterCategory === cat.id ? 'currentColor' : 'none'} />}
-                <span>{cat.label}</span>
-                <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
-              </button>
-            ))}
+            ].map(cat => {
+              const isActive = filterCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '4px 10px',
+                    fontSize: 11.5,
+                    fontWeight: isActive ? 600 : 500,
+                    borderRadius: 6,
+                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
+                    color: isActive ? (cat.id === 'liked' ? 'var(--color-rose)' : 'var(--color-brand)') : 'var(--text-muted)',
+                    border: isActive ? (cat.id === 'liked' ? '1px solid var(--color-rose)' : '1px solid var(--color-brand)') : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onClick={() => setFilterCategory(cat.id)}
+                >
+                  {cat.icon && <cat.icon size={11} fill={isActive ? 'currentColor' : 'none'} />}
+                  <span>{cat.label}</span>
+                  <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
+                </button>
+              )
+            })}
           </div>
 
           {/* Thumbnail / Preview Mode Selector */}
           <div className="segmented-control" title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)">
-            <span style={{ fontSize: 10.5, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
+            <span style={{ fontSize: 10, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
               PREVIEWS:
             </span>
             {[
@@ -1478,6 +1583,7 @@ export default function HomePage() {
                 className={`segmented-item ${thumbnailMode === m.id ? 'active' : ''}`}
                 onClick={() => setThumbnailMode(m.id)}
                 title={m.title}
+                style={{ fontSize: 11, padding: '3px 8px' }}
               >
                 {m.label}
               </button>
@@ -1509,17 +1615,12 @@ export default function HomePage() {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20, marginBottom: 36 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18, marginBottom: 36 }}>
           {filteredWallpapers.map(wallpaper => {
             const isSelected    = activeWallpaper?.id === wallpaper.id
             const activeScreens = getWallpaperActiveScreens(wallpaper)
             const isLive        = activeScreens.length > 0
             const typeInfo      = getWallpaperTypeInfo(wallpaper)
-            const thumbUrl      = getWallpaperStaticThumbnail(wallpaper)
-            const isVideo       = typeInfo.type === 'video'
-            const videoPath     = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath
-            const videoSrc      = videoPath ? (videoPath.startsWith('http') || videoPath.startsWith('data:') ? videoPath : safeConvertFileSrc(videoPath)) : ''
-
             const isLiked       = (likedWallpaperIds || []).includes(wallpaper.id)
 
             return (
@@ -1527,8 +1628,8 @@ export default function HomePage() {
                 key={wallpaper.id}
                 className="mp-card"
                 style={{
-                  border: isSelected ? '1px solid var(--color-brand)' : undefined,
-                  boxShadow: isSelected ? '0 0 0 1px var(--color-brand), 0 8px 24px rgba(0,0,0,0.4)' : undefined,
+                  border: isSelected ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+                  boxShadow: isSelected ? '0 0 0 1px var(--color-brand), 0 8px 24px rgba(0,0,0,0.3)' : undefined,
                 }}
                 onClick={() => selectWallpaper(wallpaper)}
                 onMouseEnter={() => setHoveredId(wallpaper.id)}
@@ -1638,13 +1739,13 @@ export default function HomePage() {
                 </div>
 
                 {/* ── 2. Card Content & Hierarchy ── */}
-                <div style={{ padding: '16px 16px 14px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                   {/* Title & Subtitle */}
-                  <div style={{ marginBottom: 10 }}>
+                  <div style={{ marginBottom: 8 }}>
                     <h3
                       className="font-semibold"
                       style={{
-                        fontSize: 14,
+                        fontSize: 13.5,
                         lineHeight: '1.3',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
@@ -1658,12 +1759,12 @@ export default function HomePage() {
                     >
                       {wallpaper.name}
                     </h3>
-                    <div className="text-xs text-muted" style={{ marginTop: 3 }}>
+                    <div className="text-xs text-muted" style={{ marginTop: 2 }}>
                       {wallpaper.communityMeta?.author
                         ? `by ${wallpaper.communityMeta.author}`
                         : wallpaper.isCustom
                         ? `Custom ${typeInfo.label}`
-                        : `Built-in Canvas 2D Engine`}
+                        : `Built-in Canvas Engine`}
                     </div>
                   </div>
 
@@ -1671,10 +1772,10 @@ export default function HomePage() {
                   <div
                     className="flex items-center justify-between"
                     style={{
-                      paddingTop: 10,
-                      paddingBottom: 12,
-                      borderTop: '1px solid var(--border-main)',
-                      marginBottom: 12,
+                      paddingTop: 8,
+                      paddingBottom: 10,
+                      borderTop: '1px solid var(--border-subtle)',
+                      marginBottom: 10,
                     }}
                   >
                     <div className="flex items-center gap-1 text-xs text-subtle truncate" style={{ maxWidth: '55%' }}>
@@ -1683,32 +1784,34 @@ export default function HomePage() {
                           <span
                             key={tag}
                             style={{
-                              padding: '2px 7px',
+                              padding: '2px 6px',
                               borderRadius: 4,
-                              background: 'rgba(255,255,255,0.05)',
-                              border: '1px solid var(--border-main)',
-                              fontSize: 10,
+                              background: 'var(--bg-card-hover)',
+                              border: '1px solid var(--border-subtle)',
+                              fontSize: 9.5,
+                              color: 'var(--text-muted)',
                             }}
                           >
                             #{tag}
                           </span>
                         ))
                       ) : (
-                        <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>60 FPS Native</span>
+                        <span style={{ fontSize: 10.5, color: 'var(--text-subtle)' }}>60 FPS Native</span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {/* Dedicated Preview Button */}
                       <button
                         className="btn btn-ghost"
                         style={{
-                          padding: '4px 8px',
-                          fontSize: 11,
+                          padding: '3px 6px',
+                          fontSize: 10.5,
                           display: 'flex',
                           alignItems: 'center',
                           gap: 4,
                           color: 'var(--text-muted)',
+                          height: 'auto',
                         }}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -1716,26 +1819,26 @@ export default function HomePage() {
                         }}
                         title="Open live preview window"
                       >
-                        <Eye size={12} />
+                        <Eye size={11} />
                         <span>Preview</span>
                       </button>
 
                       <button
                         className="btn-icon"
-                        style={{ padding: '4px 6px', color: 'var(--text-muted)' }}
+                        style={{ padding: '3px 5px', color: 'var(--text-muted)' }}
                         title="Rename Wallpaper"
                         onClick={(e) => {
                           e.stopPropagation()
                           setRenameModal({ isOpen: true, id: wallpaper.id, currentName: wallpaper.name })
                         }}
                       >
-                        <Pencil size={12} />
+                        <Pencil size={11} />
                       </button>
 
                       {wallpaper.isCustom && (
                         <button
                           className="btn-icon"
-                          style={{ padding: '4px 6px', color: 'var(--color-rose)' }}
+                          style={{ padding: '3px 5px', color: 'var(--color-rose)' }}
                           title="Delete custom wallpaper"
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1743,13 +1846,13 @@ export default function HomePage() {
                             uninstallItem(wallpaper.id)
                           }}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={11} />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Primary Action Button (Full Width, 36px Height, ONLY ONE APPLY BUTTON) */}
+                  {/* Primary Action Button */}
                   <div style={{ marginTop: 'auto' }}>
                     {isLive ? (
                       <div
@@ -1759,9 +1862,11 @@ export default function HomePage() {
                           background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
                           borderColor: 'var(--color-emerald)',
                           color: 'var(--color-emerald)',
+                          height: 32,
+                          fontSize: 12,
                         }}
                       >
-                        <Check size={14} /> Active on Desktop
+                        <Check size={13} /> Active on Desktop
                       </div>
                     ) : (
                       <button
@@ -1772,8 +1877,9 @@ export default function HomePage() {
                           handleApply(wallpaper)
                         }}
                         title="Apply to Windows desktop"
+                        style={{ height: 32, fontSize: 12 }}
                       >
-                        <Play size={13} fill="currentColor" /> Apply to Desktop
+                        <Play size={12} fill="currentColor" /> Apply to Desktop
                       </button>
                     )}
                   </div>

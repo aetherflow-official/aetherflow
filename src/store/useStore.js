@@ -71,8 +71,11 @@ export async function syncCustomWallpapersFromDisk() {
 
       const merged = Array.from(currentMap.values())
       const homeList = state.homeWallpaperIds || []
-      // Never force community marketplace wallpapers into Home on sync
-      const homeIds = new Set(homeList.filter(id => !id.startsWith('community-')))
+      // Preserve existing pinned home wallpapers and ensure all local custom wallpapers from disk are pinned to Home
+      const homeIds = new Set([
+        ...homeList.filter(id => !id.startsWith('community-')),
+        ...diskItems.map(d => d.id)
+      ])
 
       useStore.setState({
         installed: merged,
@@ -229,7 +232,7 @@ export const useStore = create(
       }),
 
       // ── Active Theme & Accent ─────────────────────────────────────────────
-      activeTheme: 'sovereign-onyx',
+      activeTheme: 'aether-dark',
       themes: {},                      // user-saved custom themes
       customAccentColor: null,         // custom accent override hex (e.g. '#3b82f6')
       uiDensity: 'comfortable',        // 'comfortable' | 'compact'
@@ -282,7 +285,7 @@ export const useStore = create(
             document.documentElement.style.setProperty('--color-glow', `${color}55`);
           } else {
             // Reset to current theme default tokens
-            const id = get().activeTheme || 'sovereign-onyx';
+            const id = get().activeTheme || 'aether-dark';
             get().setActiveTheme(id);
           }
         }
@@ -369,15 +372,31 @@ export const useStore = create(
       deleteCustomTheme: (id) => set((s) => {
         const next = { ...(s.themes || {}) }
         delete next[id]
-        const activeTheme = s.activeTheme === id ? 'sovereign-onyx' : s.activeTheme
+        const activeTheme = s.activeTheme === id ? 'aether-dark' : s.activeTheme
         if (s.activeTheme === id) {
-          document.documentElement.setAttribute('data-theme', 'sovereign-onyx')
+          document.documentElement.setAttribute('data-theme', 'aether-dark')
           document.documentElement.removeAttribute('style')
           const val = s.glowAmbience || 'balanced'
           const mult = val === 'vivid' ? '1.5' : val === 'balanced' ? '1' : val === 'subtle' ? '0.4' : '0'
           document.documentElement.style.setProperty('--glow-multiplier', mult)
         }
         return { themes: next, activeTheme }
+      }),
+
+      // ── Rename Custom Theme ─────────────────────────────────────────────
+      renameCustomTheme: (id, newName) => set((s) => {
+        const current = s.themes?.[id]
+        if (!current) return {}
+        const cleanName = (newName || '').trim()
+        if (!cleanName) return {}
+        const updated = {
+          ...current,
+          _meta: {
+            ...(current._meta || {}),
+            name: cleanName,
+          }
+        }
+        return { themes: { ...s.themes, [id]: updated } }
       }),
 
       // ── Renaming ──────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Zap, Palette, Mic, Settings, ChevronLeft, Square, Activity } from 'lucide-react'
 import { useStore } from '../../store/useStore.js'
+import { BUILTIN_THEMES } from '../../engines/index.js'
 import { stopDesktopWallpaper } from '../../lib/wallpaperActions.js'
 import { useNavigate } from 'react-router-dom'
 
@@ -8,6 +9,7 @@ export default function StatusBar() {
   const activeWallpaper    = useStore(s => s.activeWallpaper)
   const isWallpaperRunning = useStore(s => s.isWallpaperRunning)
   const activeTheme        = useStore(s => s.activeTheme)
+  const themes             = useStore(s => s.themes) || {}
   const audioReactive      = useStore(s => s.audioReactive)
   const sidebarCollapsed   = useStore(s => s.sidebarCollapsed)
   const toggleSidebar      = useStore(s => s.toggleSidebar)
@@ -63,7 +65,8 @@ export default function StatusBar() {
     setTimeout(() => setTrimming(false), 500)
   }
 
-  const themeLabel = activeTheme?.replace('sovereign-', '').replace('-', ' ') ?? '—'
+  const foundBuiltin = BUILTIN_THEMES.find(t => t.id === activeTheme)
+  const themeLabel = foundBuiltin?.name || themes[activeTheme]?._meta?.name || activeTheme?.replace('sovereign-', '').replace('aether-', '').replace('-', ' ') || '—'
 
   async function handleStop(e) {
     e.stopPropagation()

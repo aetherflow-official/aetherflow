@@ -46,10 +46,10 @@ function WallpaperCanvas() {
     }
   }, [isScreensaver])
 
-  // Initialize sovereign-onyx theme token values on document element
+  // Initialize aether-dark theme token values on document element
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', 'sovereign-onyx')
+      document.documentElement.setAttribute('data-theme', 'aether-dark')
       document.body.style.backgroundColor = 'transparent'
     }
   }, [])

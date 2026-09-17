@@ -3,22 +3,27 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-17 03:48 IST — Complete Elimination of Title Bar Artifact & Zero-Gap Multi-Monitor Geometry:
-1. **Title Bar Artifact (`AetherFlow Wallpaper - \\.\DISPLAY1`) Resolved**:
-   - Identified that Tauri's `WebviewWindowBuilder` assigned the window title, and when `win.show()` was called after pinning, Tao re-applied non-client window attributes and drew the title bar.
-   - Set `.title("")` on all background wallpaper host windows and eliminated the redundant `win.show()` call (the window is already positioned and shown via Win32 `SWP_SHOWWINDOW`).
-   - Implemented `borderless_wallpaper_subclass_proc` using `SetWindowSubclass` to intercept `WM_NCCALCSIZE` (returning 0), `WM_NCPAINT` (returning 0), and `WM_NCACTIVATE` (returning 1) on both Tauri and MPV wallpaper windows. Windows is strictly prevented from ever calculating or drawing non-client borders, frames, or title bars.
-2. **MPV Window Sizing & Seam Fixed**:
-   - Fixed the 199x34 postage-stamp MPV bug caused by window minimization: restored `ShowWindow(h, SW_SHOWNOACTIVATE)` while `alpha = 0` so MPV safely un-minimizes to full monitor dimensions (`mon_w x mon_h`) without flashing on screen.
-   - Removed destructive `ShowWindow(SW_HIDE)` call during enum callbacks.
-   - Windows 11 DWM 1px accent border killed with `DWMWA_BORDER_COLOR = 0xFFFFFFFE` (`COLOR_NONE`), `DWMNCRP_DISABLED`, and `DWMWCP_DONOTROUND`.
-   - Display 1 spans strictly `(0, 0, 1920, 1080)` and Display 6 spans strictly `(1920, 247, 1366, 768)` with exact 0px overlap and 0px gap.
-3. **Build & Verification**:
-   - `cargo build --release` completed with 0 errors and 0 warnings.
-   - Updated release binary `.\AetherFlow.exe`.
-   - Runtime logs verified: `POST-POSITION HWND WinRect: [1920x1080]` and `[1366x768]`, `Measured frame insets: left=0, top=0, right=0, bottom=0`, `alpha=255`, `POST-START-SYNC-VERIFIED delta=0.133s`.
-
-
+2026-09-17 17:25 IST — Personalization / Theme System Refinement:
+1. **Spatial Composition Redesign (`src/pages/Personalization.jsx`)**:
+   - Converted Personalization from disconnected card dashboard into a unified, continuous application surface matching Audio and Displays (`settings-page-container`, `settings-page-header`, `SettingSection`, `SettingRow`).
+   - Replaced bouncing cards with restrained `.theme-preset-tile`s emphasizing visual previews, clean typography, and subtle selected states without garish glow.
+2. **Display Name Cleanup (Zero ID Breaking)**:
+   - Stripped "Aether" and "Sovereign" prefixes from user-facing theme display labels across `BUILTIN_THEMES`, `Personalization.jsx`, `StatusBar`, and `Settings.jsx`.
+   - Preserved all internal IDs strictly intact (`aether-dark`, `aether-light`, `sovereign-onyx`, `sovereign-slate`, `sovereign-studio`, `sovereign-obsidian`, `sovereign-manifesto`, `sovereign-light`).
+   - Display names mapped cleanly: Dark, Light, Onyx, Slate, Studio, Obsidian, Manifesto, Light Classic.
+3. **Theme Studio Closable Workspace (`src/pages/Personalization.jsx`)**:
+   - Elevated Custom Theme Studio into a dedicated, high-productivity editor workspace.
+   - Implemented sticky Live Preview Stage with mock window, mini sidebar, sample application surface, and real-time token rendering.
+   - Added dirty state tracking (`hasUnsavedChanges`), unsaved changes confirmation modal ("Discard unsaved changes? Keep Editing / Discard & Exit"), and clean teardown of temporary inline CSS variables.
+4. **Save Custom Themes as Presets under MY PRESETS (`src/pages/Personalization.jsx`, `src/store/useStore.js`)**:
+   - Implemented `SavePresetModal` with name validation (non-empty, max 32 chars) and graceful duplicate collision detection/overwrite prompt.
+   - User-saved presets render seamlessly in the preset browser under "MY PRESETS" with mini wireframe, accent dot, checkmark indicator, Edit in Studio, Rename (`RenamePresetModal`), Export JSON, and Delete (`DeletePresetModal` with confirmation; built-ins protected).
+   - Full backward compatibility with existing `themes` map in Zustand store and localStorage.
+5. **Verification & Cross-Theme Testing**:
+   - Built frontend bundle via `npm run build` (571ms, 0 errors).
+   - Verified Rust backend via `cargo check` (3.54s, 0 errors).
+   - Verified in browser via Playwright across Dark, Light, and custom themes ("Midnight Glass Pro").
+   - Responsive verification passed at 1440×900, 1280×800, and 1024×768.
 
 ---
 
@@ -221,6 +226,10 @@ npm run tauri:dev
 | 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Desktop Black Screen Overlay & YouTube Player Crash: Restored Windows Explorer shell on WinSta0\Default; safeguarded pin_hwnd_as_wallpaper with bool return and prevented unparented windows from calling win.show(); made wallpaper.html and wallpaper.jsx backgrounds transparent; replaced destructive configurable:false MediaSession overrides with safe setActionHandler stubs; removed broken origin parameter from YouTube embed URL; attached startup thread to WinSta0\Default; verified 0 errors via cargo check, npm run build (1.11s), and cargo build --release; deployed fresh AetherFlow.exe (7.53 MB). |
 | 2026-09-15 | Antigravity (Gemini 3.8 Flash) | Resolved Wallpaper Transition Smoothness & Rapid Switching Race Condition: Eliminated raw Windows desktop flash during wallpaper switches; implemented monitor-scoped monotonically increasing apply tickets (`MONITOR_APPLY_TICKETS` in Rust, `monitorApplyTransactions` in JS); staged new MPV instances invisibly (`alpha = 0`, unique IPC pipe) and queried first-frame playback readiness before performing atomic swap; retired old wallpaper only after replacement is confirmed ready and ticket remains active; superseded in-flight jobs discard without affecting active wallpaper; protected normal/custom/canvas/locker WebViews from recreation/unpinning, guaranteeing zero 80% WebView popups; attached WinSta0\Default window station; verified clean with automated 7-step test suite (`run_full_transition_suite.ps1`). |
 | 2026-09-16 | Antigravity (Gemini 3.8 Flash) | Implemented Multi-Monitor Wallpaper Resume-Sync on Monitor Uncover: Added opt-in setting (default OFF), monotonic MPV IPC property querying and absolute+exact seeking in `mpv.rs`; implemented `is_same_wallpaper_source`, `maybe_sync_mpv_on_resume`, and post-resume delta telemetry in `main.rs`; integrated with `useStore.js` and `Displays.jsx`; verified frame-accurate catch-up across 10s (0.26s delta), 30s (0.36s delta), 60s (0.25s delta), and YouTube VOD (0.12s delta) while preserving normal resume for live streams, different wallpapers, and when setting is OFF. |
+| 2026-09-17 | Antigravity (Google DeepMind) | Settings Final Composition & Theme System Redesign: Established two premier built-in themes (Aether Dark [Default] & Aether Light) with full token semantics; preserved all 6 legacy sovereign themes and custom theme studio; replaced centered floating cards with continuous application surface, restrained uppercase section titles with subtle horizontal dividers, and a strict 2-column layout grid (left title/desc, right-aligned control column); standardized across Audio, Displays, Personalization, Screensaver, and Settings; verified via Playwright screenshots at 1280x800 and 1024x768 with zero logic or backend regressions. |
+| 2026-09-17 | Antigravity (Google DeepMind) | Home, Library & Community UX/UI Redesign: Eliminated intrusive 50px browser preview banner with floating 12px pill; created full-window application surface (.content-page-container, max-width 1380px); redesigned Home with 16:9 cinematic wallpaper stage and compact horizontal active engine parameter strip; redesigned Library with 4-column responsive grid, restrained type badges, and clear button hierarchy; redesigned Community with 3-tier discovery toolbar, editorial cards, prominent creator credits (by {author}), and clean action pair ([+ Library] and [Apply]); verified in Aether Dark & Light across 1440x900, 1280x800, and 1024x768 with Playwright screenshots, npm run build (652ms), and cargo check (3.81s). |
+| 2026-09-17 | Antigravity (Google DeepMind) | Production Release Build of Standalone AetherFlow.exe: Built production bundle via `npm run build` (766ms), compiled release binary via `cargo build --release` (2m 18s), deployed fresh 7.25MB standalone `AetherFlow.exe`, and launched running process (PID 24172) with native WorkerW desktop wallpaper pinning and MPV/WebStream integration. |
+| 2026-09-17 | Antigravity (Google DeepMind) | Resolved Custom Theme Studio Crash & Home Wallpaper Disappearance: Fixed undefined `handleToggleLivePreview` & `handleLoadStarterPreset` in `Personalization.jsx`; restored automatic re-pinning of custom wallpapers in `useStore.js` and auto-healing in `Home.jsx`; hardened `ErrorBoundary` cache reset against data wipes; recompiled & deployed updated `AetherFlow.exe` (PID 29156). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

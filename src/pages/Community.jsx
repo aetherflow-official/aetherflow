@@ -504,7 +504,7 @@ export default function CommunityPage() {
   })
 
   return (
-    <div className="animate-fadeIn" style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: 60 }}>
+    <div className="content-page-container animate-fadeIn">
       {/* ── Action Notice Toast (Portaled to document.body for true viewport anchoring) ── */}
       {actionNotice && createPortal(
         <div
@@ -532,75 +532,62 @@ export default function CommunityPage() {
         document.body
       )}
 
-      {/* ── Top Header with Stats & Admin Bar ── */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
+      {/* ── Top Header with Stats & Admin Controls ── */}
+      <div className="content-page-header">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="font-display font-bold text-2xl" style={{ letterSpacing: '-0.5px' }}>
-              Community Hub
-            </h1>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: 999,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid var(--border-main)',
-                color: 'var(--color-brand)',
-              }}
-            >
-              100% Free & Open Source
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <h1 className="content-page-title">Community Hub</h1>
+            <span className="telemetry-chip" style={{ fontSize: 10.5, padding: '2px 8px' }}>
+              OPEN CATALOG
             </span>
           </div>
-          <p className="text-muted text-sm" style={{ marginTop: 4 }}>
-            Discover and share live animated wallpapers with the AetherFlow community
+          <p className="content-page-subtitle">
+            Discover, preview, and apply animated wallpapers curated and shared by creators worldwide
           </p>
         </div>
 
         {/* Right Stats & Admin Controls */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {stats.activeUsers > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-muted" style={{ background: 'var(--bg-card)', padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-main)' }}>
-              <Users size={13} style={{ color: 'var(--color-cyan)' }} />
+            <div className="telemetry-chip" style={{ gap: 5 }}>
+              <Users size={12} style={{ color: 'var(--color-cyan)' }} />
               <span>{stats.activeUsers.toLocaleString()} creators</span>
             </div>
           )}
           {stats.totalWallpapers > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-muted" style={{ background: 'var(--bg-card)', padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-main)' }}>
-              <Palette size={13} style={{ color: 'var(--color-brand)' }} />
-              <span>{stats.totalWallpapers} live wallpapers</span>
+            <div className="telemetry-chip" style={{ gap: 5 }}>
+              <Palette size={12} style={{ color: 'var(--color-brand)' }} />
+              <span>{stats.totalWallpapers} wallpapers</span>
             </div>
           )}
 
-          {/* Admin Mode Indicator / Unlock Button */}
           {isAdmin ? (
-            <div className="flex items-center gap-2">
-              <div className="admin-badge-pill">
-                <ShieldCheck size={12} />
-                <span>Admin Mode</span>
+            <div className="flex items-center gap-1.5">
+              <div className="admin-badge-pill" style={{ height: 26, fontSize: 11 }}>
+                <ShieldCheck size={11} />
+                <span>Admin</span>
               </div>
               <button
                 className="btn btn-ghost"
-                style={{ padding: '5px 8px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
+                style={{ padding: '3px 8px', fontSize: 11, height: 26, display: 'flex', alignItems: 'center', gap: 4 }}
                 title="Lock Admin Mode"
                 onClick={handleLockAdmin}
               >
-                <Unlock size={12} />
-                Lock
+                <Unlock size={11} />
+                <span>Lock</span>
               </button>
             </div>
           ) : (
             <button
               className="btn btn-ghost"
-              style={{ padding: '5px 9px', fontSize: 11, height: 28, color: 'var(--text-subtle)', display: 'flex', alignItems: 'center', gap: 4 }}
+              style={{ padding: '4px 10px', fontSize: 11, height: 28, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}
               title="Enter Admin Passcode"
               onClick={() => {
                 setPasscodeError(false)
                 setShowAdminModal(true)
               }}
             >
-              <Lock size={12} />
+              <Lock size={11} />
               <span>Moderator Access</span>
             </button>
           )}
@@ -608,7 +595,7 @@ export default function CommunityPage() {
       </div>
 
       {/* ── Main Navigation Tabs ── */}
-      <div className="flex gap-2" style={{ marginBottom: 20, borderBottom: '1px solid var(--border-main)', paddingBottom: 12, overflowX: 'auto' }}>
+      <div className="flex gap-2" style={{ marginBottom: 18, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10, overflowX: 'auto' }}>
         {[
           { id: 'browse', label: 'Browse', icon: Search },
           { id: 'submit', label: 'Submit Wallpaper', icon: Upload },
@@ -630,10 +617,10 @@ export default function CommunityPage() {
           <button
             key={t.id}
             className={`btn ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative', height: 32, fontSize: 12 }}
             onClick={() => setTab(t.id)}
           >
-            <t.icon size={14} />
+            <t.icon size={13} />
             <span>{t.label}</span>
             {Boolean(t.badge) && (
               <span className="mod-queue-count" style={{ marginLeft: 2 }}>
@@ -647,20 +634,20 @@ export default function CommunityPage() {
       {/* ── BROWSE TAB ── */}
       {tab === 'browse' && (
         <>
-          {/* Filter Toolbar: Search, Type, Quick Filter, View Mode */}
-          <div style={{ marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {/* Search input */}
-              <div style={{ position: 'relative', flex: '1 1 240px' }}>
+          {/* Discovery Toolbar: Structured into Levels */}
+          <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Level 1: Primary Search + Sort Dropdown */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
                 <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search live wallpapers by title, tags, or creator…"
+                  placeholder="Search live wallpapers by title, creator, or keywords…"
                   style={{
-                    width: '100%', padding: '9px 12px 9px 36px',
-                    background: 'var(--bg-card)', border: '1px solid var(--border-main)',
-                    borderRadius: 8, color: 'var(--text-main)', fontSize: 13, outline: 'none',
+                    width: '100%', padding: '8px 12px 8px 36px',
+                    background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+                    borderRadius: 8, color: 'var(--text-main)', fontSize: 12.5, outline: 'none',
                   }}
                 />
                 {query && (
@@ -668,80 +655,108 @@ export default function CommunityPage() {
                     onClick={() => setQuery('')}
                     style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                   >
-                    <X size={14} />
+                    <X size={13} />
                   </button>
                 )}
               </div>
 
-              {/* Type Filter Buttons */}
-              <div className="flex gap-1">
-                {TYPE_FILTERS.map(f => (
-                  <button
-                    key={f.id}
-                    className={`btn ${typeFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
-                    style={{ padding: '6px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
-                    onClick={() => setTypeFilter(f.id)}
-                  >
-                    {f.icon && <f.icon size={11} />}
-                    {f.label}
-                  </button>
-                ))}
+              {/* Sort Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="text-xs text-muted">Sort:</span>
+                <select
+                  value={sortMode}
+                  onChange={e => setSortMode(e.target.value)}
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    fontSize: 11.5,
+                    color: 'var(--text-main)',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="popular">Most Popular</option>
+                  <option value="newest">Newest First</option>
+                  <option value="likes">Most Liked</option>
+                  <option value="name">Alphabetical</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Level 2: Content Type Filters & Curation & View Mode */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* Content Type Filter */}
+                <div className="flex gap-1">
+                  {TYPE_FILTERS.map(f => (
+                    <button
+                      key={f.id}
+                      className={`btn ${typeFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '4px 10px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => setTypeFilter(f.id)}
+                    >
+                      {f.icon && <f.icon size={11} />}
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Curation Filter: All, Featured, Community Added */}
+                <div className="flex gap-1" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8 }}>
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'featured', label: 'Featured', icon: Star },
+                    { id: 'community', label: 'Community Added', icon: Sparkles },
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      className={`btn ${filterMode === m.id ? 'btn-secondary' : 'btn-ghost'}`}
+                      style={{ padding: '4px 10px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => setFilterMode(m.id)}
+                    >
+                      {m.icon && <m.icon size={11} style={{ color: m.id === 'featured' ? 'var(--color-amber)' : 'var(--color-cyan)' }} />}
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Quick Filter: All, Featured, Community */}
-              <div className="flex gap-1" style={{ borderLeft: '1px solid var(--border-main)', paddingLeft: 8 }}>
-                {[
-                  { id: 'all', label: 'All' },
-                  { id: 'featured', label: 'Featured', icon: Star },
-                  { id: 'community', label: 'Community Added', icon: Sparkles },
-                ].map(m => (
-                  <button
-                    key={m.id}
-                    className={`btn ${filterMode === m.id ? 'btn-secondary' : 'btn-ghost'}`}
-                    style={{ padding: '6px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
-                    onClick={() => setFilterMode(m.id)}
-                  >
-                    {m.icon && <m.icon size={11} style={{ color: m.id === 'featured' ? 'var(--color-amber)' : 'var(--color-cyan)' }} />}
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* View Mode Toggle: Grid vs Compact List */}
-              <div className="flex gap-1" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
-                <span className="text-xs text-subtle" style={{ marginRight: 2 }}>View:</span>
+              {/* View Mode Switcher */}
+              <div className="segmented-control">
                 <button
                   type="button"
-                  className={`btn ${browseView === 'grid' ? 'btn-primary' : 'btn-ghost'}`}
-                  style={{ padding: '5px 8px', height: 28, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  className={`segmented-item ${browseView === 'grid' ? 'active' : ''}`}
                   onClick={() => setBrowseView('grid')}
                   title="Grid Cards View"
+                  style={{ fontSize: 11, padding: '3px 8px' }}
                 >
-                  <LayoutGrid size={12} />
+                  <LayoutGrid size={11} style={{ display: 'inline', marginRight: 4 }} />
                   <span>Cards</span>
                 </button>
                 <button
                   type="button"
-                  className={`btn ${browseView === 'compact' ? 'btn-primary' : 'btn-ghost'}`}
-                  style={{ padding: '5px 8px', height: 28, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
+                  className={`segmented-item ${browseView === 'compact' ? 'active' : ''}`}
                   onClick={() => setBrowseView('compact')}
-                  title="Compact List View (Fast Takedowns & Scanning)"
+                  title="Compact List View"
+                  style={{ fontSize: 11, padding: '3px 8px' }}
                 >
-                  <List size={12} />
-                  <span>Compact List</span>
+                  <List size={11} style={{ display: 'inline', marginRight: 4 }} />
+                  <span>List</span>
                 </button>
               </div>
             </div>
 
-            {/* Tag chips */}
-            <div className="flex gap-1.5" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-              <span className="text-xs text-subtle" style={{ marginRight: 4 }}>Tags:</span>
+            {/* Level 3: Curated Tags (Quiet row) */}
+            <div className="flex gap-1.5" style={{ flexWrap: 'wrap', alignItems: 'center', paddingTop: 2 }}>
+              <span className="text-xs text-subtle" style={{ marginRight: 2 }}>Tags:</span>
               {TAGS.map(tag => (
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
                   className={`badge ${selectedTags.includes(tag) ? 'badge-brand' : ''}`}
-                  style={{ cursor: 'pointer', border: '1px solid var(--border-main)', fontSize: 11 }}
+                  style={{ cursor: 'pointer', border: '1px solid var(--border-subtle)', fontSize: 10.5, padding: '2px 8px' }}
                 >
                   #{tag}
                 </button>
@@ -761,7 +776,7 @@ export default function CommunityPage() {
           {/* Results Display */}
           {loading ? (
             <div className="flex items-center justify-center" style={{ height: 240, color: 'var(--text-muted)' }}>
-              <div className="animate-spin" style={{ width: 28, height: 28, border: '2px solid var(--border-main)', borderTopColor: 'var(--color-brand)', borderRadius: '50%' }} />
+              <div className="animate-spin" style={{ width: 28, height: 28, border: '2px solid var(--border-subtle)', borderTopColor: 'var(--color-brand)', borderRadius: '50%' }} />
             </div>
           ) : results.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
@@ -788,11 +803,10 @@ export default function CommunityPage() {
               </button>
             </div>
           ) : browseView === 'compact' ? (
-            /* ── COMPACT LIST VIEW (Instant Takedowns, zero scrolling needed) ── */
+            /* ── COMPACT LIST VIEW ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {results.map(item => {
                 const badge = TYPE_BADGES[item.type] || {}
-                const isLiked = likedIds.has(item.id)
                 const currentDownloads = Math.max(item.downloads || 0, downloadCounts[item.id] ?? 0)
                 const currentLikes = likeCounts[item.id] ?? item.likes ?? 0
                 const targetId = `community-${item.id}`
@@ -867,7 +881,7 @@ export default function CommunityPage() {
                     <div className="flex items-center gap-1.5" style={{ flexShrink: 0 }}>
                       <button
                         className="btn btn-ghost"
-                        style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                        style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
                         onClick={() => setPreviewItem(item)}
                         title="Live Preview"
                       >
@@ -878,7 +892,7 @@ export default function CommunityPage() {
                       {isInstalled ? (
                         <span
                           className="badge badge-emerald"
-                          style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
+                          style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
                           title="In Library"
                         >
                           <Check size={10} /> Library
@@ -886,7 +900,7 @@ export default function CommunityPage() {
                       ) : (
                         <button
                           className="btn btn-ghost"
-                          style={{ padding: '5px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                          style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
                           disabled={addingLibraryId === item.id || isApplying}
                           onClick={() => handleAddToLibrary(item)}
                           title="Add to Library"
@@ -899,14 +913,14 @@ export default function CommunityPage() {
                       {isCurrentlyApplied ? (
                         <span
                           className="badge badge-emerald"
-                          style={{ padding: '5px 9px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
+                          style={{ padding: '4px 9px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}
                         >
                           <Check size={11} /> Active
                         </span>
                       ) : (
                         <button
                           className="btn btn-secondary"
-                          style={{ padding: '5px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                          style={{ padding: '4px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
                           disabled={isApplying}
                           onClick={() => handleInstall(item)}
                         >
@@ -923,7 +937,7 @@ export default function CommunityPage() {
                             style={{
                               background: item.featured ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)' : 'rgba(255,255,255,0.06)',
                               color: item.featured ? 'var(--color-amber)' : 'var(--text-muted)',
-                              padding: '5px 7px',
+                              padding: '4px 7px',
                             }}
                             onClick={() => handleToggleFeature(item)}
                             title={item.featured ? 'Unfeature' : 'Feature'}
@@ -933,7 +947,7 @@ export default function CommunityPage() {
 
                           <button
                             className="btn btn-danger"
-                            style={{ padding: '5px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                            style={{ padding: '4px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
                             onClick={() => {
                               setTakedownTarget(item)
                               setTakedownReason('')
@@ -951,8 +965,8 @@ export default function CommunityPage() {
               })}
             </div>
           ) : (
-            /* ── GRID CARDS VIEW ── */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 20 }}>
+            /* ── GRID CARDS VIEW (Editorial Experience) ── */
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
               {results.map(item => {
                 const badge = TYPE_BADGES[item.type] || {}
                 const isLiked = likedIds.has(item.id)
@@ -986,7 +1000,7 @@ export default function CommunityPage() {
                         </div>
                       )}
 
-                      {/* Top-Left: Featured Badge */}
+                      {/* Top-Left: Featured Curated Badge */}
                       {item.featured && (
                         <div className="mp-badge-top-left">
                           <div
@@ -996,6 +1010,7 @@ export default function CommunityPage() {
                               color: '#000',
                               border: '1px solid rgba(255, 255, 255, 0.4)',
                               fontWeight: 700,
+                              fontSize: 9.5,
                             }}
                           >
                             <Star size={10} fill="#000" />
@@ -1003,7 +1018,6 @@ export default function CommunityPage() {
                           </div>
                         </div>
                       )}
-
 
                       {/* Top-Right: Media Type Badge & Instant Admin Takedown */}
                       <div className="mp-badge-top-right" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1032,7 +1046,7 @@ export default function CommunityPage() {
                               setTakedownTarget(item)
                               setTakedownReason('')
                             }}
-                            title="Instant Takedown (no scrolling required)"
+                            title="Instant Takedown"
                           >
                             <Trash2 size={11} />
                             <span>Takedown</span>
@@ -1044,6 +1058,7 @@ export default function CommunityPage() {
                             background: 'rgba(15, 15, 20, 0.85)',
                             color: badge.color || 'var(--text-main)',
                             border: '1px solid rgba(255, 255, 255, 0.15)',
+                            fontSize: 10,
                           }}
                         >
                           {badge.label || item.type}
@@ -1060,8 +1075,8 @@ export default function CommunityPage() {
                     </div>
 
                     {/* Card Body */}
-                    <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'between', gap: 10, marginBottom: 4 }}>
+                    <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <h3
                             className="font-semibold text-sm"
@@ -1092,7 +1107,7 @@ export default function CommunityPage() {
                           disabled={likingId === item.id}
                           title={isLiked ? 'Unlike' : 'Like'}
                         >
-                          <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
+                          <Heart size={11} fill={isLiked ? 'currentColor' : 'none'} />
                           <span>{currentLikes}</span>
                         </button>
                       </div>
@@ -1101,7 +1116,7 @@ export default function CommunityPage() {
                         <p
                           className="text-xs text-muted"
                           style={{
-                            margin: '4px 0 10px',
+                            margin: '4px 0 8px',
                             lineHeight: 1.4,
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
@@ -1113,33 +1128,32 @@ export default function CommunityPage() {
                         </p>
                       )}
 
-                      {/* Tags */}
-                      {item.tags?.length > 0 && (
-                        <div className="flex gap-1" style={{ flexWrap: 'wrap', marginTop: 'auto', marginBottom: 12 }}>
-                          {item.tags.slice(0, 3).map(t => (
+                      {/* Tags & Downloads Row */}
+                      <div className="flex items-center justify-between gap-2" style={{ marginTop: 'auto', marginBottom: 10 }}>
+                        <div className="flex gap-1 truncate" style={{ maxWidth: '65%' }}>
+                          {item.tags?.slice(0, 2).map(t => (
                             <span
                               key={t}
                               style={{
-                                fontSize: 10,
-                                padding: '2px 6px',
+                                fontSize: 9.5,
+                                padding: '1px 5px',
                                 borderRadius: 4,
-                                background: 'rgba(255,255,255,0.04)',
-                                color: 'var(--text-subtle)',
+                                background: 'var(--bg-card-hover)',
+                                border: '1px solid var(--border-subtle)',
+                                color: 'var(--text-muted)',
                               }}
                             >
                               #{t}
                             </span>
                           ))}
-                          {item.tags.length > 3 && (
-                            <span style={{ fontSize: 10, color: 'var(--text-subtle)', padding: '2px 4px' }}>
-                              +{item.tags.length - 3}
-                            </span>
-                          )}
                         </div>
-                      )}
+                        <span className="text-xs text-subtle" style={{ fontSize: 10.5 }}>
+                          {currentDownloads} downloads
+                        </span>
+                      </div>
 
-                      {/* Card Action Buttons: Always display both Library status and Apply status */}
-                      <div className="flex items-center gap-2" style={{ marginTop: 6 }}>
+                      {/* Card Action Buttons: Library status & Apply status */}
+                      <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
                         {/* 1. Library Status / Add Button */}
                         {isInstalled ? (
                           <div
@@ -1148,6 +1162,7 @@ export default function CommunityPage() {
                               flex: 1,
                               padding: '0 6px',
                               fontSize: 11,
+                              height: 32,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1165,12 +1180,12 @@ export default function CommunityPage() {
                         ) : (
                           <button
                             className="btn btn-secondary mp-btn-action"
-                            style={{ flex: 1, padding: '0 6px', fontSize: 11 }}
+                            style={{ flex: 1, padding: '0 6px', fontSize: 11, height: 32 }}
                             disabled={isAddingLib || isApplying}
                             onClick={() => handleAddToLibrary(item)}
                             title="Add to your permanent Library"
                           >
-                            <FolderPlus size={13} />
+                            <FolderPlus size={12} />
                             <span>{isAddingLib ? 'Adding…' : '+ Library'}</span>
                           </button>
                         )}
@@ -1183,6 +1198,7 @@ export default function CommunityPage() {
                               flex: 1.2,
                               cursor: 'default',
                               fontSize: 11,
+                              height: 32,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1194,12 +1210,12 @@ export default function CommunityPage() {
                         ) : (
                           <button
                             className="btn btn-primary mp-btn-action"
-                            style={{ flex: 1.2, padding: '0 6px', fontSize: 11 }}
+                            style={{ flex: 1.2, padding: '0 6px', fontSize: 11, height: 32 }}
                             disabled={isApplying || isAddingLib}
                             onClick={() => handleInstall(item)}
                             title="Apply directly to desktop"
                           >
-                            {isApplying ? 'Applying…' : <><Play size={12} /> Apply</>}
+                            {isApplying ? 'Applying…' : <><Play size={11} fill="currentColor" /> Apply</>}
                           </button>
                         )}
                       </div>
@@ -1210,14 +1226,14 @@ export default function CommunityPage() {
                           style={{
                             marginTop: 10,
                             paddingTop: 8,
-                            borderTop: '1px dashed color-mix(in srgb, var(--color-amber) 30%, var(--border-main))',
+                            borderTop: '1px dashed color-mix(in srgb, var(--color-amber) 30%, var(--border-subtle))',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                           }}
                         >
-                          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-amber)', textTransform: 'uppercase' }}>
-                            Admin Actions
+                          <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--color-amber)', textTransform: 'uppercase' }}>
+                            Admin
                           </span>
                           <div className="flex items-center gap-1.5">
                             <button
@@ -1225,11 +1241,13 @@ export default function CommunityPage() {
                               style={{
                                 background: item.featured ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)' : 'rgba(255,255,255,0.06)',
                                 color: item.featured ? 'var(--color-amber)' : 'var(--text-muted)',
+                                padding: '3px 6px',
+                                fontSize: 10,
                               }}
                               onClick={() => handleToggleFeature(item)}
                               title={item.featured ? 'Remove from Featured' : 'Feature this wallpaper'}
                             >
-                              <Star size={11} fill={item.featured ? 'currentColor' : 'none'} />
+                              <Star size={10} fill={item.featured ? 'currentColor' : 'none'} />
                               <span>{item.featured ? 'Featured' : 'Feature'}</span>
                             </button>
 
@@ -1239,6 +1257,8 @@ export default function CommunityPage() {
                                 background: 'color-mix(in srgb, var(--color-rose) 12%, transparent)',
                                 color: 'var(--color-rose)',
                                 border: '1px solid color-mix(in srgb, var(--color-rose) 30%, transparent)',
+                                padding: '3px 6px',
+                                fontSize: 10,
                               }}
                               onClick={() => {
                                 setTakedownTarget(item)
@@ -1246,7 +1266,7 @@ export default function CommunityPage() {
                               }}
                               title="Immediately remove wallpaper from community feed"
                             >
-                              <Trash2 size={11} />
+                              <Trash2 size={10} />
                               <span>Take Down</span>
                             </button>
                           </div>

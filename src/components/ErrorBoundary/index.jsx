@@ -28,8 +28,25 @@ export class ErrorBoundary extends React.Component {
 
   handleReset = () => {
     try {
-      localStorage.removeItem('aetherflow-state')
-    } catch {}
+      const raw = localStorage.getItem('aetherflow-state')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const preserved = {
+          state: {
+            installed: parsed?.state?.installed || [],
+            homeWallpaperIds: parsed?.state?.homeWallpaperIds || [],
+            customNames: parsed?.state?.customNames || {},
+            likedWallpaperIds: parsed?.state?.likedWallpaperIds || [],
+          },
+          version: parsed?.version || 0,
+        }
+        localStorage.setItem('aetherflow-state', JSON.stringify(preserved))
+      } else {
+        localStorage.removeItem('aetherflow-state')
+      }
+    } catch {
+      try { localStorage.removeItem('aetherflow-state') } catch {}
+    }
     window.location.reload()
   }
 

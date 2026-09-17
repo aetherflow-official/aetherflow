@@ -2541,3 +2541,96 @@
   - `cargo build --release`: ✅ Passes in 2m 07s.
   - Deployed release binary to root `AetherFlow.exe`.
 ---
+
+## Session: 2026-09-17 14:55 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** AetherFlow Settings — Final Composition + Theme System Redesign
+- **Completed:**
+  1. **Two Premier Built-in Themes Established**:
+     - `aether-dark` (Default): Titanium dark slate palette (`#0d0f14` base, `#161a23` surface, `#242a38` border, `#f3f4f6` text, `#9ca3af` muted, `#3b82f6` brand) with high contrast and zero reliance on neon glow for legibility.
+     - `aether-light`: Refined modern light canvas (`#f6f8fa` base, `#ffffff` surface, `#d0d7de` border, `#111827` primary text, `#4b5563` muted text, `#2563eb` brand) with crisp, non-washed-out tonal hierarchy.
+     - Preserved all 6 legacy sovereign themes (`sovereign-onyx`, `sovereign-slate`, `sovereign-studio`, `sovereign-obsidian`, `sovereign-manifesto`, `sovereign-light`) and user custom theme studio.
+  2. **Continuous Application Surface Composition**:
+     - Eliminated disconnected floating card islands separated by large gaps; replaced with continuous surface, restrained uppercase section titles, and subtle divider rules.
+     - Strict 2-column layout grid: LEFT setting title & description (`max-width: 620px`), RIGHT aligned control column (`min-width: 260px`).
+     - Cards reserved strictly for intentional complex tools (display selectors, taskbar wireframe previews, OLED clock stage, theme studio, quick nav cards).
+     - Standardized across `Audio`, `Displays & Workspace`, `Personalization`, `Screensaver`, and `Settings`.
+  3. **Sidebar Adaptability**:
+     - Clean adaptive active indicators and border styling for both Dark and Light modes without giant colored panels.
+  4. **Verification**:
+     - `npm run build`: ✅ Passes in 621ms with 0 errors.
+     - `cargo check`: ✅ Passes in 4.04s with 0 errors.
+     - Playwright Visual QA confirmed at 1280x800 and 1024x768 across Dark and Light themes.
+## Session: 2026-09-17 15:20 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** AetherFlow — Home, Library & Community UX/UI Redesign
+- **Completed:**
+  1. **Dev Browser Mode Minimization**:
+     - Replaced the large 50px header banner in `src/App.jsx` with an unobtrusive tiny floating bottom-right pill (`Browser Preview`) so it never displaces desktop content in browser dev mode.
+  2. **Global Application Surface (`src/styles/index.css`)**:
+     - Implemented `.content-page-container` (`max-width: 1380px; margin: 0 auto; padding: 4px clamp(16px, 2.5vw, 36px) 64px;`), enabling full-window utilization across 1024, 1280, 1440, and 1920 displays.
+     - Implemented `.wallpaper-stage-card` for 16:9 cinematic media stage presentation and `.engine-params-surface` for compact horizontal engine control strips.
+     - Refined `.mp-card`: eliminated aggressive scale/transforms, enforcing sleek desktop border/shadow elevation.
+  3. **Home Page Redesign (`src/pages/Home.jsx`)**:
+     - Stage Anchor: Hero wallpaper stage showing active desktop status, pause/resume preview toggle, and prominent `[ Apply to Desktop ]`.
+     - Compact horizontal engine parameters bar (Opacity, Brightness, Speed/Fit, Volume + Mute).
+     - Clean Home Favorites toolbar with search, preview mode switch (`On`, `Hover`, `Off`), and calm category filters.
+  4. **Library Page Redesign (`src/pages/Library.jsx`)**:
+     - Full collection management across 4 responsive columns.
+     - Restrained media type indicators, active status chips, and clear action hierarchy (`Apply to Desktop` as primary, like/pin/rename/delete subordinate).
+  5. **Community Hub Redesign (`src/pages/Community.jsx`)**:
+     - Structured multi-tier discovery toolbar: Primary Search & Sort, Secondary Content Type & Curation mode, and Quiet Tags row.
+     - Editorial card layout: dominant artwork, prominent creator credit (`by {author}`), curated featured badges, clean action pair (`[ + Library ]` and `[ Apply ]`).
+  6. **Verification & Cross-Theme Quality**:
+     - Verified in both **Aether Dark** (Default) and **Aether Light** themes with high contrast and crisp borders.
+     - Tested responsive composition across 1440×900, 1280×800, and 1024×768 with Playwright screenshots.
+     - Preserved 100% of wallpaper playback, MPV, WebStream, Zustand state, persistence, and Tauri IPC logic.
+     - `npm run build`: ✅ Passes in 652ms with 0 errors.
+---
+## Session: 2026-09-17 15:30 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Production Release Build of Standalone `AetherFlow.exe`
+- **Completed:**
+  - Built fresh frontend bundle via `npm run build` (766ms) embedding all redesigned Home, Library, Community, and Theme surfaces.
+  - Compiled production native Windows executable via `cargo build --release` (2m 18s).
+  - Deployed compiled binary `src-tauri/target/release/aetherflow.exe` to standalone root `AetherFlow.exe` (7.25MB / 7,599,104 bytes).
+  - Launched fresh standalone `AetherFlow.exe` (PID 24172, responding: True) with full native WorkerW desktop wallpaper pinning, MPV, WebStream, and UI integration.
+---
+## Session: 2026-09-17 16:55 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Resolved Custom Theme Studio Crash & Home Wallpaper Disappearance
+- **Completed:**
+  - Fixed `ReferenceError: handleToggleLivePreview is not defined` in `src/pages/Personalization.jsx`: defined `handleToggleLivePreview`, `handleLoadStarterPreset`, and implemented style override cleanup upon studio close.
+  - Resolved custom wallpapers disappearing from Home after cache resets: updated `syncCustomWallpapersFromDisk()` in `src/store/useStore.js` to re-pin all recovered custom wallpapers into `homeWallpaperIds`.
+  - Added auto-healing fallback in `src/pages/Home.jsx` ensuring installed custom wallpapers are never filtered out even if `homeWallpaperIds` is unpopulated.
+  - Hardened `ErrorBoundary` in `src/components/ErrorBoundary/index.jsx` to preserve `installed`, `homeWallpaperIds`, `customNames`, and `likedWallpaperIds` during emergency cache resets.
+  - Rebuilt production bundle (`npm run build` 1.42s) and release binary (`cargo build --release` 2m 33s).
+  - Deployed fresh `AetherFlow.exe` (7.25MB) and launched process (PID 29156, Responding: True).
+- **Build status:** ✅ `npm run build` (1.42s), `cargo build --release` (2m 33s) passed with 0 errors.
+---
+## Session: 2026-09-17 17:20 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Personalization / Theme System Refinement (All 4 Goals Complete)
+- **Completed:**
+  1. **Spatial Composition Redesign (`src/pages/Personalization.jsx`)**:
+     - Converted Personalization from disconnected legacy card stack into a unified, continuous application surface matching Audio and Displays (`settings-page-container`, `settings-page-header`, `SettingSection`, `SettingRow`).
+     - Replaced bouncing cards with restrained `.theme-preset-tile`s emphasizing visual previews, clean typography, and subtle selected states without garish glow.
+  2. **Display Name Cleanup (Zero ID Breaking)**:
+     - Stripped "Aether" and "Sovereign" prefixes from user-facing theme display labels across `BUILTIN_THEMES`, `Personalization.jsx`, `StatusBar`, and `Settings.jsx`.
+     - Preserved all internal IDs strictly intact (`aether-dark`, `aether-light`, `sovereign-onyx`, `sovereign-slate`, `sovereign-studio`, `sovereign-obsidian`, `sovereign-manifesto`, `sovereign-light`).
+     - Display names mapped cleanly: Dark, Light, Onyx, Slate, Studio, Obsidian, Manifesto, Light Classic.
+  3. **Theme Studio Closable Workspace (`src/pages/Personalization.jsx`)**:
+     - Elevated Custom Theme Studio into a dedicated, high-productivity editor workspace.
+     - Implemented sticky Live Preview Stage with mock window, mini sidebar, sample application surface, and real-time token rendering.
+     - Added dirty state tracking (`hasUnsavedChanges`), unsaved changes confirmation modal ("Discard unsaved changes? Keep Editing / Discard & Exit"), and clean teardown of temporary inline CSS variables.
+  4. **Save Custom Themes as Presets under MY PRESETS (`src/pages/Personalization.jsx`, `src/store/useStore.js`)**:
+     - Implemented `SavePresetModal` with name validation (non-empty, max 32 chars) and graceful duplicate collision detection/overwrite prompt.
+     - User-saved presets render seamlessly in the preset browser under "MY PRESETS" with mini wireframe, accent dot, checkmark indicator, Edit in Studio, Rename (`RenamePresetModal`), Export JSON, and Delete (`DeletePresetModal` with confirmation; built-ins protected).
+     - Full backward compatibility with existing `themes` map in Zustand store and localStorage.
+  5. **Verification & Cross-Theme Testing**:
+     - Built frontend bundle via `npm run build` (571ms, 0 errors).
+     - Verified Rust backend via `cargo check` (3.54s, 0 errors).
+     - Verified in browser via Playwright across Dark, Light, and custom themes ("Midnight Glass Pro").
+     - Responsive verification passed at 1440×900, 1280×800, and 1024×768.
+- **Build status:** ✅ `npm run build` (571ms), `cargo check` (3.54s) passed with 0 errors.
+---
