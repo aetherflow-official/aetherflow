@@ -1,24 +1,29 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  Trash2, Play, Image, Plus, Video, Monitor, Square, Check,
-  Zap, Pin, PinOff, Pencil, Search, X, Globe, Heart
+  Trash2, Play, Image as ImageIcon, Plus, Video, Monitor, Check,
+  Pin, PinOff, Pencil, Search, X, Globe, Heart, ChevronDown,
+  LayoutGrid, List, Sparkles, Terminal, Waves, Compass, Flame,
+  CloudRain, Activity, Code, ExternalLink, MoreHorizontal, Eye
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
 import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
-import WallpaperThumbnail from '../components/WallpaperThumbnail/index.jsx'
+import WallpaperThumbnail, { resolveWallpaperThumbnail } from '../components/WallpaperThumbnail/index.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
 import {
   applyWallpaperToDesktop,
   stopDesktopWallpaper,
   addCustomMediaWallpaper,
-  addCustomVideoWallpaper,
   addCustomStreamWallpaper,
   tauriInvoke,
   safeListen,
+  safeConvertFileSrc,
 } from '../lib/wallpaperActions.js'
+import { previewManager } from '../lib/previewManager.js'
 
-function getWallpaperTypeInfo(wallpaper) {
+export function getWallpaperTypeInfo(wallpaper) {
+  if (!wallpaper) return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas', icon: Code }
   const engineId = wallpaper.engine || wallpaper.id
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
   const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
@@ -31,50 +36,299 @@ function getWallpaperTypeInfo(wallpaper) {
       label: isYt ? 'YouTube' : 'Web Stream',
       color: isYt ? 'var(--color-rose)' : 'var(--color-cyan)',
       type: isYt ? 'youtube' : 'stream',
+      icon: Globe,
     }
   }
   if (isImage) {
-    return { label: 'Picture', color: 'var(--color-emerald)', type: 'image' }
+    return { label: 'Picture', color: 'var(--color-emerald)', type: 'image', icon: ImageIcon }
   }
   if (isVideo) {
-    return { label: 'Video', color: 'var(--color-brand)', type: 'video' }
+    return { label: 'Video', color: 'var(--color-brand)', type: 'video', icon: Video }
   }
-  return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas' }
+  return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas', icon: Sparkles }
+}
+
+/**
+ * Dedicated Library Preview Modal — opens on card click or "Preview" button.
+ * Enforces immediate and complete teardown of decoders/media buffers on close.
+ */
+function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      if (videoRef.current) {
+        try {
+          videoRef.current.pause()
+          videoRef.current.removeAttribute('src')
+          videoRef.current.load()
+        } catch (e) {}
+      }
+      tauriInvoke('trim_memory').catch(() => {})
+    }
+  }, [onClose])
+
+  if (!wallpaper) return null
+
+  const typeInfo = getWallpaperTypeInfo(wallpaper)
+  const isVideo = typeInfo.type === 'video'
+  const isImage = typeInfo.type === 'image'
+  const isCanvas = typeInfo.type === 'canvas'
+
+  const videoPath = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath
+  const videoSrc = videoPath
+    ? (videoPath.startsWith('http') || videoPath.startsWith('data:') ? videoPath : safeConvertFileSrc(videoPath))
+    : ''
+
+  const imgPath = wallpaper.config?.imagePath || wallpaper.defaultConfig?.imagePath
+  const imgSrc = imgPath
+    ? (imgPath.startsWith('http') || imgPath.startsWith('data:') ? imgPath : safeConvertFileSrc(imgPath))
+    : resolveWallpaperThumbnail(wallpaper) || wallpaper.preview || ''
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        background: 'rgba(0, 0, 0, 0.84)',
+        backdropFilter: 'blur(12px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+        animation: 'fadeIn 0.18s ease-out',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{
+          width: '100%',
+          maxWidth: 860,
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-main)',
+          borderRadius: 14,
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255,255,255,0.08)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: '92vh',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 20px',
+            borderBottom: '1px solid var(--border-subtle)',
+            background: 'rgba(var(--rgb-card), 0.7)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 700,
+                background: 'rgba(0,0,0,0.6)',
+                color: typeInfo.color,
+                border: '1px solid rgba(255,255,255,0.12)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <typeInfo.icon size={12} />
+              <span>{typeInfo.label.toUpperCase()}</span>
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-main)' }} className="truncate">
+                {wallpaper.name}
+              </h3>
+              <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-muted)' }}>
+                {wallpaper.communityMeta?.author
+                  ? `by ${wallpaper.communityMeta.author}`
+                  : wallpaper.isCustom
+                  ? 'Custom Media'
+                  : 'Built-in Canvas Engine'}
+              </p>
+            </div>
+          </div>
+          <button className="btn-icon" onClick={onClose} style={{ padding: 6 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Modal Preview Stage */}
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '460px',
+            background: '#04060a',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {isVideo && videoSrc ? (
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          ) : isCanvas ? (
+            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+              <WallpaperPlayer engineId={wallpaper.engine || wallpaper.id} options={wallpaper.config || {}} />
+            </div>
+          ) : (
+            <img
+              src={imgSrc}
+              alt={wallpaper.name}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          style={{
+            padding: '14px 20px',
+            borderTop: '1px solid var(--border-subtle)',
+            background: 'rgba(var(--rgb-card), 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            {wallpaper.tags && wallpaper.tags.length > 0 ? (
+              wallpaper.tags.slice(0, 4).map(t => (
+                <span key={t} className="library-tag-chip">
+                  #{t}
+                </span>
+              ))
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>High-Definition Desktop Surface</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-ghost" onClick={onClose} style={{ height: 34, fontSize: 12 }}>
+              Close
+            </button>
+            {isLive ? (
+              <div
+                className="btn btn-success"
+                style={{
+                  height: 34,
+                  fontSize: 12,
+                  background: 'color-mix(in srgb, var(--color-emerald) 18%, transparent)',
+                  borderColor: 'var(--color-emerald)',
+                  color: 'var(--color-emerald)',
+                  cursor: 'default',
+                }}
+              >
+                <Check size={13} /> Active on Desktop
+              </div>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  onApply(wallpaper)
+                  onClose()
+                }}
+                style={{ height: 34, fontSize: 12, padding: '0 16px' }}
+              >
+                <Play size={13} fill="currentColor" /> Apply to Desktop
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 export default function LibraryPage() {
-  const installed            = useStore(s => s.installed)
-  const activeWallpaper      = useStore(s => s.activeWallpaper)
+  const installed               = useStore(s => s.installed)
   const currentDesktopWallpaper = useStore(s => s.currentDesktopWallpaper)
-  const isWallpaperRunning   = useStore(s => s.isWallpaperRunning)
-  const likedWallpaperIds    = useStore(s => s.likedWallpaperIds) || []
-  const toggleLikeWallpaper  = useStore(s => s.toggleLikeWallpaper)
-  const uninstallItem        = useStore(s => s.uninstallItem)
-  const screenArrangement    = useStore(s => s.screenArrangement)
-  const monitorWallpapers    = useStore(s => s.monitorWallpapers)
-  const homeWallpaperIds     = useStore(s => s.homeWallpaperIds) || []
-  const togglePinToHome      = useStore(s => s.togglePinToHome)
-  const customNames          = useStore(s => s.customNames) || {}
-  const setWallpaperName     = useStore(s => s.setWallpaperName)
-  const setActiveWallpaper   = useStore(s => s.setActiveWallpaper)
-  const thumbnailMode        = useStore(s => s.thumbnailMode) || 'hover'
-  const setThumbnailMode     = useStore(s => s.setThumbnailMode)
+  const isWallpaperRunning      = useStore(s => s.isWallpaperRunning)
+  const likedWallpaperIds       = useStore(s => s.likedWallpaperIds) || []
+  const toggleLikeWallpaper     = useStore(s => s.toggleLikeWallpaper)
+  const uninstallItem           = useStore(s => s.uninstallItem)
+  const screenArrangement       = useStore(s => s.screenArrangement)
+  const monitorWallpapers       = useStore(s => s.monitorWallpapers)
+  const homeWallpaperIds        = useStore(s => s.homeWallpaperIds) || []
+  const togglePinToHome         = useStore(s => s.togglePinToHome)
+  const customNames             = useStore(s => s.customNames) || {}
+  const setWallpaperName        = useStore(s => s.setWallpaperName)
+  const setActiveWallpaper      = useStore(s => s.setActiveWallpaper)
+  const thumbnailMode           = useStore(s => s.thumbnailMode) || 'hover'
 
   const [monitors, setMonitors] = useState([])
   const [selectedMonitorLabel, setSelectedMonitorLabel] = useState(null)
   const [applyingId, setApplyingId] = useState(null)
   const [hoveredId, setHoveredId]   = useState(null)
 
-  // Filters & Search
+  // Filters, Search, Sort & View Modes
   const [filterCategory, setFilterCategory] = useState('all') // 'all' | 'liked' | 'pinned' | 'builtin' | 'custom' | 'stream'
+  const [typeFilter, setTypeFilter]         = useState('all') // 'all' | 'video' | 'image' | 'canvas' | 'stream'
+  const [sortBy, setSortBy]                 = useState('recent') // 'recent' | 'name-asc' | 'name-desc' | 'liked'
+  const [viewMode, setViewMode]             = useState('grid') // 'grid' | 'list'
   const [searchQuery, setSearchQuery]       = useState('')
 
+  // UI Dropdowns & Context Menus
+  const [isAddMenuOpen, setIsAddMenuOpen]   = useState(false)
+  const [activeMenuId, setActiveMenuId]     = useState(null)
+  const [previewingWallpaper, setPreviewingWallpaper] = useState(null)
+
   // Modals state
-  const [addModal, setAddModal] = useState({ isOpen: false, path: '', initialName: '' })
-  const [renameModal, setRenameModal] = useState({ isOpen: false, id: null, currentName: '' })
+  const [addModal, setAddModal]             = useState({ isOpen: false, path: '', initialName: '' })
+  const [renameModal, setRenameModal]       = useState({ isOpen: false, id: null, currentName: '' })
   const [addStreamModal, setAddStreamModal] = useState(false)
 
-  // Fetch monitors on mount and when display configuration changes
+  // Close open dropdowns on outside click or escape
+  useEffect(() => {
+    const handleWindowClick = (e) => {
+      if (!e.target.closest('.library-context-menu') && !e.target.closest('.library-menu-trigger')) {
+        setActiveMenuId(null)
+      }
+      if (!e.target.closest('.library-split-btn') && !e.target.closest('.library-add-dropdown')) {
+        setIsAddMenuOpen(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setActiveMenuId(null)
+        setIsAddMenuOpen(false)
+      }
+    }
+    window.addEventListener('click', handleWindowClick)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', handleWindowClick)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  // Fetch monitors
   useEffect(() => {
     let unlistenMonitors
     function loadMonitors() {
@@ -95,12 +349,8 @@ export default function LibraryPage() {
     }
     loadMonitors()
 
-    safeListen('aether:monitors-changed', () => {
-      loadMonitors()
-    }).then(u => { unlistenMonitors = u }).catch(() => {})
-    safeListen('aura:monitors-changed', () => {
-      loadMonitors()
-    }).catch(() => {})
+    safeListen('aether:monitors-changed', () => loadMonitors())
+      .then(u => { unlistenMonitors = u }).catch(() => {})
 
     window.addEventListener('focus', loadMonitors)
     return () => {
@@ -109,8 +359,9 @@ export default function LibraryPage() {
     }
   }, [])
 
-  // ── Import file handler with naming modal ──────────────────────────────────
+  // Import file handler
   const handleOpenImportDialog = async () => {
+    setIsAddMenuOpen(false)
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const selected = await open({
@@ -143,7 +394,7 @@ export default function LibraryPage() {
     }
   }
 
-  // ── Drag & Drop listener ───────────────────────────────────────────────────
+  // Drag & drop listener
   useEffect(() => {
     let unlistenFn
     safeListen('tauri://drag-drop', event => {
@@ -185,7 +436,6 @@ export default function LibraryPage() {
     setRenameModal({ isOpen: false, id: null, currentName: '' })
   }
 
-  // ── Apply to Desktop ───────────────────────────────────────────────────────
   async function handleApply(item, targetMon = null) {
     setApplyingId(item.id)
     try {
@@ -197,13 +447,6 @@ export default function LibraryPage() {
     }
   }
 
-  // ── Stop Desktop Wallpaper ─────────────────────────────────────────────────
-  async function handleStop(targetMon = null) {
-    const mon = targetMon ?? (screenArrangement === 'per-screen' ? selectedMonitorLabel : null)
-    await stopDesktopWallpaper(mon)
-  }
-
-  // Check if wallpaper is currently active on desktop
   function getActiveStatus(item) {
     if (!isWallpaperRunning || !item) return null
     if (screenArrangement === 'per-screen') {
@@ -218,7 +461,7 @@ export default function LibraryPage() {
     return currentDesktopWallpaper?.id === item.id ? ['all'] : null
   }
 
-  // ── Combine All Wallpapers (Built-in + Custom) ───────────────────────────────
+  // Combine All Wallpapers (Built-in + Custom)
   const allWallpapers = useMemo(() => {
     const names = customNames || {}
     const builtins = WALLPAPER_LIST.map(w => ({
@@ -243,63 +486,130 @@ export default function LibraryPage() {
     return [...customs, ...builtins]
   }, [installed, customNames])
 
+  // Filtered & Sorted Wallpapers
   const filteredWallpapers = useMemo(() => {
     const pinnedSet = new Set(homeWallpaperIds || [])
     const likedSet = new Set(likedWallpaperIds || [])
-    return allWallpapers.filter(w => {
+
+    let list = allWallpapers.filter(w => {
       const isPinned = pinnedSet.has(w.id)
       const isLiked = likedSet.has(w.id)
+      const typeInfo = getWallpaperTypeInfo(w)
+
+      // Category Pill Filters
       if (filterCategory === 'liked' && !isLiked) return false
+      if (filterCategory === 'pinned' && !isPinned) return false
       if (filterCategory === 'builtin' && w.isCustom) return false
       if (filterCategory === 'custom' && (!w.isCustom || w.config?.streamUrl)) return false
       if (filterCategory === 'stream' && !w.config?.streamUrl) return false
-      if (filterCategory === 'pinned' && !isPinned) return false
+
+      // Type Filter Dropdown
+      if (typeFilter !== 'all') {
+        if (typeFilter === 'video' && typeInfo.type !== 'video') return false
+        if (typeFilter === 'image' && typeInfo.type !== 'image') return false
+        if (typeFilter === 'canvas' && typeInfo.type !== 'canvas') return false
+        if (typeFilter === 'stream' && typeInfo.type !== 'stream' && typeInfo.type !== 'youtube') return false
+      }
+
+      // Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
-        const matchName = w.name.toLowerCase().includes(query)
+        const matchName = (w.name || '').toLowerCase().includes(query)
+        const matchAuthor = (w.communityMeta?.author || '').toLowerCase().includes(query)
         const matchTag = w.tags?.some(t => t.toLowerCase().includes(query))
-        return matchName || matchTag
+        return matchName || matchAuthor || matchTag
       }
       return true
     })
-  }, [allWallpapers, filterCategory, searchQuery, homeWallpaperIds, likedWallpaperIds])
+
+    // Sort order
+    if (sortBy === 'name-asc') {
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    } else if (sortBy === 'name-desc') {
+      list.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+    } else if (sortBy === 'liked') {
+      list.sort((a, b) => {
+        const aLiked = likedSet.has(a.id) ? 1 : 0
+        const bLiked = likedSet.has(b.id) ? 1 : 0
+        return bLiked - aLiked
+      })
+    }
+
+    return list
+  }, [allWallpapers, filterCategory, typeFilter, sortBy, searchQuery, homeWallpaperIds, likedWallpaperIds])
+
+  // Split out first item for the featured asymmetric hero card if in grid mode and >= 1 item
+  const featuredItem = (viewMode === 'grid' && filteredWallpapers.length > 0) ? filteredWallpapers[0] : null
+  const standardItems = (viewMode === 'grid' && filteredWallpapers.length > 0) ? filteredWallpapers.slice(1) : filteredWallpapers
 
   return (
-    <div className="content-page-container animate-fadeIn">
-      {/* Top Application Header */}
-      <div className="content-page-header">
+    <div className="library-page-container animate-fadeIn">
+      {/* ── Top Header Bar ────────────────────────────────────────────────────── */}
+      <div className="library-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 className="content-page-title">Library</h1>
-            <span className="badge font-mono" style={{ fontSize: 11 }}>{allWallpapers.length} items</span>
-          </div>
-          <p className="content-page-subtitle">
-            Master wallpaper repository — organize, preview, and pin to your Home dashboard
-          </p>
+          <h1 className="library-title">Wallpaper Library</h1>
+          <p className="library-subtitle">Your collection. Make your desktop feel alive.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-ghost"
-            onClick={() => setAddStreamModal(true)}
-            style={{ height: 34, fontSize: 12, padding: '0 12px' }}
-          >
-            <Globe size={14} /> Add Web Stream
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleOpenImportDialog}
-            style={{ height: 34, fontSize: 12, padding: '0 14px' }}
-          >
-            <Plus size={14} /> Add Local Wallpaper
-          </button>
+
+        <div className="flex items-center gap-3">
+          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+            {allWallpapers.length} wallpapers
+          </span>
+
+          {/* Split Add Button matching reference */}
+          <div style={{ position: 'relative' }}>
+            <div className="library-split-btn">
+              <button
+                className="library-split-main"
+                onClick={handleOpenImportDialog}
+                title="Add a local video or picture wallpaper"
+              >
+                <Plus size={14} /> Add Wallpaper
+              </button>
+              <button
+                className="library-split-arrow"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsAddMenuOpen(!isAddMenuOpen)
+                }}
+                title="More import options"
+              >
+                <ChevronDown size={13} />
+              </button>
+            </div>
+
+            {isAddMenuOpen && (
+              <div
+                className="library-context-menu library-add-dropdown"
+                style={{ top: 'calc(100% + 6px)', right: 0 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="library-context-item"
+                  onClick={handleOpenImportDialog}
+                >
+                  <Plus size={13} /> Add Local Wallpaper
+                </button>
+                <button
+                  className="library-context-item"
+                  onClick={() => {
+                    setIsAddMenuOpen(false)
+                    setAddStreamModal(true)
+                  }}
+                >
+                  <Globe size={13} /> Add Web Stream
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Target Screen Bar (for multi-monitor per-screen arrangement) */}
+      {/* ── Multi-Monitor Target Screen Bar ───────────────────────────────────── */}
       {screenArrangement === 'per-screen' && monitors.length > 1 && (
         <div
           style={{
-            marginBottom: 18,
+            marginBottom: 16,
             padding: '10px 14px',
             background: 'var(--bg-card)',
             border: '1px solid var(--border-subtle)',
@@ -334,157 +644,335 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div style={{ marginBottom: 18 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>
-              {filterCategory === 'all' ? 'All Wallpapers' :
-               filterCategory === 'liked' ? 'Liked Wallpapers' :
-               filterCategory === 'pinned' ? 'Pinned to Home' :
-               filterCategory === 'builtin' ? 'Built-in Canvas Engines' :
-               filterCategory === 'custom' ? 'Custom Media' : 'Web Streams'}
-            </h2>
-            <span className="badge font-mono" style={{ fontSize: 11 }}>{filteredWallpapers.length}</span>
-          </div>
-
-          <div style={{ position: 'relative', width: 220 }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* ── Integrated Toolbar (Two Rows) ─────────────────────────────────────── */}
+      <div className="library-toolbar">
+        {/* Row 1: Search, Type Dropdown, Sort Dropdown, View Switcher */}
+        <div className="library-toolbar-row1">
+          <div className="library-search-box">
+            <Search
+              size={14}
+              style={{ position: 'absolute', left: 12, color: 'var(--text-muted)', pointerEvents: 'none' }}
+            />
             <input
               type="text"
-              placeholder="Search library…"
+              className="library-search-input"
+              placeholder="Search wallpapers by title, creator, or tags..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 26px 6px 30px',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                color: 'var(--text-main)',
-                fontSize: 12,
-                outline: 'none',
-              }}
             />
             {searchQuery && (
               <button
                 className="btn-icon"
-                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 2 }}
+                style={{ position: 'absolute', right: 8, padding: 2 }}
                 onClick={() => setSearchQuery('')}
               >
-                <X size={12} />
+                <X size={13} />
               </button>
             )}
           </div>
+
+          <select
+            className="library-select"
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            title="Filter by media type"
+          >
+            <option value="all">All Types</option>
+            <option value="video">Videos</option>
+            <option value="image">Pictures</option>
+            <option value="canvas">Canvas 2D</option>
+            <option value="stream">Web Streams</option>
+          </select>
+
+          <select
+            className="library-select"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            title="Sort order"
+          >
+            <option value="recent">Sort: Recently Added</option>
+            <option value="name-asc">Sort: Name (A-Z)</option>
+            <option value="name-desc">Sort: Name (Z-A)</option>
+            <option value="liked">Sort: Most Liked</option>
+          </select>
+
+          <div className="library-view-switcher">
+            <button
+              className={`library-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="Grid View"
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              className={`library-view-btn ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setViewMode('list')}
+              title="Compact List View"
+            >
+              <List size={15} />
+            </button>
+          </div>
         </div>
 
-        {/* Filter Pills & Thumbnail Mode Selector */}
-        <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
-          <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
-            {[
-              { id: 'all', label: 'All', count: allWallpapers.length },
-              { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
-              { id: 'pinned', label: 'Pinned', count: homeWallpaperIds.length, icon: Pin },
-              { id: 'builtin', label: 'Built-in', count: WALLPAPER_LIST.length },
-              { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
-              { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length },
-            ].map(cat => {
-              const isActive = filterCategory === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '4px 10px',
-                    fontSize: 11.5,
-                    fontWeight: isActive ? 600 : 500,
-                    borderRadius: 6,
-                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
-                    color: isActive ? (cat.id === 'liked' ? 'var(--color-rose)' : 'var(--color-brand)') : 'var(--text-muted)',
-                    border: isActive ? (cat.id === 'liked' ? '1px solid var(--color-rose)' : '1px solid var(--color-brand)') : '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    transition: 'all 0.15s ease',
-                  }}
-                  onClick={() => setFilterCategory(cat.id)}
-                >
-                  {cat.icon && <cat.icon size={11} fill={isActive ? 'currentColor' : 'none'} />}
-                  <span>{cat.label}</span>
-                  <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Thumbnail / Preview Mode Selector */}
-          <div className="segmented-control" title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)">
-            <span style={{ fontSize: 10, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
-              PREVIEWS:
-            </span>
-            {[
-              { id: 'always', label: 'On', title: 'Always Show Thumbnails' },
-              { id: 'hover', label: 'Hover', title: 'Show Previews on Hover (Low RAM)' },
-              { id: 'off', label: 'Off', title: 'Off — Clean Vector Badges (Zero RAM)' },
-            ].map(m => (
+        {/* Row 2: Category Filter Pills */}
+        <div className="library-pills-row">
+          {[
+            { id: 'all', label: 'All', count: allWallpapers.length },
+            { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
+            { id: 'pinned', label: 'Pinned', count: homeWallpaperIds.length, icon: Pin },
+            { id: 'builtin', label: 'Built-in', count: WALLPAPER_LIST.length },
+            { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
+            { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length },
+          ].map(cat => {
+            const isActive = filterCategory === cat.id
+            const Icon = cat.icon
+            return (
               <button
-                key={m.id}
-                className={`segmented-item ${thumbnailMode === m.id ? 'active' : ''}`}
-                onClick={() => setThumbnailMode(m.id)}
-                title={m.title}
-                style={{ fontSize: 11, padding: '3px 8px' }}
+                key={cat.id}
+                className={`library-pill-btn ${isActive ? 'active' : ''}`}
+                onClick={() => setFilterCategory(cat.id)}
               >
-                {m.label}
+                {Icon && <Icon size={12} fill={isActive && cat.id === 'liked' ? 'currentColor' : 'none'} />}
+                <span>{cat.label}</span>
+                <span className="library-pill-count">{cat.count}</span>
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Wallpapers Grid */}
+      {/* ── Empty State ───────────────────────────────────────────────────────── */}
       {filteredWallpapers.length === 0 ? (
-        <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)', marginBottom: 36, border: '1.5px dashed var(--border-main)', background: 'transparent' }}>
-          <Search size={26} className="text-brand" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+        <div
+          className="card"
+          style={{
+            padding: 56,
+            textAlign: 'center',
+            color: 'var(--text-subtle)',
+            margin: '20px 0 40px',
+            border: '1.5px dashed var(--border-main)',
+            background: 'transparent',
+            borderRadius: 14,
+          }}
+        >
+          <Search size={28} className="text-brand" style={{ margin: '0 auto 12px', opacity: 0.7 }} />
           <div className="text-base font-semibold" style={{ color: 'var(--text-main)', marginBottom: 4 }}>
             No wallpapers match your filter
           </div>
-          <p className="text-xs text-muted" style={{ maxWidth: 360, margin: '0 auto 16px' }}>
-            Try selecting another category or clear your search term to see wallpapers in your library.
+          <p className="text-xs text-muted" style={{ maxWidth: 380, margin: '0 auto 18px' }}>
+            Try resetting your search query or switching to another category pill to view wallpapers.
           </p>
           <button
             className="btn btn-ghost"
-            style={{ margin: '0 auto', fontSize: 12 }}
-            onClick={() => { setSearchQuery(''); setFilterCategory('all'); }}
+            style={{ margin: '0 auto', fontSize: 12.5 }}
+            onClick={() => { setSearchQuery(''); setFilterCategory('all'); setTypeFilter('all'); }}
           >
             Reset Filters
           </button>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18, marginBottom: 36 }}>
-          {filteredWallpapers.map(item => {
+      ) : viewMode === 'grid' ? (
+        /* ── Asymmetric Editorial Grid (Matching Reference) ──────────────────── */
+        <div className="library-editorial-grid">
+          {/* Featured Hero Card (Item 1, Spans 2 Columns in Row 1) */}
+          {featuredItem && (() => {
+            const activeStatus = getActiveStatus(featuredItem)
+            const isLive = Boolean(activeStatus)
+            const isApplying = applyingId === featuredItem.id
+            const isPinned = homeWallpaperIds.includes(featuredItem.id)
+            const isLiked = (likedWallpaperIds || []).includes(featuredItem.id)
+            const typeInfo = getWallpaperTypeInfo(featuredItem)
+
+            return (
+              <div
+                key={featuredItem.id}
+                className="library-featured-card"
+                onMouseEnter={() => setHoveredId(featuredItem.id)}
+                onMouseLeave={() => setHoveredId(null)}
+              >
+                {/* Upper Panoramic Thumbnail with Overlays */}
+                <div
+                  className="library-featured-thumb-container"
+                  onClick={() => setPreviewingWallpaper(featuredItem)}
+                  title="Click to open full preview"
+                >
+                  <WallpaperThumbnail
+                    wallpaper={featuredItem}
+                    isHovered={hoveredId === featuredItem.id}
+                    mode={thumbnailMode}
+                  />
+
+                  {/* Top-Left Media Type Badge */}
+                  <div className="library-card-badge-tl">
+                    <div className="library-glass-pill" style={{ color: typeInfo.color }}>
+                      <typeInfo.icon size={11} />
+                      <span>{typeInfo.label.toUpperCase()}</span>
+                    </div>
+                  </div>
+
+                  {/* Top-Right Heart & Context Menu */}
+                  <div className="library-card-badge-tr">
+                    <button
+                      className="library-icon-btn"
+                      title={isLiked ? 'Unlike' : 'Like'}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleLikeWallpaper(featuredItem.id)
+                      }}
+                      style={{ color: isLiked ? 'var(--color-rose)' : 'inherit' }}
+                    >
+                      <Heart size={13} fill={isLiked ? 'currentColor' : 'none'} />
+                    </button>
+
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        className="library-icon-btn library-menu-trigger"
+                        title="More options"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveMenuId(activeMenuId === featuredItem.id ? null : featuredItem.id)
+                        }}
+                      >
+                        <MoreHorizontal size={13} />
+                      </button>
+
+                      {activeMenuId === featuredItem.id && (
+                        <div className="library-context-menu" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="library-context-item"
+                            onClick={() => {
+                              togglePinToHome(featuredItem.id)
+                              setActiveMenuId(null)
+                            }}
+                          >
+                            <Pin size={12} /> {isPinned ? 'Unpin from Home' : 'Pin to Home'}
+                          </button>
+                          <button
+                            className="library-context-item"
+                            onClick={() => {
+                              setRenameModal({ isOpen: true, id: featuredItem.id, currentName: featuredItem.name })
+                              setActiveMenuId(null)
+                            }}
+                          >
+                            <Pencil size={12} /> Rename
+                          </button>
+                          {featuredItem.isCustom && (
+                            <button
+                              className="library-context-item danger"
+                              onClick={() => {
+                                if (isLive) handleStop()
+                                uninstallItem(featuredItem.id)
+                                setActiveMenuId(null)
+                              }}
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Hover Overlay with Preview & Apply Actions */}
+                  <div className="library-card-hover-overlay" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="library-hover-action-preview"
+                      onClick={() => setPreviewingWallpaper(featuredItem)}
+                    >
+                      <Eye size={13} /> Preview
+                    </button>
+                    <button
+                      className="library-hover-action-apply"
+                      onClick={() => handleApply(featuredItem)}
+                      disabled={isApplying}
+                    >
+                      <Play size={13} fill="currentColor" /> {isApplying ? 'Applying…' : 'Apply to Desktop'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bottom Featured Footer */}
+                <div className="library-featured-footer">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h3
+                      className="library-card-title"
+                      style={{ fontSize: 15, marginBottom: 2 }}
+                      title={featuredItem.name}
+                    >
+                      {featuredItem.name}
+                    </h3>
+                    <div className="library-card-creator">
+                      {featuredItem.communityMeta?.author
+                        ? `by ${featuredItem.communityMeta.author}`
+                        : featuredItem.isCustom
+                        ? `Custom ${typeInfo.label}`
+                        : `Built-in Canvas Engine`}
+                    </div>
+                    <div className="library-card-tags">
+                      {featuredItem.tags && featuredItem.tags.length > 0 ? (
+                        featuredItem.tags.slice(0, 3).map(t => (
+                          <span key={t} className="library-tag-chip">
+                            #{t}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="library-tag-chip">#featured</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    {isLive ? (
+                      <div
+                        className="btn btn-success"
+                        style={{
+                          height: 32,
+                          fontSize: 12,
+                          padding: '0 14px',
+                          background: 'color-mix(in srgb, var(--color-emerald) 18%, transparent)',
+                          borderColor: 'var(--color-emerald)',
+                          color: 'var(--color-emerald)',
+                          cursor: 'default',
+                        }}
+                      >
+                        <Check size={12} /> Active
+                      </div>
+                    ) : (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleApply(featuredItem)}
+                        disabled={isApplying}
+                        style={{ height: 32, fontSize: 12, padding: '0 16px', borderRadius: 999 }}
+                      >
+                        <Play size={11} fill="currentColor" /> {isApplying ? '…' : 'Apply'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Standard Cards (Cols 3 & 4 in Row 1, and all subsequent rows) */}
+          {standardItems.map(item => {
             const activeStatus = getActiveStatus(item)
             const isLive = Boolean(activeStatus)
             const isApplying = applyingId === item.id
-            const isPinnedToHome = homeWallpaperIds.includes(item.id)
+            const isPinned = homeWallpaperIds.includes(item.id)
             const isLiked = (likedWallpaperIds || []).includes(item.id)
             const typeInfo = getWallpaperTypeInfo(item)
 
             return (
               <div
                 key={item.id}
-                className="mp-card"
-                style={{
-                  border: isLive ? '1px solid var(--color-emerald)' : '1px solid var(--border-subtle)',
-                  boxShadow: isLive ? '0 0 0 1px var(--color-emerald), 0 8px 24px rgba(0,0,0,0.3)' : undefined,
-                }}
+                className="library-standard-card"
                 onMouseEnter={() => setHoveredId(item.id)}
                 onMouseLeave={() => setHoveredId(null)}
-                onDoubleClick={() => handleApply(item)}
               >
-                {/* Thumbnail Preview */}
+                {/* Artwork Area */}
                 <div
-                  className="mp-thumb-container"
-                  title={`Double-click to apply ${item.name}`}
+                  className="library-card-thumb-container"
+                  onClick={() => setPreviewingWallpaper(item)}
+                  title="Click to preview"
                 >
                   <WallpaperThumbnail
                     wallpaper={item}
@@ -492,197 +980,152 @@ export default function LibraryPage() {
                     mode={thumbnailMode}
                   />
 
-                  {/* Top-Left: Type Badge */}
-                  <div className="mp-badge-top-left">
-                    <div
-                      className="mp-pill-badge"
-                      style={{
-                        background: 'rgba(10, 10, 14, 0.75)',
-                        color: typeInfo.color,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        fontSize: 10,
-                      }}
-                    >
-                      <span>{typeInfo.label}</span>
+                  {/* Top-Left Badge */}
+                  <div className="library-card-badge-tl">
+                    <div className="library-glass-pill" style={{ color: typeInfo.color }}>
+                      <typeInfo.icon size={10} />
+                      <span>{typeInfo.label.toUpperCase()}</span>
                     </div>
                   </div>
 
-                  {/* Top-Right: Active Indicator, Heart & Pin */}
-                  <div className="mp-badge-top-right flex items-center gap-1">
-                    {isLive && (
-                      <div
-                        className="mp-pill-badge"
-                        style={{
-                          background: 'rgba(16, 185, 129, 0.92)',
-                          color: '#fff',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          fontSize: 10,
-                          fontWeight: 700,
-                        }}
-                      >
-                        <div className="status-dot-live" />
-                        <span>{activeStatus[0] === 'all' ? 'LIVE' : activeStatus.join(', ')}</span>
-                      </div>
-                    )}
-
+                  {/* Top-Right Heart & Context Menu */}
+                  <div className="library-card-badge-tr">
                     <button
-                      className="btn-icon"
-                      style={{
-                        background: isLiked ? 'color-mix(in srgb, var(--color-rose) 30%, rgba(0,0,0,0.7))' : 'rgba(0,0,0,0.65)',
-                        color: isLiked ? 'var(--color-rose)' : 'rgba(255,255,255,0.85)',
-                        padding: 5,
-                        borderRadius: 6,
-                        backdropFilter: 'blur(8px)',
-                        border: isLiked ? '1px solid var(--color-rose)' : '1px solid rgba(255,255,255,0.14)',
-                        transition: 'all 0.15s ease',
-                      }}
-                      title={isLiked ? 'Unlike wallpaper' : 'Like wallpaper'}
+                      className="library-icon-btn"
+                      title={isLiked ? 'Unlike' : 'Like'}
                       onClick={(e) => {
                         e.stopPropagation()
                         toggleLikeWallpaper(item.id)
                       }}
+                      style={{ color: isLiked ? 'var(--color-rose)' : 'inherit' }}
                     >
                       <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
                     </button>
 
-                    <button
-                      className="btn-icon"
-                      style={{
-                        background: isPinnedToHome ? 'var(--color-brand)' : 'rgba(0,0,0,0.65)',
-                        color: '#fff',
-                        padding: 5,
-                        borderRadius: 6,
-                        backdropFilter: 'blur(8px)',
-                        border: isPinnedToHome ? '1px solid var(--color-brand)' : '1px solid rgba(255,255,255,0.12)',
-                      }}
-                      title={isPinnedToHome ? 'Pinned to Home (Click to remove)' : 'Pin to Home'}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        togglePinToHome(item.id)
-                      }}
-                    >
-                      <Pin size={12} fill={isPinnedToHome ? '#fff' : 'none'} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Card Content & Hierarchy */}
-                <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <h3
-                      className="font-semibold"
-                      style={{
-                        fontSize: 13.5,
-                        lineHeight: '1.3',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        color: 'var(--text-main)',
-                      }}
-                      title={item.name}
-                    >
-                      {item.name}
-                    </h3>
-                    <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                      {item.communityMeta?.author
-                        ? `by ${item.communityMeta.author}`
-                        : item.isCustom
-                        ? `Custom ${typeInfo.label}`
-                        : `Built-in Canvas Engine`}
-                    </div>
-                  </div>
-
-                  {/* Secondary actions row */}
-                  <div
-                    className="flex items-center justify-between"
-                    style={{
-                      paddingTop: 8,
-                      paddingBottom: 10,
-                      borderTop: '1px solid var(--border-subtle)',
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div className="flex items-center gap-1 text-xs text-subtle truncate" style={{ maxWidth: '60%' }}>
-                      {item.tags && item.tags.length > 0 ? (
-                        item.tags.slice(0, 2).map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: 'var(--bg-card-hover)',
-                              border: '1px solid var(--border-subtle)',
-                              fontSize: 9.5,
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            #{tag}
-                          </span>
-                        ))
-                      ) : (
-                        <span style={{ fontSize: 10.5, color: 'var(--text-subtle)' }}>60 FPS Native</span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1">
+                    <div style={{ position: 'relative' }}>
                       <button
-                        className="btn-icon"
-                        style={{ padding: '3px 5px', color: 'var(--text-muted)' }}
-                        title="Rename Wallpaper"
+                        className="library-icon-btn library-menu-trigger"
+                        title="More options"
                         onClick={(e) => {
                           e.stopPropagation()
-                          setRenameModal({ isOpen: true, id: item.id, currentName: item.name })
+                          setActiveMenuId(activeMenuId === item.id ? null : item.id)
                         }}
                       >
-                        <Pencil size={11} />
+                        <MoreHorizontal size={12} />
                       </button>
 
-                      {item.isCustom && (
-                        <button
-                          className="btn-icon"
-                          style={{ padding: '3px 5px', color: 'var(--color-rose)' }}
-                          title="Delete custom wallpaper"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (isLive) handleStop()
-                            uninstallItem(item.id)
-                          }}
-                        >
-                          <Trash2 size={11} />
-                        </button>
+                      {activeMenuId === item.id && (
+                        <div className="library-context-menu" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="library-context-item"
+                            onClick={() => {
+                              togglePinToHome(item.id)
+                              setActiveMenuId(null)
+                            }}
+                          >
+                            <Pin size={12} /> {isPinned ? 'Unpin from Home' : 'Pin to Home'}
+                          </button>
+                          <button
+                            className="library-context-item"
+                            onClick={() => {
+                              setRenameModal({ isOpen: true, id: item.id, currentName: item.name })
+                              setActiveMenuId(null)
+                            }}
+                          >
+                            <Pencil size={12} /> Rename
+                          </button>
+                          {item.isCustom && (
+                            <button
+                              className="library-context-item danger"
+                              onClick={() => {
+                                if (isLive) handleStop()
+                                uninstallItem(item.id)
+                                setActiveMenuId(null)
+                              }}
+                            >
+                              <Trash2 size={12} /> Delete
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Primary Action Button */}
-                  <div style={{ marginTop: 'auto' }}>
+                  {/* Hover Actions Overlay (Preview & Apply to Desktop) */}
+                  <div className="library-card-hover-overlay" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="library-hover-action-preview"
+                      onClick={() => setPreviewingWallpaper(item)}
+                    >
+                      <Eye size={12} /> Preview
+                    </button>
                     {isLive ? (
                       <div
-                        className="btn btn-success mp-btn-action w-full"
+                        className="library-hover-action-apply"
                         style={{
+                          background: 'var(--color-emerald)',
+                          borderColor: 'rgba(255,255,255,0.3)',
                           cursor: 'default',
-                          background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
-                          borderColor: 'var(--color-emerald)',
-                          color: 'var(--color-emerald)',
-                          height: 32,
-                          fontSize: 12,
                         }}
                       >
-                        <Check size={13} /> Active on Desktop
+                        <Check size={12} /> Active on Desktop
                       </div>
                     ) : (
                       <button
-                        className="btn btn-secondary mp-btn-action w-full"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleApply(item)
-                        }}
+                        className="library-hover-action-apply"
+                        onClick={() => handleApply(item)}
                         disabled={isApplying}
-                        title="Apply to Windows desktop"
-                        style={{ height: 32, fontSize: 12 }}
                       >
                         <Play size={12} fill="currentColor" /> {isApplying ? 'Applying…' : 'Apply to Desktop'}
                       </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Body Information */}
+                <div className="library-card-body">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <h3 className="library-card-title" title={item.name}>
+                      {item.name}
+                    </h3>
+                    {isLive && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          color: 'var(--color-emerald)',
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span className="status-dot-live" style={{ width: 5, height: 5 }} />
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="library-card-creator">
+                    {item.communityMeta?.author
+                      ? `by ${item.communityMeta.author}`
+                      : item.isCustom
+                      ? `Custom ${typeInfo.label}`
+                      : `Built-in Engine`}
+                  </div>
+
+                  <div className="library-card-tags">
+                    {item.tags && item.tags.length > 0 ? (
+                      item.tags.slice(0, 3).map(t => (
+                        <span key={t} className="library-tag-chip">
+                          #{t}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="library-tag-chip">#wallpaper</span>
                     )}
                   </div>
                 </div>
@@ -690,9 +1133,145 @@ export default function LibraryPage() {
             )
           })}
         </div>
+      ) : (
+        /* ── Compact List View ────────────────────────────────────────────────── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 40 }}>
+          {filteredWallpapers.map(item => {
+            const activeStatus = getActiveStatus(item)
+            const isLive = Boolean(activeStatus)
+            const isApplying = applyingId === item.id
+            const isPinned = homeWallpaperIds.includes(item.id)
+            const isLiked = (likedWallpaperIds || []).includes(item.id)
+            const typeInfo = getWallpaperTypeInfo(item)
+
+            return (
+              <div
+                key={item.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  padding: '10px 16px',
+                  background: 'var(--bg-card)',
+                  border: isLive ? '1px solid var(--color-emerald)' : '1px solid var(--border-subtle)',
+                  borderRadius: 10,
+                  transition: 'border-color 0.15s ease',
+                }}
+              >
+                {/* Mini Thumbnail */}
+                <div
+                  style={{
+                    width: 68,
+                    height: 42,
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    position: 'relative',
+                    flexShrink: 0,
+                    background: '#0a0d14',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setPreviewingWallpaper(item)}
+                >
+                  <WallpaperThumbnail wallpaper={item} isHovered={false} mode="off" />
+                </div>
+
+                {/* Info */}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-main)' }} className="truncate">
+                      {item.name}
+                    </h4>
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        background: 'rgba(0,0,0,0.5)',
+                        color: typeInfo.color,
+                        border: '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      {typeInfo.label.toUpperCase()}
+                    </span>
+                    {isLive && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-emerald)' }}>
+                        ● LIVE
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {item.communityMeta?.author ? `by ${item.communityMeta.author}` : item.isCustom ? 'Custom Media' : 'Built-in Canvas'}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <button
+                    className="btn-icon"
+                    title={isLiked ? 'Unlike' : 'Like'}
+                    onClick={() => toggleLikeWallpaper(item.id)}
+                    style={{ color: isLiked ? 'var(--color-rose)' : 'var(--text-muted)' }}
+                  >
+                    <Heart size={14} fill={isLiked ? 'currentColor' : 'none'} />
+                  </button>
+                  <button
+                    className="btn-icon"
+                    title={isPinned ? 'Unpin' : 'Pin'}
+                    onClick={() => togglePinToHome(item.id)}
+                    style={{ color: isPinned ? 'var(--color-brand)' : 'var(--text-muted)' }}
+                  >
+                    <Pin size={14} fill={isPinned ? 'currentColor' : 'none'} />
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setPreviewingWallpaper(item)}
+                    style={{ height: 30, fontSize: 11.5, padding: '0 10px' }}
+                  >
+                    <Eye size={12} /> Preview
+                  </button>
+                  {isLive ? (
+                    <div
+                      className="btn btn-success"
+                      style={{
+                        height: 30,
+                        fontSize: 11.5,
+                        padding: '0 12px',
+                        background: 'color-mix(in srgb, var(--color-emerald) 15%, transparent)',
+                        borderColor: 'var(--color-emerald)',
+                        color: 'var(--color-emerald)',
+                        cursor: 'default',
+                      }}
+                    >
+                      <Check size={12} /> Active
+                    </div>
+                  ) : (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handleApply(item)}
+                      disabled={isApplying}
+                      style={{ height: 30, fontSize: 11.5, padding: '0 12px' }}
+                    >
+                      <Play size={11} fill="currentColor" /> Apply
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
 
-      {/* Modals */}
+      {/* ── Modals ───────────────────────────────────────────────────────────── */}
+      {previewingWallpaper && (
+        <LibraryPreviewModal
+          wallpaper={previewingWallpaper}
+          onClose={() => setPreviewingWallpaper(null)}
+          onApply={handleApply}
+          isLive={Boolean(getActiveStatus(previewingWallpaper))}
+        />
+      )}
+
       <AddWallpaperModal
         isOpen={addModal.isOpen}
         filePath={addModal.path}
