@@ -1568,28 +1568,6 @@ export default function HomePage() {
               )
             })}
           </div>
-
-          {/* Thumbnail / Preview Mode Selector */}
-          <div className="segmented-control" title="Card Preview Mode: On (Always), Hover (On Mouse Hover), Off (Minimalist vector badges)">
-            <span style={{ fontSize: 10, color: 'var(--text-subtle)', paddingLeft: 6, paddingRight: 4, fontWeight: 600, letterSpacing: '0.02em' }}>
-              PREVIEWS:
-            </span>
-            {[
-              { id: 'always', label: 'On', title: 'Always Show Thumbnails' },
-              { id: 'hover', label: 'Hover', title: 'Show Previews on Hover (Low RAM)' },
-              { id: 'off', label: 'Off', title: 'Off — Clean Vector Badges (Zero RAM)' },
-            ].map(m => (
-              <button
-                key={m.id}
-                className={`segmented-item ${thumbnailMode === m.id ? 'active' : ''}`}
-                onClick={() => setThumbnailMode(m.id)}
-                title={m.title}
-                style={{ fontSize: 11, padding: '3px 8px' }}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
