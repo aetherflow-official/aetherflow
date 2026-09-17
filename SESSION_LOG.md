@@ -2785,3 +2785,31 @@
 - **Build status:** ✅ `npm run build` passed in 354ms; release executable and installer bundles successfully updated.
 ---
 
+## Session: 2026-09-18 01:45 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Fix Custom Video Static Posters (Library & Home)
+- **Completed:**
+  1. **Root Cause Diagnosis**:
+     - Custom video cards appeared solid black at rest because `<VideoPosterFrame>` was being mounted with `isPlaying = false`, `preload="metadata"`, and `#t=0.5`. In Chromium/WebView2, paused unplayed video tags render as opaque black rectangles, hiding the card background and fallback badge underneath.
+     - Furthermore, `shouldShowMedia` previously suppressed static `<img>` tags on resting cards in `hover` and `off` modes even when valid thumbnail URLs existed.
+  2. **Static Poster & Live Preview Architectural Decoupling (`src/components/WallpaperThumbnail/index.jsx`)**:
+     - Separated static poster from live preview: static poster `<img>` is mounted at `zIndex: 1` whenever a thumbnail source or cached frame exists, remaining permanently visible at rest, during hover buffering, and in all preview modes.
+     - Upgraded `resolveWallpaperThumbnail` with complete candidate cascade (`cover`, `coverUrl`, `coverPath`, `image`, `imageUrl`, and `videoPosterMemoryCache[id]`).
+     - Enhanced `ENGINE_THEMES['video-player']` fallback with a luminous sapphire/indigo gradient (`linear-gradient(135deg, #0b1528 0%, #102447 50%, #162b55 100%)`), guaranteeing resting cards without thumbnails look like intentional artwork rather than pitch black.
+     - Restricted `<VideoPosterFrame>` strictly to active hover preview (`isPreviewActive = currentMode !== 'off' && isVideo && isThisPreviewActive && Boolean(activePreview.activeSrc) && isHovered`). Zero `<video>` elements or decoders exist on resting cards (`totalVideosInDOM: 0`).
+     - Cross-fade transition: live preview mounts at `zIndex: 2` with `opacity: hasLoaded ? 1 : 0` and smooth 0.22s CSS transition, eliminating any black flash while buffering.
+     - Automatic frame capture: captures crisp 480p JPEG into memory cache and updates store via `updateInstalledWallpaper`, permanently persisting static thumbnails for future sessions.
+  3. **Store Persistence (`src/store/useStore.js`)**:
+     - Added `updateInstalledWallpaper(id, updates)` to sync dynamically captured poster frames to both `localStorage` and disk (`persistCustomWallpapersToDisk`).
+  4. **PreviewManager Untouched**:
+     - Zero modifications to `src/utils/previewManager.js` (debounce, single-preview slot, cancellation, teardown preserved).
+  5. **Verification & Build**:
+     - Chrome DevTools QA confirmed: resting cards have 0 video elements in DOM, tulip/Furina cards display static `<img>`, fallback cards show luminous badge, hover activates 1 video and leaves with 0 videos.
+     - Home favorites confirmed working identically with static posters.
+     - `npm run build`: built in 390ms with 0 errors.
+     - `cargo build --release`: completed with exit code 0.
+     - Git commit `1055c3e` created on `feature/library-redesign-preview-overhaul`.
+- **Build status:** ✅ Frontend and release binaries verified cleanly with 0 errors.
+---
+

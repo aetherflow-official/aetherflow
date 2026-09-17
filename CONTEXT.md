@@ -3,23 +3,20 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 01:30 IST — Resolved Video Previews in Always-On Mode & Packaged Release Bundles:
-1. **Resolved Video Wallpaper Previews When Preview is ON (`src/components/WallpaperThumbnail/index.jsx`)**:
-   - **Root Cause**: For custom video wallpapers without explicit thumbnail image files, `resolveWallpaperThumbnail` returned `null`, and `VideoPosterFrame` only rendered if `isHovered` was true. When the user set Preview mode to "On" (`always`), video cards rendered the vector placeholder badge ("VIDEO WALLPAPER") when idle, only revealing preview media on hover.
-   - **Fix**:
-     - Upgraded `WallpaperThumbnail` and `VideoPosterFrame` to handle both idle poster display and active hover loop playback.
-     - In `always` mode: visible video cards mount `<VideoPosterFrame>` with `preload="metadata"` and seek to `0.5s` to display crisp poster frames immediately.
-     - Automatically extracts the 0.5s frame to `videoPosterMemoryCache` via a lightweight 480px canvas, instantly caching the poster data URL.
-     - Once cached, the card automatically transitions to a standard `<img>` tag and unmounts the `<video>` element, immediately releasing all hardware video decoders.
-     - While hovering, `previewManager` activates the single active preview slot and plays the video loop smoothly on top.
-     - When unhovered, it reverts seamlessly to the cached static poster image with zero flicker and zero placeholder fallback.
-2. **Library Preview Modal Resilience (`src/pages/Library.jsx`)**:
-   - Enhanced `videoPath` resolution to handle all possible data shapes (`config?.videoPath`, `videoPath`, `source`, `path`, `config?.path`, `config?.url`, `defaultConfig?.videoPath`).
-3. **Production Binaries Packaged**:
-   - Root standalone executable: [`AetherFlow.exe`](file:///c:/Users/Yashpreet_o7/Desktop/AetherFlow/AetherFlow.exe) (7.60 MB, built 1:30 AM).
-   - NSIS installer: `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe` (54.72 MB).
-   - MSI package: `src-tauri/target/release/bundle/msi/AetherFlow_1.0.7_x64_en-US.msi` (68.21 MB).
-   - `npm run build`: Passes in 354ms with 0 errors.
+2026-09-18 01:45 IST — Restored Static Custom Video Posters & Clean Architecture:
+1. **Restored Static Custom Video Posters (`src/components/WallpaperThumbnail/index.jsx`, `src/store/useStore.js`)**:
+   - **Root Cause Diagnosed**: Paused unplayed `<video>` elements (`preload="metadata"`, `#t=0.5`) on resting cards rendered as solid black rectangles in Chromium/WebView2, obscuring the card and fallback. Additionally, `shouldShowMedia` previously suppressed static `<img>` posters when cards were resting in `hover` or `off` modes.
+   - **Decoupled Architecture**: Completely separated static poster layer from live preview layer. Static posters render as lightweight `<img>` tags at `zIndex: 1` whenever thumbnail sources or cached frames exist, visible at rest, during hover, in Preview OFF, Preview HOVER, and Preview ON.
+   - **Zero Resting Decoders**: Zero `<video>` tags or hardware decoders allocated for resting cards (`totalVideosInDOM: 0`).
+   - **PreviewManager Single Slot Preserved**: Live video preview strictly mounts only when hovered, active, and coordinated by `PreviewManager`.
+   - **Zero Black Flash**: Live preview mounts at `zIndex: 2` with `opacity: hasLoaded ? 1 : 0` and smooth 0.22s cross-fade; poster remains visible underneath while video buffers.
+   - **Permanent Poster Persistence**: Captures crisp 480p JPEG into memory cache and updates store via `updateInstalledWallpaper`, persisting static thumbnails to `localStorage` and disk.
+   - **Luminous Vector Fallbacks**: Enhanced `ENGINE_THEMES['video-player']` with a luminous sapphire/indigo gradient and glowing icons, ensuring resting cards without stored thumbnails look like intentional artwork rather than pitch black.
+   - **Home Synchronization**: Shared `WallpaperCard` on Home favorites behaves identically.
+2. **Production Binaries Packaged**:
+   - Native release binary: `src-tauri/target/release/aetherflow.exe` (7.60 MB).
+   - Standalone root binary: `AetherFlow.exe` (7.60 MB).
+   - `npm run build`: Passes in 390ms with 0 errors.
 
 ---
 
@@ -227,6 +224,7 @@ npm run tauri:dev
 | 2026-09-17 | Antigravity (Google DeepMind) | Production Release Build of Standalone AetherFlow.exe: Built production bundle via `npm run build` (766ms), compiled release binary via `cargo build --release` (2m 18s), deployed fresh 7.25MB standalone `AetherFlow.exe`, and launched running process (PID 24172) with native WorkerW desktop wallpaper pinning and MPV/WebStream integration. |
 | 2026-09-17 | Antigravity (Google DeepMind) | Resolved Custom Theme Studio Crash & Home Wallpaper Disappearance: Fixed undefined `handleToggleLivePreview` & `handleLoadStarterPreset` in `Personalization.jsx`; restored automatic re-pinning of custom wallpapers in `useStore.js` and auto-healing in `Home.jsx`; hardened `ErrorBoundary` cache reset against data wipes; recompiled & deployed updated `AetherFlow.exe` (PID 29156). |
 | 2026-09-17 | Antigravity (Google DeepMind) | Wallpaper Card System Redesign: Eliminated hard split / solid metadata box underneath cards; transformed cards into 100% continuous artwork surfaces with subtle multi-stop bottom scrim gradients; created unified WallpaperCard component across Library (featured & standard) and Home (favorites); implemented compact type badges, top-right controls, resting apply button, and clean hover actions without blacking out artwork; preserved central single-slot PreviewManager; verified across Dark/Light themes and viewports. |
+| 2026-09-18 | Antigravity (Google DeepMind) | Restored Static Custom Video Posters: Decoupled static poster layer (<img>, zIndex 1) from single-slot live preview layer (<VideoPosterFrame>, zIndex 2); eliminated solid black card rendering caused by paused unplayed <video> tags; guaranteed 0 video decoders at rest (totalVideosInDOM: 0); prevented black flash during hover with 0.22s cross-fade; added dynamic 480p JPEG thumbnail capture & permanent store persistence to localStorage and disk; updated fallback with luminous sapphire/indigo gradient; committed to feature/library-redesign-preview-overhaul (1055c3e). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 
