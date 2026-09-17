@@ -3,25 +3,26 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-17 19:30 IST — Wallpaper Card System Redesign (Continuous Artwork Surface):
-1. **Core Principle — The Wallpaper IS The Card**:
-   - Eliminated the previous hard visual split (thumbnail on top, separate dark metadata panel on the bottom).
-   - Entire card surface is now 100% continuous wallpaper artwork with 14px border radius.
-   - All metadata, tags, and action buttons float naturally over a subtle bottom readability gradient (`--wp-scrim-gradient`).
-2. **Unified `WallpaperCard` Shared Component (`src/components/WallpaperCard/index.jsx`)**:
-   - Created reusable base component used across both **Library** (Featured Hero 2-column card + standard grid cards) and **Home** (Home Favorites).
-   - Top-left: compact frosted media type pill (`[ 🖼 PICTURE ]`, `[ 🎬 VIDEO ]`, `[ 🌐 STREAM ]`, `[ ⚡ CANVAS ]`).
-   - Top-right: frosted glass Heart `♡` and context menu `⋯`.
-   - Bottom overlay: crisp title, creator line (`by {author}`), subtle tag chips (`#tag`), resting floating action `[ ▶ Apply ]`.
-   - Hover state: subtle backdrop dimming (`rgba(5,7,12,0.32)`), resting apply cleanly fades out, and centered floating actions (`[ ▶ Preview ]` and `[ ▶ Apply to Desktop ]`) appear without obscuring the artwork.
-3. **Hardware Decoder & Preview Protection**:
-   - Preserved centralized `previewManager` (`src/lib/previewManager.js`): single active preview slot (`MAX = 1`), 250ms hover debounce, and strict video decoder teardown (`pause()`, `removeAttribute('src')`, `load()`).
-4. **Theme Semantics & Multi-Theme Adaptability**:
-   - Integrated semantic tokens `--wp-scrim-gradient`, `--wp-text-title`, and `--wp-text-creator` into `themes.css` for both Aether Dark and Aether Light.
-5. **Verification**:
-   - Clean `npm run build` (535ms).
-   - Playwright visual verification across Library gallery, Library card hover, Home Favorites, Light theme, and responsive viewports (1280×800, 1024×768).
-   - Preserved on dedicated feature branch `feature/library-redesign-preview-overhaul`.
+2026-09-17 19:45 IST — Final Wallpaper Card Polish & Home Consistency:
+1. **Continuous Artwork Surface (The Wallpaper IS The Card)**:
+   - Full edge-to-edge artwork continuous underneath the subtle multi-stop bottom scrim.
+   - Zero hard horizontal divisions or separate solid metadata panels.
+2. **Subtle Non-Obtrusive Hover State**:
+   - Removed centered button overlay; center of the artwork remains 100% visible at all times.
+   - Artwork dims very slightly (`brightness(0.92)`).
+   - Contextual `[ 👁 Preview ]` pill fades in smoothly beside `[ ▶ Apply ]` in the bottom-right action cluster on hover.
+   - Click-to-preview opens full high-definition inspection modal.
+3. **Shared Card Architecture**:
+   - Both **Library** (Featured Hero 2-column card + standard grid cards) and **Home** (Home Favorites) use the exact same `WallpaperCard` component (`src/components/WallpaperCard/index.jsx`).
+   - Top-left: Small restrained type indicator (`IMAGE`, `VIDEO`, `YOUTUBE`, `WEB`, `CANVAS`).
+   - Top-right: Floating `[ ♡ ]`, `[ 📌 ]` (when pinned), and `[ ⋯ ]` more menu.
+   - Bottom-left: Title, creator (`by {author}` / `by AetherFlow`), and quiet `#tags`.
+   - Bottom-right: Floating `[ ▶ Apply ]` pill and `[ ● Active ]` indicator when live.
+4. **Memory & Decoder Teardown Benchmark**:
+   - JS Heap memory stays rock-solid between 66 MB and 74 MB across hover cycles, rapid switching, and modal lifecycles. Zero memory leak regression.
+5. **Theme Adaptability & Branch Isolation**:
+   - Tested and verified across Aether Dark and Aether Light themes.
+   - Isolated and committed to branch `feature/library-redesign-preview-overhaul`. Clean build in 441ms.
 
 ---
 

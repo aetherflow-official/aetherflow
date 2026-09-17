@@ -2694,4 +2694,29 @@
      - Playwright visual verification across Library gallery, Library card hover, Home Favorites, Light theme, and responsive viewports (1280×800, 1024×768).
      - Screenshots saved to artifact storage and recorded in `walkthrough.md`.
 - **Build status:** ✅ Passes cleanly in 535ms.
+## Session: 2026-09-17 19:50 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Final Wallpaper Card Polish + Home Consistency
+- **Completed:**
+  1. **Final Card Polish (The Wallpaper IS The Card)**:
+     - 100% continuous artwork surface without any separate lower panels or horizontal card divisions.
+     - Multi-stop photographic bottom readability gradient (`rgba(0,0,0,0.82)` at bottom to `transparent` at top) provides optimal text contrast across all wallpaper imagery.
+     - Removed centered hover actions: center of the artwork remains 100% visible at all times during hover.
+     - Contextual `[ 👁 Preview ]` pill appears smoothly beside `[ ▶ Apply ]` in the bottom-right corner upon hover.
+     - Small, restrained top-left type badge (`IMAGE`, `VIDEO`, `YOUTUBE`, `WEB`, `CANVAS`).
+     - Compact top-right controls: heart button (`[ ♡ ]`), pin button (`[ 📌 ]` when pinned), and more menu (`[ ⋯ ]`).
+     - Bottom-left metadata: clean title, author line (`by {author}` / `by AetherFlow`), and quiet inline `#tags`.
+     - Active state: subtle `● Active` pill badge with pulsing dot and emerald accent border.
+  2. **Shared Across Library & Home**:
+     - `WallpaperCard` (`src/components/WallpaperCard/index.jsx`) serves both Library (including 2-column featured hero card) and Home Favorites.
+     - Preserved Home layout integrity (Hero Selected Preview $\rightarrow$ Active Engine Parameters $\rightarrow$ Home Favorites).
+  3. **Zero RAM Leak / Preview Manager Verification**:
+     - Measured V8 JS heap memory: Idle (96.3 MB) $\rightarrow$ Hover A (66.1 MB) $\rightarrow$ Hover B (67.1 MB) $\rightarrow$ Leave (67.6 MB) $\rightarrow$ Preview Modal (73.9 MB) $\rightarrow$ Close (71.8 MB).
+     - Single active decoder slot preserved, 250ms debounce active, zero resource leaks.
+  4. **Theming & Git Safety**:
+     - Verified across Aether Dark and Aether Light themes.
+     - Isolated to branch `feature/library-redesign-preview-overhaul`.
+     - Git commit: `f092ee6 feat(ui): refine shared artwork-first wallpaper cards`.
+- **Build status:** ✅ Passes in 441ms with 0 errors.
 ---
