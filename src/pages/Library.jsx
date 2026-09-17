@@ -9,7 +9,7 @@ import {
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
 import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
-import WallpaperThumbnail, { resolveWallpaperThumbnail } from '../components/WallpaperThumbnail/index.jsx'
+import WallpaperThumbnail, { resolveWallpaperThumbnail, extractYouTubeId } from '../components/WallpaperThumbnail/index.jsx'
 import WallpaperCard from '../components/WallpaperCard/index.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
 import {
@@ -90,6 +90,9 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
   const imgSrc = imgPath
     ? (imgPath.startsWith('http') || imgPath.startsWith('data:') ? imgPath : safeConvertFileSrc(imgPath))
     : resolveWallpaperThumbnail(wallpaper) || wallpaper.preview || ''
+
+  const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
+  const ytId = wallpaper.config?.youtubeId || extractYouTubeId(streamUrl)
 
   return createPortal(
     <div
@@ -195,7 +198,16 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
             />
           ) : isCanvas ? (
             <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-              <WallpaperPlayer engineId={wallpaper.engine || wallpaper.id} options={wallpaper.config || {}} />
+              <WallpaperPlayer engineId={wallpaper.engine || wallpaper.id} config={wallpaper.config || {}} preview />
+            </div>
+          ) : ytId ? (
+            <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${ytId}&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1`}
+                style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+                allow="autoplay; encrypted-media"
+                title={wallpaper.name}
+              />
             </div>
           ) : (
             <img

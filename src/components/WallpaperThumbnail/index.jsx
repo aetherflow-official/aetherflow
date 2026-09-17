@@ -381,10 +381,15 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const staticThumbUrl = resolveWallpaperThumbnail(wallpaper)
 
   // Compute media preview based on thumbnailMode:
-  // - Static image/poster thumbnail is ALWAYS rendered as baseline if available (zero decoders, works even when mode === 'off')
-  // - Live video preview ONLY mounts if preview mode is NOT off AND previewManager granted this card the single active preview slot
+  // - 'off': Never show preview media (pure zero-RAM vector badges)
+  // - 'hover': Only show preview media while hovered (low RAM)
+  // - 'always': Always show preview media (continuous artwork surface)
+  const shouldShowMedia =
+    currentMode === 'always' ||
+    (currentMode === 'hover' && isHovered)
+
   let staticMedia = null
-  if (staticThumbUrl && !imgLoadError) {
+  if (shouldShowMedia && currentMode !== 'off' && staticThumbUrl && !imgLoadError) {
     staticMedia = (
       <img
         src={staticThumbUrl}
@@ -491,38 +496,40 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
       {/* Dynamic Preview Media Layer (Static image, YouTube thumb, or clean VideoPosterFrame) */}
       {previewMedia}
 
-      {/* Persistent Pill Badge Overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 8,
-          left: 8,
-          background: 'rgba(5, 7, 12, 0.85)',
-          backdropFilter: 'blur(6px)',
-          borderRadius: 4,
-          padding: '2px 7px',
-          fontSize: 9.5,
-          fontWeight: 700,
-          letterSpacing: 0.5,
-          color: accentColor,
-          border: `1px solid ${accentColor}35`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          zIndex: 3,
-        }}
-      >
-        <span
+      {/* Persistent Pill Badge Overlay (Only rendered in vector badge mode) */}
+      {!previewMedia && (
+        <div
           style={{
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background: accentColor,
-            boxShadow: `0 0 6px ${accentColor}`,
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            background: 'rgba(5, 7, 12, 0.85)',
+            backdropFilter: 'blur(6px)',
+            borderRadius: 4,
+            padding: '2px 7px',
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            color: accentColor,
+            border: `1px solid ${accentColor}35`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            zIndex: 3,
           }}
-        />
-        {badgeText}
-      </div>
+        >
+          <span
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              background: accentColor,
+              boxShadow: `0 0 6px ${accentColor}`,
+            }}
+          />
+          {badgeText}
+        </div>
+      )}
     </div>
   )
 }
