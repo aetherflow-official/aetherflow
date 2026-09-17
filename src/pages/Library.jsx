@@ -22,6 +22,7 @@ import {
   safeConvertFileSrc,
 } from '../lib/wallpaperActions.js'
 import { previewManager } from '../lib/previewManager.js'
+import { posterGenerator } from '../lib/posterGenerator.js'
 
 export function getWallpaperTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas', icon: Code }
@@ -348,6 +349,29 @@ export default function LibraryPage() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
+
+  // Sequential, low-priority background poster generation for custom videos
+  useEffect(() => {
+    posterGenerator.resume()
+
+    const missingPosters = (installed || []).filter(w => {
+      const isVideo = w.isCustom || w.engine === 'video-player' || w.mediaType === 'video' || Boolean(w.config?.videoPath)
+      const hasPoster = Boolean(w.thumbnail || w.preview || w.cover)
+      return isVideo && !hasPoster
+    })
+
+    if (missingPosters.length > 0) {
+      // Prioritize the first visible batch of cards (first 8), queue the rest behind
+      const visibleBatch = missingPosters.slice(0, 8)
+      const remainingBatch = missingPosters.slice(8)
+      if (visibleBatch.length > 0) posterGenerator.enqueue(visibleBatch, true)
+      if (remainingBatch.length > 0) posterGenerator.enqueue(remainingBatch, false)
+    }
+
+    return () => {
+      posterGenerator.pause()
+    }
+  }, [installed])
 
   // Fetch monitors
   useEffect(() => {

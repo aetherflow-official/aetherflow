@@ -443,6 +443,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
           objectFit: 'cover',
           display: 'block',
           zIndex: 1,
+          animation: 'fadeIn 0.22s ease forwards',
         }}
       />
     )

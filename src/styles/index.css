@@ -1966,6 +1966,15 @@ input:checked ~ .toggle-thumb {
   pointer-events: none;
 }
 
+.wp-overlay-scrim.is-fallback {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.52) 0%,
+    rgba(0, 0, 0, 0.18) 38%,
+    transparent 70%
+  );
+}
+
 .wp-overlay-content {
   display: flex;
   align-items: flex-end;
