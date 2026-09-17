@@ -3,21 +3,18 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 03:05 IST — Implemented Wallpaper Engine Style Native Video Thumbnail Extraction Pipeline:
-1. **Native Windows Shell Extractor (`src-tauri/src/thumbnail_extractor.rs`)**:
-   - Built a lightweight Rust subsystem utilizing Windows Shell `IShellItemImageFactory` (`SHCreateItemFromParsingName`) + native GDI+ (`GdipCreateBitmapFromHBITMAP` / `GdipSaveImageToFile`).
-   - Extracts crisp, hardware-accelerated 640x360 JPEG posters in ~50ms per video directly on disk (`%APPDATA%\com.aetherflow.app\thumbnails\<id>.jpg`).
-   - Completely bypasses Chromium/WebView2/DOM video decoders — zero memory bloat, zero GPU spikes, zero risk of compositor freeze.
-2. **Background Threaded Synchronization (`src-tauri/src/main.rs`)**:
-   - Added `get_or_create_video_thumbnail` and `sync_all_custom_video_thumbnails` Tauri commands.
-   - On app startup and Library mount, missing thumbnails for custom videos are extracted asynchronously on a dedicated OS thread (`std::thread::spawn`), updating `custom_wallpapers.json` and emitting `custom_thumbnails_updated` to the frontend.
-3. **Frontend Integration & Memory Performance**:
-   - Cards display standard `<img>` tags loaded via Tauri's asset protocol (`safeConvertFileSrc`).
-   - All 27 user custom videos successfully extracted crisp thumbnails.
-   - DOM at rest: `document.querySelectorAll("video").length === 0` (0 video elements, 0 decoders).
-   - Hover: single slot `previewManager` temporarily mounts 1 live video player, releasing immediately on unhover.
+2026-09-18 03:12 IST — Cleaned Header UI & Removed [On | Hover | Off] Pill Controls:
+1. **Removed Pill Controls**:
+   - Removed the `PREVIEWS: On | Hover | Off` segmented control buttons from both `Home.jsx` and `Library.jsx` headers.
+   - Preserves the clean, professional look of the top bar without unnecessary cognitive overhead.
+2. **Maintained Native Wallpaper Engine Architecture**:
+   - Cards display crisp static `<img>` posters at rest (0 decoders, 0 GPU load).
+   - Single-slot hover preview remains active (`thumbnailMode="hover"`) using `previewManager` (1 live video player on hover, 0 at rest).
    - Host `AetherFlow.exe` uses 2.61 MB RAM; total application memory stays flat under 180 MB.
-   - Frontend (`npm run build`: 395ms) and backend release executable built and deployed cleanly.
+3. **Build & Quality Assurance**:
+   - Verified clean header layout and 0 video decoders at rest via Playwright.
+   - `npm run build`: built in 447ms with 0 errors.
+   - Committed to `feature/library-redesign-preview-overhaul` (`4dd0f78`).
 
 ---
 

@@ -2901,4 +2901,20 @@
 - **Build status:** ✅ Standalone release executable and frontend bundle built cleanly with 0 errors.
 ---
 
+## Session: 2026-09-18 03:12 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Remove [On | Hover | Off] Preview Pills from Home and Library Headers
+- **Completed:**
+  1. Removed the redundant `PREVIEWS: On | Hover | Off` segmented button controls from:
+     - `src/pages/Home.jsx`
+     - `src/pages/Library.jsx`
+  2. Preserved the rock-solid single-slot live hover preview behavior (`thumbnailMode="hover"`) by default.
+  3. Verified via Playwright: `hasPillBar: false` across both Home and Library headers; cards continue rendering crisp static artwork at rest and mount exactly 1 video on hover.
+  4. Verified `npm run build`: built cleanly in 447ms with 0 errors.
+  5. Committed to `feature/library-redesign-preview-overhaul` (`4dd0f78`).
+- **Build status:** ✅ Passes in 447ms.
+---
+
+
 
