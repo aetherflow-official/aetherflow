@@ -3,24 +3,27 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 02:20 IST — Sequential Background Poster Generation for Custom Videos:
-1. **Implemented Sequential Background Poster Queue (`src/lib/posterGenerator.js`)**:
-   - Single-worker background queue enforcing `MAX_ACTIVE_DECODERS = 1` concurrency.
-   - Extracts representative frames (0.5s–1.0s) from local videos using offscreen HTML5 `<video>`, scales aspect-preserving to max 640x360, and generates lightweight JPEG data URLs (`quality: 0.82`).
-   - Strict resource lifecycle: immediately pauses, strips `src`, loads, removes event handlers, and inserts an 80ms cooling gap between jobs to let GPU process garbage collect decoder allocations.
-   - Updates `useStore.updateInstalledWallpaper`, persisting to `localStorage` and disk (`persistCustomWallpapersToDisk`), ensuring permanent, one-time generation.
-   - Integrated into `Library.jsx` with viewport-first prioritization (first 8 visible cards queued high-priority, remainder behind), pausing gracefully on unmount.
-2. **Refined Fallback Scrim (`src/styles/index.css`, `src/components/WallpaperCard/index.jsx`)**:
-   - Added `.wp-overlay-scrim.is-fallback` (52% bottom-fade) when `!hasPoster`, eliminating the black smothering effect on fallback cards.
-   - Once poster is generated, card automatically transitions to full photographic scrim with smooth 0.22s cross-fade.
-3. **Runtime QA & Zero-Leak Verification**:
-   - All 27 custom videos in Library now have permanent static poster images (`cardsWithImg: 27/27`).
-   - At rest: `totalVideosInDOM: 0` (0 video elements, 0 decoders).
-   - During hover: strictly 1 video element active, unmounting back to 0 on mouse leave.
-   - Home favorites automatically inherit static poster images (`cardsWithImg: 27/27`).
-   - Preview OFF mode: posters remain visible, hover spawns 0 video elements.
-   - `npm run build`: Passes in 485ms with 0 errors.
-   - Committed to `feature/library-redesign-preview-overhaul` (`6917da9`).
+2026-09-18 02:40 IST — Restored Authentic AetherFlow Architecture & Removed Experimental Poster Machinery:
+1. **Removed Experimental Poster Generation System**:
+   - Deleted `src/lib/posterGenerator.js` (entire 300-line background queue and sequential video decoding worker).
+   - Removed `posterGenerator` import and startup extraction `useEffect` from `src/pages/Library.jsx`. Library startup never decodes custom videos.
+   - Cleaned `src/components/WallpaperThumbnail/index.jsx`: removed canvas frame capture, `captureFrame()`, `canvas.toDataURL()`, `onPosterReady()`, `videoPosterMemoryCache`, and hover-triggered thumbnail persistence.
+   - Preserved `src/lib/previewManager.js` completely intact (single-slot hover preview, 250ms debounce, strict decoder teardown).
+2. **Cleaned Up Experimental Data URL Thumbnails**:
+   - Cleaned experimental `data:image/jpeg` thumbnails from `custom_wallpapers.json` on disk.
+   - Added guards in `src/store/useStore.js` (`syncCustomWallpapersFromDisk` and `localStorage` migration) to strip any captured data URLs from custom local videos while preserving genuine user-supplied artwork.
+3. **Restored Authentic Lightweight Vector Fallback**:
+   - Custom videos without supplied thumbnails render an intentional, visible Aether vector fallback card at rest (circular blue Video badge, `"Video Wallpaper"` subtitle, glowing radial backdrop).
+   - Refined `.wp-overlay-scrim.is-fallback` in `src/styles/index.css` (45% bottom-fade only), ensuring the vector fallback is never smothered by dark scrims.
+4. **Verified Runtime Behavior & Memory**:
+   - DOM at idle: `document.querySelectorAll("video").length === 0` (0 video elements, 0 decoders).
+   - During hover: exactly 1 video element active across the entire application.
+   - On mouse leave: exactly 0 video elements active.
+   - 10x hover test: memory remains completely flat (~39.5 MB JS heap, largest WebView2 process 76 MB, AetherFlow 6.3 MB) with zero decoder leaks.
+   - Visual inspection: confirmed in Playwright screenshots for both Library and Home.
+   - `npm run build`: Passes in 540ms with 0 errors.
+   - `cargo check`: Passes in 3.48s with 0 errors.
+   - Committed to `feature/library-redesign-preview-overhaul` (`119483c`).
 
 ---
 

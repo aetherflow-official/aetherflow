@@ -2842,3 +2842,31 @@
 - **Build status:** ✅ Passes cleanly in 485ms with 0 errors.
 ---
 
+## Session: 2026-09-18 02:40 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Branch:** `feature/library-redesign-preview-overhaul`
+- **Task:** Remove Experimental Video Poster Generation & Restore Authentic AetherFlow Architecture
+- **Completed:**
+  1. **Removed Experimental Poster System**:
+     - Deleted `src/lib/posterGenerator.js` (entire background poster queue and sequential video decoding system).
+     - Removed `posterGenerator` import and startup processing `useEffect` from `src/pages/Library.jsx`. Library startup never decodes custom videos.
+     - Cleaned `src/components/WallpaperThumbnail/index.jsx`: removed canvas frame capture, `captureFrame()`, `canvas.toDataURL()`, `onPosterReady()`, `videoPosterMemoryCache`, and hover-triggered thumbnail persistence.
+     - Preserved `src/lib/previewManager.js` intact (single-slot hover preview, 250ms debounce, strict decoder teardown).
+  2. **Cleaned Up Experimental Data URL Thumbnails**:
+     - Stripped experimental `data:image/jpeg` thumbnails from `custom_wallpapers.json` on disk.
+     - Added guards in `src/store/useStore.js` (`syncCustomWallpapersFromDisk` and `localStorage` migration) to strip any captured data URLs from custom local videos while preserving genuine user-supplied artwork.
+  3. **Restored Authentic Lightweight Vector Fallback**:
+     - Custom videos without supplied thumbnails render an intentional, visible Aether vector fallback card at rest (circular blue Video badge, `"Video Wallpaper"` subtitle, glowing radial backdrop).
+     - Refined `.wp-overlay-scrim.is-fallback` in `src/styles/index.css` (45% bottom-fade only), ensuring the vector fallback is never smothered by dark scrims.
+  4. **Verified Runtime Behavior & Memory**:
+     - DOM at idle: `document.querySelectorAll("video").length === 0` (0 video elements, 0 decoders).
+     - During hover: exactly 1 video element active across the entire application.
+     - On mouse leave: exactly 0 video elements active.
+     - 10x hover test: memory remains completely flat (~39.5 MB JS heap, largest WebView2 process 76 MB, AetherFlow 6.3 MB) with zero decoder leaks.
+     - Visual inspection: confirmed in Playwright screenshots for both Library and Home.
+     - `npm run build`: Passes in 540ms with 0 errors.
+     - `cargo check`: Passes in 3.48s with 0 errors.
+     - Committed to `feature/library-redesign-preview-overhaul` (`119483c`).
+- **Build status:** ✅ Frontend and cargo check pass cleanly with 0 errors.
+---
+
