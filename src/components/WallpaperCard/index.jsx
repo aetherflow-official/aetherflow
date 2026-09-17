@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
 import {
   Heart, MoreHorizontal, Play, Check, Eye, Pin, Pencil, Trash2,
-  Video, Image as ImageIcon, Globe, Sparkles, Code
+  Video, Image as ImageIcon, Globe, Sparkles
 } from 'lucide-react'
 import WallpaperThumbnail from '../WallpaperThumbnail/index.jsx'
 
 export function getCardTypeInfo(wallpaper) {
-  if (!wallpaper) return { label: 'Canvas 2D', color: 'var(--color-purple)', icon: Sparkles, type: 'canvas' }
+  if (!wallpaper) return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
   const engineId = wallpaper.engine || wallpaper.id
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
   const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
@@ -16,27 +16,30 @@ export function getCardTypeInfo(wallpaper) {
     const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
     const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)
     return {
-      label: isYt ? 'YouTube' : 'Web Stream',
+      label: isYt ? 'YouTube' : 'Web',
       color: isYt ? 'var(--color-rose)' : 'var(--color-cyan)',
       icon: Globe,
       type: isYt ? 'youtube' : 'stream',
     }
   }
   if (isImage) {
-    return { label: 'Picture', color: 'var(--color-emerald)', icon: ImageIcon, type: 'image' }
+    return { label: 'Image', color: 'var(--color-emerald)', icon: ImageIcon, type: 'image' }
   }
   if (isVideo) {
     return { label: 'Video', color: 'var(--color-brand)', icon: Video, type: 'video' }
   }
-  return { label: 'Canvas 2D', color: 'var(--color-purple)', icon: Sparkles, type: 'canvas' }
+  return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
 }
 
 /**
  * WallpaperCard — Unified Continuous-Artwork Wallpaper Card
  * 
  * CORE PRINCIPLE: The wallpaper image IS the entire card surface.
- * Metadata, tags, and action buttons float seamlessly on top of the artwork
+ * Metadata, tags, and action buttons float naturally on top of the artwork
  * over a subtle bottom readability gradient. No separate lower panel.
+ * 
+ * HOVER PRINCIPLE: Subtle. Never cover the artwork with a giant dark box
+ * or two huge centered buttons. The artwork remains the hero at all times.
  */
 export default function WallpaperCard({
   wallpaper,
@@ -62,6 +65,13 @@ export default function WallpaperCard({
 
   const typeInfo = getCardTypeInfo(wallpaper)
   const TypeIcon = typeInfo.icon
+  const creatorText = wallpaper.author
+    ? `by ${wallpaper.author}`
+    : wallpaper.communityMeta?.author
+    ? `by ${wallpaper.communityMeta.author}`
+    : wallpaper.isCustom
+    ? `Custom ${typeInfo.label}`
+    : `by AetherFlow`
 
   return (
     <div
@@ -72,8 +82,8 @@ export default function WallpaperCard({
         setIsMenuOpen(false)
       }}
       onClick={() => {
-        if (onSelect) onSelect(wallpaper)
-        else if (onPreview) onPreview(wallpaper)
+        if (onPreview) onPreview(wallpaper)
+        else if (onSelect) onSelect(wallpaper)
       }}
     >
       {/* ── 1. The Wallpaper Surface (Fills 100% of the card) ───────────────── */}
@@ -85,16 +95,27 @@ export default function WallpaperCard({
         />
       </div>
 
-      {/* ── 2. Top-Left: Media Type Badge ───────────────────────────────────── */}
+      {/* ── 2. Top-Left: Media Type Indicator (Small, Restrained) ───────────── */}
       <div className="wp-overlay-badge-tl">
-        <div className="wp-glass-pill" style={{ color: typeInfo.color }}>
-          <TypeIcon size={10.5} />
+        <div className="wp-type-indicator">
+          <TypeIcon size={10} style={{ color: typeInfo.color }} />
           <span>{typeInfo.label.toUpperCase()}</span>
         </div>
       </div>
 
-      {/* ── 3. Top-Right: Heart & Context Menu ──────────────────────────────── */}
+      {/* ── 3. Top-Right: Heart, Pin indicator & Context Menu ───────────────── */}
       <div className="wp-overlay-badge-tr" onClick={(e) => e.stopPropagation()}>
+        {isPinned && onTogglePin && (
+          <button
+            className="wp-glass-icon-btn active"
+            title="Pinned to Home (click to unpin)"
+            onClick={() => onTogglePin(wallpaper.id)}
+            style={{ color: 'var(--color-brand)' }}
+          >
+            <Pin size={12} />
+          </button>
+        )}
+
         {onToggleLike && (
           <button
             className={`wp-glass-icon-btn ${isLiked ? 'active' : ''}`}
@@ -102,7 +123,7 @@ export default function WallpaperCard({
             onClick={() => onToggleLike(wallpaper.id)}
             style={{ color: isLiked ? 'var(--color-rose)' : 'inherit' }}
           >
-            <Heart size={12.5} fill={isLiked ? 'currentColor' : 'none'} />
+            <Heart size={12} fill={isLiked ? 'currentColor' : 'none'} />
           </button>
         )}
 
@@ -161,56 +182,16 @@ export default function WallpaperCard({
         )}
       </div>
 
-      {/* ── 4. Subtle Hover Action Cluster (Quietly appears on hover) ──────── */}
-      <div className={`wp-overlay-hover-actions ${isHovered ? 'visible' : ''}`} onClick={(e) => e.stopPropagation()}>
-        {onPreview && (
-          <button
-            className="wp-hover-btn-preview"
-            onClick={() => onPreview(wallpaper)}
-            title="Open high-definition preview"
-          >
-            <Play size={11} fill="currentColor" /> Preview
-          </button>
-        )}
-
-        {isLive ? (
-          <div className="wp-hover-btn-active">
-            <Check size={12} /> Active on Desktop
-          </div>
-        ) : (
-          <button
-            className="wp-hover-btn-apply"
-            onClick={() => onApply && onApply(wallpaper)}
-            disabled={isApplying}
-            title="Apply to Windows desktop"
-          >
-            <Play size={12} fill="currentColor" /> {isApplying ? 'Applying…' : 'Apply to Desktop'}
-          </button>
-        )}
-      </div>
-
-      {/* ── 5. Bottom Readability Scrim & Metadata Overlay ──────────────────── */}
+      {/* ── 4. Bottom Readability Scrim & Metadata Overlay ──────────────────── */}
       <div className="wp-overlay-scrim">
         <div className="wp-overlay-content">
           <div className="wp-overlay-info">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <h3 className="wp-overlay-title" title={wallpaper.name}>
-                {wallpaper.name}
-              </h3>
-              {isLive && (
-                <span className="wp-live-indicator">
-                  <span className="status-dot-live" style={{ width: 5, height: 5 }} />
-                  ACTIVE
-                </span>
-              )}
-            </div>
+            <h3 className="wp-overlay-title" title={wallpaper.name}>
+              {wallpaper.name}
+            </h3>
 
             <div className="wp-overlay-creator">
-              {wallpaper.communityMeta?.author
-                ? `by ${wallpaper.communityMeta.author}`
-                : wallpaper.isCustom
-                ? `Custom ${typeInfo.label}`
-                : `Built-in Engine`}
+              {creatorText}
             </div>
 
             {wallpaper.tags && wallpaper.tags.length > 0 && (
@@ -224,20 +205,30 @@ export default function WallpaperCard({
             )}
           </div>
 
-          {/* Floating Apply Action (Visible on normal resting state) */}
-          <div className="wp-overlay-resting-action" onClick={(e) => e.stopPropagation()}>
+          {/* Action Cluster in Bottom-Right: Preview on hover + Floating Apply */}
+          <div className="wp-overlay-actions-row" onClick={(e) => e.stopPropagation()}>
+            {onPreview && (
+              <button
+                className="wp-pill-preview"
+                onClick={() => onPreview(wallpaper)}
+                title="Quick preview"
+              >
+                <Eye size={11} /> Preview
+              </button>
+            )}
+
             {isLive ? (
-              <div className="wp-pill-active-resting" title="Currently running on desktop">
-                <Check size={11} /> Active
+              <div className="wp-live-badge" title="Currently running on desktop">
+                <span className="wp-live-dot" /> Active
               </div>
             ) : (
               <button
-                className="wp-pill-apply-resting"
+                className="wp-pill-apply"
                 onClick={() => onApply && onApply(wallpaper)}
                 disabled={isApplying}
                 title="Apply to desktop"
               >
-                <Play size={10.5} fill="currentColor" /> {isApplying ? '…' : 'Apply'}
+                <Play size={10} fill="currentColor" /> {isApplying ? '…' : 'Apply'}
               </button>
             )}
           </div>
