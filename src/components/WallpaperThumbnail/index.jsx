@@ -7,14 +7,11 @@ import {
 import { safeConvertFileSrc, tauriInvoke } from '../../lib/wallpaperActions.js'
 import { useStore } from '../../store/useStore.js'
 import { parseYouTubeId } from '../../engines/web-stream.js'
+import { previewManager } from '../../lib/previewManager.js'
 
 /**
  * WallpaperThumbnail — Supports Always On, On Hover, and Off modes.
- *
- * Modes:
- * - 'always' (On): Full visual previews always display (static poster / web thumbnail / image / SVG).
- * - 'hover' (On Hover): Zero-RAM vector badge when idle; streams media on mouse hover.
- * - 'off' (Off): Always renders zero-RAM vector badges with category icons and glow gradients (zero decoders, zero media fetch).
+ * Enforces single active preview slot via previewManager to eliminate RAM spikes.
  */
 
 export const ENGINE_THEMES = {
@@ -156,28 +153,29 @@ export function resolveWallpaperThumbnail(wallpaper) {
 }
 
 /**
- * VideoPosterFrame — Clean, zero-leak video frame renderer for local videos without static previews.
+ * VideoPosterFrame — Single-slot video preview renderer managed by previewManager.
+ * Enforces strict hardware decoder cleanup on unmount or pause.
  */
-function VideoPosterFrame({ videoSrc, isHovered, currentMode }) {
+function VideoPosterFrame({ videoSrc, isHovered }) {
   const [hasLoaded, setHasLoaded] = useState(false)
   const videoRef = useRef(null)
 
-  // Hardware decoder teardown callback
-  const cleanupVideo = useCallback(() => {
+  useEffect(() => {
     const v = videoRef.current
     if (v) {
-      try {
-        v.pause()
-        v.removeAttribute('src')
-        v.load()
-      } catch (e) {}
-      videoRef.current = null
+      previewManager.registerVideoElement(v)
+    }
+    return () => {
+      if (v) {
+        try {
+          v.pause()
+          v.removeAttribute('src')
+          v.load()
+        } catch (e) {}
+        previewManager.unregisterVideoElement(v)
+      }
     }
   }, [])
-
-  useEffect(() => {
-    return () => cleanupVideo()
-  }, [cleanupVideo])
 
   useEffect(() => {
     const v = videoRef.current
@@ -186,9 +184,6 @@ function VideoPosterFrame({ videoSrc, isHovered, currentMode }) {
       v.play().catch(() => {})
     } else {
       v.pause()
-      try {
-        if (v.currentTime !== 0.5) v.currentTime = 0.5
-      } catch (e) {}
     }
   }, [isHovered])
 
@@ -198,21 +193,25 @@ function VideoPosterFrame({ videoSrc, isHovered, currentMode }) {
         videoRef.current = el
       }}
       src={videoSrc}
-      preload="metadata"
+      preload="auto"
       muted
       loop
       playsInline
       onLoadedData={() => setHasLoaded(true)}
-      onLoadedMetadata={(e) => {
+      onCanPlay={() => {
         setHasLoaded(true)
-        try {
-          if (e.target.currentTime === 0) e.target.currentTime = 0.5
-        } catch (err) {}
+        if (isHovered && videoRef.current) {
+          videoRef.current.play().catch(() => {})
+        }
       }}
-      onSeeked={() => setHasLoaded(true)}
-      onCanPlay={() => setHasLoaded(true)}
       onError={() => {
-        cleanupVideo()
+        if (videoRef.current) {
+          try {
+            videoRef.current.pause()
+            videoRef.current.removeAttribute('src')
+            videoRef.current.load()
+          } catch (e) {}
+        }
       }}
       style={{
         position: 'absolute',
@@ -221,7 +220,7 @@ function VideoPosterFrame({ videoSrc, isHovered, currentMode }) {
         height: '100%',
         objectFit: 'cover',
         display: 'block',
-        zIndex: 1,
+        zIndex: 2,
         opacity: hasLoaded ? 1 : 0,
         transition: 'opacity 0.25s ease',
       }}
@@ -251,13 +250,19 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
 
-  // Debounce hover activation by 80ms to avoid firing decoders on quick cursor sweeps
-  const [debouncedHover, setDebouncedHover] = useState(false)
+  const [activePreview, setActivePreview] = useState(previewManager.getState())
   const [imgLoadError, setImgLoadError] = useState(false)
   const [isInView, setIsInView] = useState(false)
   const containerRef = useRef(null)
 
-  // Viewport lazy loader for 'always' mode: loads media only when in viewport, and unloads off-screen cards
+  // Subscribe to previewManager singleton
+  useEffect(() => {
+    return previewManager.subscribe(setActivePreview)
+  }, [])
+
+  const isThisPreviewActive = activePreview.activeId === wallpaper.id
+
+  // Viewport lazy loader for 'always' mode
   useEffect(() => {
     if (currentMode !== 'always') {
       setIsInView(false)
@@ -278,7 +283,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
       },
       {
         root: null,
-        rootMargin: '140px 0px', // Pre-load slightly before scrolling into view, unload when outside
+        rootMargin: '140px 0px',
         threshold: 0.01,
       }
     )
@@ -289,21 +294,28 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
     }
   }, [currentMode])
 
+  // Single-player hover management: request preview on hover, cancel on leave
   useEffect(() => {
-    if (!isHovered) {
-      setDebouncedHover(false)
-      // When unhovering in hover mode, schedule a light memory trim after 600ms
-      if (currentMode === 'hover') {
-        const timer = setTimeout(() => {
-          tauriInvoke('trim_memory').catch(() => {})
-        }, 600)
-        return () => clearTimeout(timer)
+    if (currentMode !== 'hover') return
+
+    if (isHovered && isVideo) {
+      const videoPath = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath || ''
+      const videoSrc = videoPath
+        ? (videoPath.startsWith('http') || videoPath.startsWith('data:') ? videoPath : safeConvertFileSrc(videoPath))
+        : ''
+      if (videoSrc) {
+        previewManager.requestPreview(wallpaper.id, videoSrc, 'video')
       }
-      return
+    } else {
+      if (activePreview.activeId === wallpaper.id || previewManager.pendingId === wallpaper.id) {
+        previewManager.cancelPreview(wallpaper.id)
+      }
     }
-    const timer = setTimeout(() => setDebouncedHover(true), 80)
-    return () => clearTimeout(timer)
-  }, [isHovered, currentMode])
+
+    return () => {
+      previewManager.cancelPreview(wallpaper.id)
+    }
+  }, [isHovered, isVideo, currentMode, wallpaper.id, wallpaper.config, activePreview.activeId])
 
   // Resolve Theme & Badges
   let theme = null
@@ -333,15 +345,12 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const staticThumbUrl = resolveWallpaperThumbnail(wallpaper)
 
   // Compute media preview based on thumbnailMode:
-  // - 'off': Never show preview media (pure zero-RAM vector badges)
-  // - 'hover': Only show preview media while hovered (debounced)
-  // - 'always': Show preview media ONLY for cards currently in viewport (lazy-loaded and unloaded when out of view)
+  // - Static image thumbnail is ALWAYS rendered as baseline (zero decoders)
+  // - Video preview ONLY mounts if previewManager granted this card the single active preview slot
   let previewMedia = null
-  const shouldShow = (currentMode === 'always' && isInView) || (currentMode === 'hover' && debouncedHover)
 
-  if (shouldShow && currentMode !== 'off' && !imgLoadError) {
+  if (currentMode !== 'off' && !imgLoadError) {
     if (staticThumbUrl) {
-      // 1. Static Image or SVG Thumbnail (Zero-RAM decoder footprint)
       previewMedia = (
         <img
           src={staticThumbUrl}
@@ -359,22 +368,19 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
           }}
         />
       )
-    } else if (isVideo) {
-      // 2. Local Video without static preview (uses VideoPosterFrame with automatic decoder cleanup)
-      const videoPath = wallpaper.config?.videoPath || wallpaper.defaultConfig?.videoPath || ''
-      const videoSrc = videoPath
-        ? (videoPath.startsWith('http') || videoPath.startsWith('data:') ? videoPath : safeConvertFileSrc(videoPath))
-        : ''
+    }
 
-      if (videoSrc) {
-        previewMedia = (
+    // Overlay single active video preview when granted
+    if (isVideo && isThisPreviewActive && activePreview.activeSrc) {
+      previewMedia = (
+        <>
+          {previewMedia}
           <VideoPosterFrame
-            videoSrc={videoSrc}
+            videoSrc={activePreview.activeSrc}
             isHovered={isHovered}
-            currentMode={currentMode}
           />
-        )
-      }
+        </>
+      )
     }
   }
 
