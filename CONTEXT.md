@@ -3,20 +3,15 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 17:50 IST — Resolved Playlist Monitor Scope Persistence, Race Condition & Immediate Wallpaper Rotation:
-1. **Monitor Scope Persistence**:
-   - `targetMonitor` permanently stored on each playlist object (`pl.targetMonitor`, default `'*'`). Pausing or editing a playlist on Screen 1 NEVER resets it back to All Displays.
-2. **Mutual Exclusion (Zero Race Conditions)**:
-   - Implemented `activatePlaylist` and `deactivatePlaylist` store actions:
-     - Activating a playlist on `'*'` (All Displays) pauses all other playlists to eliminate concurrent timer collisions.
-     - Activating a playlist on a specific display (e.g. `Screen 1`) pauses any playlist on `'*'` or `Screen 1`, while allowing independent playlists on `Screen 2` / `Screen 3` to continue rotating concurrently.
-   - Display target badge (`ALL DISPLAYS`, `DISPLAY 1 (PRIMARY)`) added to playlist sidebar cards for clear multi-monitor visibility.
-3. **Immediate Visual Desktop Feedback**:
-   - Starting a playlist or changing display scope now immediately rotates and applies the wallpaper to the desktop (`rotateNext(scope, playlist.id, true)`), eliminating the 15-minute start delay.
-   - Rust `sync_playlist_timers` clears `PLAYLIST_LAST_TICK` so timer starts fresh from activation.
-4. **Build & Release**:
-   - `npm run build`: built in 781ms with 0 errors.
-   - `cargo build --release`: passed in 2m 36s; updated `AetherFlow.exe` (7.65MB, PID 16812).
+2026-09-18 18:05 IST — Eliminated Main Window Restore & Focus Stealing on Wallpaper Change:
+1. **Silent Background Transitions**:
+   - Diagnosed root cause of window popping up over fullscreen videos, games, and active applications during playlist auto-rotation and wallpaper change: `apply_wallpaper` in `src-tauri/src/main.rs` contained diagnostic code calling `ShowWindow(main_h, SW_RESTORE)`, `SetForegroundWindow(main_h)`, `main_win.unminimize()`, `main_win.show()`, and `main_win.set_focus()`.
+   - Removed all restoration, unminimize, and foreground focus calls.
+   - All wallpaper transitions (manual apply, playlist timer tick, and monitor scope changes) now execute 100% silently in the background beneath desktop icons (`WorkerW`).
+2. **Build & Release**:
+   - `npm run build`: completed in 736ms with 0 errors.
+   - `cargo build --release`: compiled in 2m 24s.
+   - Replaced root `AetherFlow.exe` with the fresh release build and relaunched (PID 20992).
 
 ---
 
@@ -233,6 +228,7 @@ npm run tauri:dev
 | 2026-09-18 | Antigravity (Google DeepMind) | Implemented Playlist Auto-Rotation, Mass Batch Ingestion, Hybrid Storage Engine & Watch Folder: Added Hybrid storage (<50MB copy, >=50MB reference), BatchImportModal, scan_directory_media, Rust watch folder background scanner, PLAYLIST_TIMERS background rotation engine, Playlists Studio (/playlists), and Settings Storage & Watch Folder card. Verified npm run build (497ms) and cargo check (20.13s). |
 | 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Built-in Canvas Engine Playlist Integration & Release Deployment: Added resolution of built-in canvas engines in playlistManager.js and Playlists.jsx candidates; verified npm run build (540ms); compiled production standalone binary via cargo build --release (2m 39s); deployed updated 7.65MB AetherFlow.exe to root; launched running process (PID 16500) with native multi-monitor WorkerW desktop pinning. |
 | 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Resolved Playlist Monitor Scope Persistence & Race Condition: Bound targetMonitor directly to each playlist object; enforced mutual exclusion in activatePlaylist/deactivatePlaylist to prevent multiple playlists colliding on All Displays or the same screen; added immediate desktop wallpaper rotation on start/scope change; deployed updated AetherFlow.exe (7.65MB, PID 16812). |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Eliminated Window Popup / Focus Stealing on Wallpaper Change: Removed SW_RESTORE, SetForegroundWindow, and main_win.unminimize()/show()/set_focus() from apply_wallpaper in main.rs; verified silent background wallpaper rotation during fullscreen video & gaming; built release binary and deployed fresh AetherFlow.exe (PID 20992). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

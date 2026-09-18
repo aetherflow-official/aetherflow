@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-18 17:50 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Playlist Monitor Scope Persistence, Mutual Exclusion & Immediate Wallpaper Rotation resolved and deployed in release binary (7.65 MB, PID 16812).
+> **Updated:** 2026-09-18 18:05 IST | **Current Version:** `1.0.7` | **Active Branch:** `feature/library-redesign-preview-overhaul` | **Status:** ✅ COMPLETE — Eliminated Main Window Restore & Focus Stealing on Wallpaper Change; verified silent background wallpaper rotation during fullscreen video & gaming; release binary deployed (PID 20992).
 
 ---
 

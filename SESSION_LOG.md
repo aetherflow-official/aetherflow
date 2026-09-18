@@ -2976,6 +2976,29 @@
 - **Build status:** ✅ Complete — 0 errors in frontend and release binary.
 ---
 
+## Session: 2026-09-18 18:05 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:** Eliminate Main Window Popup and Foreground Focus Stealing on Wallpaper Change
+- **Completed:**
+  1. **Diagnosed Root Cause**:
+     - Investigated `src-tauri/src/main.rs` inside `apply_wallpaper`.
+     - Found legacy diagnostic code unconditionally executing:
+       - `ShowWindow(main_h, SW_RESTORE)`
+       - `SetForegroundWindow(main_h)`
+       - `main_win.unminimize()`, `main_win.show()`, `main_win.set_focus()`
+     - This caused the main control panel window to restore from minimized state and steal focus every single time a wallpaper changed manually or via playlist auto-rotation timer, interrupting fullscreen video players and active apps.
+  2. **Code Edit**:
+     - Removed `ShowWindow`, `SetForegroundWindow`, and `main_win.unminimize()`, `main_win.show()`, and `main_win.set_focus()` from `apply_wallpaper`.
+     - Preserved safety check ensuring main window HWND parent is not accidentally reparented away from desktop root.
+  3. **Build & Release Deployment**:
+     - Verified `npm run build` passes in 736ms with 0 errors.
+     - Compiled production binary with `cargo build --release` in 2m 24s.
+     - Terminated old running instance, updated `AetherFlow.exe` in workspace root, and launched updated binary (PID 20992).
+     - Wallpaper transitions now execute 100% silently in the background beneath desktop icons without disturbing foreground apps.
+- **Build status:** ✅ Complete — 0 errors in frontend and release binary.
+---
+
+
 
 
 

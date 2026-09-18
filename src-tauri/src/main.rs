@@ -3130,24 +3130,13 @@ async fn apply_wallpaper(
     if let Some(main_h) = get_main_hwnd() {
         unsafe {
             let parent_after = GetParent(main_h);
-            let msg = format!("[DIAG 5] Main AetherFlow HWND: 0x{:X}, Parent AFTER apply: 0x{:X} (Expected 0x0)", main_h as usize, parent_after as usize);
-            log_msg(&msg);
-            println!("{}", msg);
             if parent_after != std::ptr::null_mut() {
                 let err = format!("[DIAG 5 CRITICAL ERROR] Main HWND was reparented to 0x{:X}! Restoring to desktop root!", parent_after as usize);
                 log_msg(&err);
                 eprintln!("{}", err);
                 SetParent(main_h, std::ptr::null_mut());
             }
-            ShowWindow(main_h, 9); // SW_RESTORE
-            SetForegroundWindow(main_h);
         }
-    }
-
-    if let Some(main_win) = app.get_webview_window("main") {
-        let _ = main_win.unminimize();
-        let _ = main_win.show();
-        let _ = main_win.set_focus();
     }
 
     MONITOR_SYNC_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
