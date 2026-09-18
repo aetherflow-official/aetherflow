@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-17 03:32 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Fixed multi-monitor boundary seam (0px gap/overlap) and eliminated startup title bar flash. Full release build & NSIS installer updated.
+> **Updated:** 2026-09-18 17:50 IST | **Current Version:** `1.0.7` | **Active Branch:** `ui/ux` | **Status:** ✅ COMPLETE — Playlist Monitor Scope Persistence, Mutual Exclusion & Immediate Wallpaper Rotation resolved and deployed in release binary (7.65 MB, PID 16812).
 
 ---
 
@@ -13,7 +13,7 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
 - **Active Git Branch:** `ui/ux` (synced with `origin/ui/ux`)
 - **Release Page:** [github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7](https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.7)
 - **Older Releases:** All releases (v1.0.0 through v1.0.7) are preserved on GitHub.
-- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.53 MB, PID 13456)
+- **Local Executable:** `C:\Users\Yashpreet_o7\Desktop\AetherFlow\AetherFlow.exe` (updated release binary, 7.65 MB, PID 16500)
 - **Local Dev Server:** Active in background on port `1420` (`http://localhost:1420/`).
 - **User Validation:** User tested the latest build and confirmed: *"i am very happy with the app"*.
 

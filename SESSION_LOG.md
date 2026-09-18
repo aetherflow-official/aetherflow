@@ -2916,6 +2916,67 @@
 - **Build status:** ✅ Standalone release executable built in 2m 59s, deployed to `.\AetherFlow.exe`, and running with PID 35440 (2.4 MB RAM).
 ---
 
+## Session: 2026-09-18 17:00 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Implement Playlist Auto-Rotation, Mass Batch Ingestion, Hybrid Storage Engine & Watch Folder
+- **Completed:**
+  1. **Hybrid Storage Engine (`src-tauri/src/main.rs`, `src/lib/storageManager.js`)**:
+     - Media < 50MB copied to `%APPDATA%\AetherFlow\library\` for self-contained portability; media >= 50MB (e.g. 4K/60fps video) referenced in-place with `storageType: 'reference'`.
+     - Added `get_file_metadata`, `batch_import_media_files`, and `get_library_storage_stats` Tauri commands.
+  2. **Batch Import & Watch Folder Subsystem (`BatchImportModal.jsx`, `Library.jsx`, `main.rs`)**:
+     - Upgraded open dialog to `multiple: true` and drag-drop listener to process batch paths.
+     - Created `BatchImportModal` with animated progress, hybrid choice, and 1-click auto-playlist creation.
+     - Added "Import Entire Folder..." recursive folder traversal (`scan_directory_media`).
+     - Implemented Rust background watch folder scanner (checks every 4.5s, emits `aether:watch-folder-new-items`, auto-ingests).
+  3. **Playlist Engine & Auto-Rotation (`useStore.js`, `playlistManager.js`, `main.rs`)**:
+     - Full multi-playlist state model with non-repeating shuffle cycle pool and sequential modes.
+     - Rust background timer thread evaluates `PLAYLIST_TIMERS` every 750ms and emits rotation triggers even when window is closed to tray.
+     - Automatic screensaver/sleep rotation inhibition.
+  4. **Dedicated Playlist Studio & Settings (`Playlists.jsx`, `App.jsx`, `Settings.jsx`)**:
+     - Added `/playlists` route and sidebar navigation item.
+     - Master-Detail Playlist Studio with live active toggles, target monitor scope assignment, interval presets (1m-24h), and interactive library wallpaper picker.
+     - Added "Storage & Watch Folder" section in Settings with storage mode selector, size threshold picker, watch folder picker, and disk usage telemetry.
+- **Build status:** ✅ `npm run build` passed in 497ms; `cargo check` passed in 20.13s with 0 errors.
+---
+
+## Session: 2026-09-18 17:10 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:** Finalize Playlist Engine Built-ins Support, Compile Release Binary & Deploy AetherFlow.exe
+- **Completed:**
+  1. **Built-in Wallpaper Integration in Playlist Engine**:
+     - Updated `src/lib/playlistManager.js` (`findWallpaperById`) to resolve built-in Canvas 2D engines (`matrix-rain`, `cyber-particles`, `synthwave-grid`, etc.) with default configs and user-edited custom names.
+     - Updated `src/pages/Playlists.jsx` to build unified `allWallpapers` combining custom media and built-in engines, enabling seamless mixing of videos and canvas engines in any playlist.
+  2. **Release Binary Compilation & Deployment**:
+     - Verified `npm run build` passes in 540ms with 0 errors.
+     - Compiled production standalone binary via `cargo build --release` in `src-tauri` (completed in 2m 39s).
+     - Deployed updated 7.65MB `AetherFlow.exe` binary to workspace root.
+     - Launched `AetherFlow.exe` (PID 16500) and confirmed healthy process execution with native WorkerW desktop pinning and Win32 multi-monitor host.
+- **Build status:** ✅ Frontend and release desktop executable compiled and deployed cleanly with 0 errors.
+---
+
+## Session: 2026-09-18 17:50 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:** Resolve Playlist Monitor Scope Persistence, Race Condition & Immediate Wallpaper Rotation
+- **Completed:**
+  1. **Fixed Display Scope Reset on Pause**:
+     - Bound `targetMonitor` directly to each playlist object (`playlist.targetMonitor`, default `'*'`).
+     - Preserved monitor selection across pause, edit, and activation cycles so pausing a playlist on Screen 1 NEVER resets it back to All Displays.
+  2. **Eliminated Multiple Playlist Race Conditions (Mutual Exclusion)**:
+     - Implemented `activatePlaylist` and `deactivatePlaylist` store actions with mutual exclusion:
+       - Activating on `'*'` (All Displays) automatically deactivates any other active playlists.
+       - Activating on a specific display (e.g. `Display 1`) automatically pauses any playlist active on `'*'` or `Display 1`, while allowing independent playlists on `Display 2` or `Display 3` to continue rotating concurrently.
+     - Added target display badge (`ALL DISPLAYS`, `DISPLAY 1 (PRIMARY)`) to playlist sidebar cards for clear multi-monitor visibility.
+  3. **Immediate Visual Desktop Update on Start / Scope Change**:
+     - Activating a playlist or changing its target display now immediately rotates and applies the wallpaper to the desktop (`rotateNext(scope, playlist.id, true)`), eliminating the 15-minute delay on start.
+     - Reset `PLAYLIST_LAST_TICK` in `sync_playlist_timers` in Rust backend so timer starts counting from activation.
+  4. **Release Binary Compilation & Deployment**:
+     - Verified `npm run build` passes in 781ms.
+     - Compiled release binary via `cargo build --release` (2m 36s).
+     - Deployed updated `AetherFlow.exe` (7.65MB, PID 16812) to workspace root and verified healthy desktop execution.
+- **Build status:** ✅ Complete — 0 errors in frontend and release binary.
+---
+
+
 
 
 

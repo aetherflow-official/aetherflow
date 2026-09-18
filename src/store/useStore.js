@@ -367,6 +367,193 @@ export const useStore = create(
           }
         }),
 
+      batchInstallItems: (items, pinToHome = true) =>
+        set((s) => {
+          if (!Array.isArray(items) || items.length === 0) return {}
+          const newIds = new Set(items.map(it => it.id))
+          const filteredOld = (s.installed || []).filter(i => !newIds.has(i.id))
+          const installed = [...filteredOld, ...items]
+          persistCustomWallpapersToDisk(installed)
+
+          let homeWallpaperIds = s.homeWallpaperIds || []
+          if (pinToHome) {
+            const existingHomeSet = new Set(homeWallpaperIds)
+            const toAdd = items.map(it => it.id).filter(id => !existingHomeSet.has(id))
+            homeWallpaperIds = [...homeWallpaperIds, ...toAdd]
+          }
+
+          return { installed, homeWallpaperIds }
+        }),
+
+      // ── Storage & Watch Folder ──────────────────────────────────────────
+      storageThresholdMb: 50,
+      storageMode: 'hybrid', // 'hybrid' | 'always-copy' | 'always-reference'
+      watchFolderPath: null,
+      watchFolderEnabled: false,
+
+      setStorageThresholdMb: (mb) => set({ storageThresholdMb: mb }),
+      setStorageMode: (mode) => set({ storageMode: mode }),
+      setWatchFolder: (path, enabled) => {
+        if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+          import('@tauri-apps/api/core').then(({ invoke }) => {
+            invoke('set_watch_folder', { path: path || null, enabled: Boolean(enabled) }).catch(() => {})
+          }).catch(() => {})
+        }
+        set({
+          watchFolderPath: path,
+          watchFolderEnabled: Boolean(enabled),
+        })
+      },
+
+      // ── Playlists & Auto-Rotation ────────────────────────────────────────
+      playlists: [
+        {
+          id: 'playlist-favorites',
+          name: 'Favorites Rotation',
+          wallpaperIds: ['cyber-particles', 'synthwave-grid', 'tokyo-rain', 'deep-space'],
+          order: 'shuffle', // 'shuffle' | 'linear'
+          intervalMins: 15, // minutes
+          transition: 'crossfade',
+          targetMonitor: '*', // '*' | monitorLabel
+          enabled: false,
+          lastRotatedAt: 0,
+        }
+      ],
+      activePlaylists: {
+        '*': null, // global or monitor-specific assignment
+      },
+      playlistHistory: {}, // { [playlistId]: string[] }
+
+      createPlaylist: (name, options = {}) => set((s) => {
+        const id = 'pl-' + Date.now()
+        const newPl = {
+          id,
+          name: (name || 'New Playlist').trim(),
+          wallpaperIds: options.wallpaperIds || [],
+          order: options.order || 'shuffle',
+          intervalMins: options.intervalMins || 15,
+          transition: options.transition || 'crossfade',
+          targetMonitor: options.targetMonitor || '*',
+          enabled: false,
+          lastRotatedAt: 0,
+        }
+        return { playlists: [...(s.playlists || []), newPl] }
+      }),
+
+      deletePlaylist: (playlistId) => set((s) => {
+        const nextPlaylists = (s.playlists || []).filter(p => p.id !== playlistId)
+        const nextActive = { ...(s.activePlaylists || {}) }
+        for (const [scope, pId] of Object.entries(nextActive)) {
+          if (pId === playlistId) {
+            delete nextActive[scope]
+          }
+        }
+        const nextHistory = { ...(s.playlistHistory || {}) }
+        delete nextHistory[playlistId]
+        return {
+          playlists: nextPlaylists,
+          activePlaylists: nextActive,
+          playlistHistory: nextHistory,
+        }
+      }),
+
+      updatePlaylist: (playlistId, updates) => set((s) => ({
+        playlists: (s.playlists || []).map(p =>
+          p.id === playlistId ? { ...p, ...updates } : p
+        )
+      })),
+
+      activatePlaylist: (playlistId, targetScope = null) => set((s) => {
+        const playlists = s.playlists || []
+        const targetPl = playlists.find(p => p.id === playlistId)
+        if (!targetPl) return {}
+
+        const scope = targetScope || targetPl.targetMonitor || '*'
+        const nextActive = { ...(s.activePlaylists || {}) }
+
+        if (scope === '*') {
+          // If activating for ALL displays, deactivate all other playlists completely to prevent races
+          const updatedPlaylists = playlists.map(p => {
+            if (p.id === playlistId) {
+              return { ...p, enabled: true, targetMonitor: '*' }
+            }
+            return { ...p, enabled: false }
+          })
+          return {
+            playlists: updatedPlaylists,
+            activePlaylists: { '*': playlistId },
+          }
+        } else {
+          // If activating for a specific display (e.g. wallpaper__DISPLAY1):
+          // 1. Remove any global '*' assignment so global rotation doesn't stomp this display
+          delete nextActive['*']
+          // 2. Deactivate any playlist previously assigned to '*' or to this specific display
+          const updatedPlaylists = playlists.map(p => {
+            if (p.id === playlistId) {
+              return { ...p, enabled: true, targetMonitor: scope }
+            }
+            if (p.enabled && (p.targetMonitor === '*' || p.targetMonitor === scope || nextActive[scope] === p.id)) {
+              return { ...p, enabled: false }
+            }
+            return p
+          })
+          nextActive[scope] = playlistId
+          return {
+            playlists: updatedPlaylists,
+            activePlaylists: nextActive,
+          }
+        }
+      }),
+
+      deactivatePlaylist: (playlistId) => set((s) => {
+        const playlists = (s.playlists || []).map(p =>
+          p.id === playlistId ? { ...p, enabled: false } : p
+        )
+        const nextActive = { ...(s.activePlaylists || {}) }
+        for (const [scope, pId] of Object.entries(nextActive)) {
+          if (pId === playlistId) {
+            delete nextActive[scope]
+          }
+        }
+        return {
+          playlists,
+          activePlaylists: nextActive,
+        }
+      }),
+
+      addWallpapersToPlaylist: (playlistId, wallpaperIds) => set((s) => {
+        const idsToAdd = Array.isArray(wallpaperIds) ? wallpaperIds : [wallpaperIds]
+        return {
+          playlists: (s.playlists || []).map(p => {
+            if (p.id !== playlistId) return p
+            const existing = new Set(p.wallpaperIds || [])
+            idsToAdd.forEach(id => existing.add(id))
+            return { ...p, wallpaperIds: Array.from(existing) }
+          })
+        }
+      }),
+
+      removeWallpaperFromPlaylist: (playlistId, wallpaperId) => set((s) => ({
+        playlists: (s.playlists || []).map(p => {
+          if (p.id !== playlistId) return p
+          return {
+            ...p,
+            wallpaperIds: (p.wallpaperIds || []).filter(id => id !== wallpaperId)
+          }
+        })
+      })),
+
+      reorderPlaylist: (playlistId, newWallpaperIds) => set((s) => ({
+        playlists: (s.playlists || []).map(p =>
+          p.id === playlistId ? { ...p, wallpaperIds: newWallpaperIds } : p
+        )
+      })),
+
+      assignPlaylistToMonitor: (monitorScope, playlistId) => set((s) => {
+        const next = { ...(s.activePlaylists || {}), [monitorScope]: playlistId }
+        return { activePlaylists: next }
+      }),
+
       // ── Home Curation (Pin / Unpin) ──────────────────────────────────────
       togglePinToHome: (id) => set((s) => {
         const list = s.homeWallpaperIds || []
@@ -686,6 +873,13 @@ export const useStore = create(
         isAuthenticated: !!s.isAuthenticated,
         communityAdminUnlocked: !!s.communityAdminUnlocked,
         communityAdminPasscode: s.communityAdminPasscode || '',
+        playlists: s.playlists,
+        activePlaylists: s.activePlaylists,
+        playlistHistory: s.playlistHistory,
+        storageThresholdMb: s.storageThresholdMb,
+        storageMode: s.storageMode,
+        watchFolderPath: s.watchFolderPath,
+        watchFolderEnabled: s.watchFolderEnabled,
       }),
     }
   )

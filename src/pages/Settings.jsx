@@ -9,6 +9,7 @@ import { useStore } from '../store/useStore.js'
 import { checkForUpdate, openReleaseUrl, APP_VERSION } from '../lib/updater.js'
 import UserAvatar from '../components/UserAvatar/index.jsx'
 import { signOut, isOnline } from '../lib/supabase.js'
+import { getLibraryStorageStats, scanWatchFolder } from '../lib/storageManager.js'
 import {
   SettingSection,
   SettingRow,
@@ -31,6 +32,62 @@ export default function SettingsPage() {
   const [updateResult, setUpdateResult] = useState(null)
   const [signingOut, setSigningOut] = useState(false)
   const [wallpaperDirectory, setWallpaperDirectory] = useState('')
+
+  const storageThresholdMb = useStore(s => s.storageThresholdMb) || 50
+  const setStorageThresholdMb = useStore(s => s.setStorageThresholdMb)
+  const storageMode = useStore(s => s.storageMode) || 'hybrid'
+  const setStorageMode = useStore(s => s.setStorageMode)
+  const watchFolderPath = useStore(s => s.watchFolderPath)
+  const watchFolderEnabled = useStore(s => s.watchFolderEnabled) || false
+  const setWatchFolder = useStore(s => s.setWatchFolder)
+
+  const [storageStats, setStorageStats] = useState({ total_files: 0, total_bytes: 0 })
+  const [isScanningWatch, setIsScanningWatch] = useState(false)
+  const [scanFeedback, setScanFeedback] = useState(null)
+
+  useEffect(() => {
+    getLibraryStorageStats().then(stats => {
+      if (stats) setStorageStats(stats)
+    })
+  }, [])
+
+  const handlePickWatchFolder = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selected = await open({ directory: true, multiple: false })
+      if (selected) {
+        const path = typeof selected === 'string' ? selected : selected[0]
+        if (path) {
+          setWatchFolder(path, true)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to pick watch folder:', err)
+    }
+  }
+
+  const handleScanNow = async () => {
+    setIsScanningWatch(true)
+    setScanFeedback(null)
+    try {
+      const found = await scanWatchFolder()
+      setScanFeedback(`Scan complete: ${found?.length || 0} new media files detected.`)
+      getLibraryStorageStats().then(stats => {
+        if (stats) setStorageStats(stats)
+      })
+    } catch (err) {
+      setScanFeedback('Scan failed: ' + err)
+    } finally {
+      setIsScanningWatch(false)
+    }
+  }
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 MB'
+    const mb = bytes / (1024 * 1024)
+    if (mb < 1024) return `${mb.toFixed(1)} MB`
+    return `${(mb / 1024).toFixed(2)} GB`
+  }
 
   useEffect(() => {
     import('@tauri-apps/api/core').then(({ invoke }) => {
@@ -288,6 +345,146 @@ export default function SettingsPage() {
             </button>
           </SettingRow>
         )}
+      </SettingSection>
+
+      {/* Section: Storage & Watch Folder */}
+      <SettingSection
+        title="Storage & Watch Folder"
+        badge={storageMode === 'hybrid' ? 'Smart Hybrid' : storageMode === 'always-copy' ? 'Full Copy' : 'In-Place'}
+      >
+        <SettingRow
+          label="Media Ingestion Strategy"
+          desc="Control whether imported wallpapers are copied to AppData or referenced in-place on disk"
+        >
+          <AetherSegmented
+            options={[
+              { value: 'hybrid', label: 'Smart Hybrid' },
+              { value: 'always-copy', label: 'Always Copy' },
+              { value: 'always-reference', label: 'In-Place Reference' },
+            ]}
+            value={storageMode}
+            onChange={val => setStorageMode(val)}
+          />
+        </SettingRow>
+
+        {storageMode === 'hybrid' && (
+          <SettingRow
+            label="In-Place Reference Threshold"
+            desc={`Wallpapers smaller than ${storageThresholdMb}MB are safely copied to AppData; files larger than ${storageThresholdMb}MB (e.g. 4K/60fps videos) are linked in-place to save disk space`}
+          >
+            <AetherSegmented
+              options={[
+                { value: '25', label: '25 MB' },
+                { value: '50', label: '50 MB' },
+                { value: '100', label: '100 MB' },
+                { value: '200', label: '200 MB' },
+              ]}
+              value={String(storageThresholdMb)}
+              onChange={val => setStorageThresholdMb(Number(val))}
+            />
+          </SettingRow>
+        )}
+
+        <SettingRow
+          label="Auto-Ingest Watch Folder"
+          desc="Designate a directory (e.g. Downloads or Pictures). Any video or picture dropped inside will be automatically detected and added to your AetherFlow library"
+        >
+          <AetherToggle
+            checked={watchFolderEnabled && Boolean(watchFolderPath)}
+            disabled={!watchFolderPath}
+            onChange={() => {
+              if (watchFolderPath) {
+                setWatchFolder(watchFolderPath, !watchFolderEnabled)
+              }
+            }}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Designated Folder Path"
+          desc={watchFolderPath ? `Active watch directory: ${watchFolderPath}` : 'No watch directory currently chosen'}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface)'
+              }}
+              onClick={handlePickWatchFolder}
+            >
+              <FolderOpen size={14} /> {watchFolderPath ? 'Change Folder...' : 'Select Folder...'}
+            </button>
+            {watchFolderPath && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={isScanningWatch}
+                style={{
+                  fontSize: 12,
+                  padding: '6px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-surface)'
+                }}
+                onClick={handleScanNow}
+              >
+                <RefreshCw size={13} className={isScanningWatch ? 'animate-spin' : ''} />
+                <span>Scan Now</span>
+              </button>
+            )}
+          </div>
+        </SettingRow>
+
+        {scanFeedback && (
+          <div style={{
+            fontSize: 12,
+            padding: '8px 12px',
+            borderRadius: 6,
+            background: 'rgba(var(--rgb-brand), 0.1)',
+            border: '1px solid var(--border-accent)',
+            color: 'var(--color-brand)',
+            marginBottom: 8,
+          }}>
+            {scanFeedback}
+          </div>
+        )}
+
+        <SettingRow
+          label="Library Storage Consumption"
+          desc={`Copied library currently holds ${storageStats.total_files} files using ${formatBytes(storageStats.total_bytes)} of disk space`}
+        >
+          {wallpaperDirectory && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface)'
+              }}
+              onClick={() => {
+                import('@tauri-apps/api/core').then(({ invoke }) => {
+                  invoke('open_url', { url: wallpaperDirectory }).catch(() => {})
+                }).catch(() => {})
+              }}
+            >
+              <FolderOpen size={14} /> Open AppData Library
+            </button>
+          )}
+        </SettingRow>
       </SettingSection>
 
       {/* Section 2: Software Updates & Releases */}

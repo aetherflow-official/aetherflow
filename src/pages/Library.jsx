@@ -4,7 +4,7 @@ import {
   Trash2, Play, Image as ImageIcon, Plus, Video, Monitor, Check,
   Pin, PinOff, Pencil, Search, X, Globe, Heart, ChevronDown,
   LayoutGrid, List, Sparkles, Terminal, Waves, Compass, Flame,
-  CloudRain, Activity, Code, ExternalLink, MoreHorizontal, Eye
+  CloudRain, Activity, Code, ExternalLink, MoreHorizontal, Eye, FolderPlus
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
@@ -12,6 +12,8 @@ import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
 import WallpaperThumbnail, { resolveWallpaperThumbnail, extractYouTubeId } from '../components/WallpaperThumbnail/index.jsx'
 import WallpaperCard from '../components/WallpaperCard/index.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
+import { BatchImportModal } from '../components/Modals/BatchImportModal.jsx'
+import { scanDirectoryMedia } from '../lib/storageManager.js'
 import {
   applyWallpaperToDesktop,
   stopDesktopWallpaper,
@@ -322,6 +324,7 @@ export default function LibraryPage() {
 
   // Modals state
   const [addModal, setAddModal]             = useState({ isOpen: false, path: '', initialName: '' })
+  const [batchModal, setBatchModal]         = useState({ isOpen: false, paths: [] })
   const [renameModal, setRenameModal]       = useState({ isOpen: false, id: null, currentName: '' })
   const [addStreamModal, setAddStreamModal] = useState(false)
 
@@ -405,13 +408,13 @@ export default function LibraryPage() {
     }
   }, [])
 
-  // Import file handler
+  // Import file handler (supports single and multiple file selection)
   const handleOpenImportDialog = async () => {
     setIsAddMenuOpen(false)
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const selected = await open({
-        multiple: false,
+        multiple: true,
         filters: [
           {
             name: 'All Supported Media',
@@ -429,30 +432,73 @@ export default function LibraryPage() {
       })
 
       if (selected) {
-        const path = typeof selected === 'string' ? selected : selected[0]
-        if (!path) return
-        const filename = path.split('\\').pop().split('/').pop()
-        const cleanName = filename.replace(/\.[^/.]+$/, '')
-        setAddModal({ isOpen: true, path, initialName: cleanName })
+        const paths = Array.isArray(selected) ? selected : [selected]
+        if (paths.length === 0) return
+        if (paths.length === 1) {
+          const path = paths[0]
+          const filename = path.split('\\').pop().split('/').pop()
+          const cleanName = filename.replace(/\.[^/.]+$/, '')
+          setAddModal({ isOpen: true, path, initialName: cleanName })
+        } else {
+          setBatchModal({ isOpen: true, paths })
+        }
       }
     } catch (err) {
       console.error('Failed to open import dialog:', err)
     }
   }
 
-  // Drag & drop listener
+  // Import folder handler (recursively scans directory)
+  const handleOpenFolderImportDialog = async () => {
+    setIsAddMenuOpen(false)
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selectedDir = await open({
+        directory: true,
+        multiple: false,
+      })
+      if (selectedDir) {
+        const dirPath = typeof selectedDir === 'string' ? selectedDir : selectedDir[0]
+        if (dirPath) {
+          const files = await scanDirectoryMedia(dirPath)
+          if (files && files.length > 0) {
+            if (files.length === 1) {
+              const filename = files[0].split('\\').pop().split('/').pop()
+              setAddModal({ isOpen: true, path: files[0], initialName: filename.replace(/\.[^/.]+$/, '') })
+            } else {
+              setBatchModal({ isOpen: true, paths: files })
+            }
+          } else {
+            alert('No supported media files found in selected folder.')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to open folder import dialog:', err)
+    }
+  }
+
+  // Drag & drop listener (supports batch drops)
   useEffect(() => {
     let unlistenFn
     safeListen('tauri://drag-drop', event => {
       const paths = event.payload?.paths
       if (!paths || paths.length === 0) return
 
-      const path = paths[0]
-      const ext = path.split('.').pop().toLowerCase()
-      if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'mp4', 'webm', 'ogg', 'mkv', 'avi', 'mov', 'wmv', 'flv'].includes(ext)) {
+      const supportedExts = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'mp4', 'webm', 'ogg', 'mkv', 'avi', 'mov', 'wmv', 'flv']
+      const validPaths = paths.filter(p => {
+        const ext = p.split('.').pop()?.toLowerCase() || ''
+        return supportedExts.includes(ext)
+      })
+
+      if (validPaths.length === 0) return
+      if (validPaths.length === 1) {
+        const path = validPaths[0]
         const filename = path.split('\\').pop().split('/').pop()
         const cleanName = filename.replace(/\.[^/.]+$/, '')
         setAddModal({ isOpen: true, path, initialName: cleanName })
+      } else {
+        setBatchModal({ isOpen: true, paths: validPaths })
       }
     }).then(u => { unlistenFn = u }).catch(err => console.error(err))
 
@@ -634,7 +680,13 @@ export default function LibraryPage() {
                   className="library-context-item"
                   onClick={handleOpenImportDialog}
                 >
-                  <Plus size={13} /> Add Local Wallpaper
+                  <Plus size={13} /> Add Local Wallpaper(s)
+                </button>
+                <button
+                  className="library-context-item"
+                  onClick={handleOpenFolderImportDialog}
+                >
+                  <FolderPlus size={13} /> Import Entire Folder...
                 </button>
                 <button
                   className="library-context-item"
@@ -1013,6 +1065,13 @@ export default function LibraryPage() {
         initialName={addModal.initialName}
         onClose={() => setAddModal({ isOpen: false, path: '', initialName: '' })}
         onConfirm={handleConfirmAdd}
+      />
+
+      <BatchImportModal
+        isOpen={batchModal.isOpen}
+        filePaths={batchModal.paths}
+        onClose={() => setBatchModal({ isOpen: false, paths: [] })}
+        onSuccess={() => setBatchModal({ isOpen: false, paths: [] })}
       />
 
       <RenameWallpaperModal

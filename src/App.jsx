@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import { Home, Users, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2 } from 'lucide-react'
+import { Home, Users, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2, ListMusic } from 'lucide-react'
 import { checkForUpdate } from './lib/updater.js'
 import { useStore, syncCustomWallpapersFromDisk } from './store/useStore.js'
 import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperActions.js'
@@ -11,6 +11,7 @@ import StatusBar from './components/StatusBar/index.jsx'
 import HomePage from './pages/Home.jsx'
 import CommunityPage from './pages/Community.jsx'
 import LibraryPage from './pages/Library.jsx'
+import PlaylistsPage from './pages/Playlists.jsx'
 import DisplaysPage from './pages/Displays.jsx'
 import PersonalizationPage from './pages/Personalization.jsx'
 import AudioPage from './pages/Audio.jsx'
@@ -25,6 +26,7 @@ import SettingsPage from './pages/Settings.jsx'
 const NAV = [
   { to: '/',                icon: Home,        label: 'Home' },
   { to: '/library',         icon: Library,     label: 'Library' },
+  { to: '/playlists',       icon: ListMusic,   label: 'Playlists' },
   { to: '/community',       icon: Users,       label: 'Community' },
   { to: '/displays',        icon: Monitor,     label: 'Displays & Workspace' },
   { to: '/personalization', icon: Palette,     label: 'Personalization' },
@@ -666,6 +668,7 @@ export default function App() {
           <Routes>
             <Route path="/"                element={<HomePage />} />
             <Route path="/library"         element={<LibraryPage />} />
+            <Route path="/playlists"       element={<PlaylistsPage />} />
             <Route path="/community"       element={<CommunityPage />} />
             <Route path="/marketplace"     element={<CommunityPage />} />
             <Route path="/displays"        element={<DisplaysPage />} />

@@ -1693,6 +1693,43 @@ pub fn start_system_state_monitor(app: AppHandle) {
                 *p_guard = is_any_paused;
             }
             paused_monitors = target_paused_monitors;
+
+            // 4. Playlist Auto-Rotation Background Trigger
+            if !is_screensaver_active {
+                if let Ok(timers) = PLAYLIST_TIMERS.lock() {
+                    if !timers.is_empty() {
+                        let mut last_ticks = PLAYLIST_LAST_TICK.lock().unwrap_or_else(|e| e.into_inner());
+                        let now = std::time::Instant::now();
+                        for timer in timers.iter() {
+                            if !timer.enabled || timer.interval_secs == 0 {
+                                continue;
+                            }
+                            let key = format!("{}:{}", timer.monitor_scope, timer.playlist_id);
+                            let should_fire = match last_ticks.get(&key) {
+                                Some(last) => now.duration_since(*last).as_secs() >= timer.interval_secs,
+                                None => {
+                                    last_ticks.insert(key.clone(), now);
+                                    false
+                                }
+                            };
+                            if should_fire {
+                                last_ticks.insert(key, now);
+                                let payload = serde_json::json!({
+                                    "monitor_scope": timer.monitor_scope,
+                                    "playlist_id": timer.playlist_id
+                                });
+                                log_msg(&format!("[PLAYLIST] Rotation timer triggered: {:?}", payload));
+                                let _ = app.emit("aether:playlist-rotate-trigger", payload);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Watch Folder Periodic Scan (every ~6 ticks = 4.5s)
+            if taskbar_tick % 6 == 0 && WATCH_FOLDER_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = scan_watch_folder(app.clone());
+            }
         }
     });
 }
@@ -3384,6 +3421,335 @@ fn import_wallpaper_media(app: AppHandle, source_path: String) -> Result<String,
             Ok(source_path)
         }
     }
+}
+
+// ─── Playlists & Batch Storage Engine ──────────────────────────────────────────
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct FileMeta {
+    pub path: String,
+    pub name: String,
+    pub extension: String,
+    pub size_bytes: u64,
+    pub is_file: bool,
+    pub is_video: bool,
+    pub is_image: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct BatchImportResult {
+    pub original_path: String,
+    pub final_path: String,
+    pub name: String,
+    pub storage_type: String, // "copy" or "reference"
+    pub size_bytes: u64,
+    pub media_type: String, // "video" or "image"
+    pub thumbnail: Option<String>,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct LibraryStorageStats {
+    pub library_dir: String,
+    pub total_files: usize,
+    pub total_bytes: u64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct PlaylistTimerConfig {
+    pub monitor_scope: String,
+    pub playlist_id: String,
+    pub interval_secs: u64,
+    pub enabled: bool,
+}
+
+static PLAYLIST_TIMERS: Mutex<Vec<PlaylistTimerConfig>> = Mutex::new(Vec::new());
+static PLAYLIST_LAST_TICK: std::sync::LazyLock<Mutex<std::collections::HashMap<String, std::time::Instant>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+static WATCH_FOLDER_PATH: Mutex<Option<String>> = Mutex::new(None);
+static WATCH_FOLDER_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SEEN_WATCH_FILES: std::sync::LazyLock<Mutex<std::collections::HashSet<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
+
+#[tauri::command]
+fn get_file_metadata(path: String) -> Result<FileMeta, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+    let meta = std::fs::metadata(p).map_err(|e| e.to_string())?;
+    let file_stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+    let ext = p.extension().and_then(|s| s.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+    
+    let is_video = ["mp4", "webm", "mkv", "avi", "mov", "wmv", "flv"].contains(&ext.as_str());
+    let is_image = ["png", "jpg", "jpeg", "webp", "bmp", "gif", "avif"].contains(&ext.as_str());
+
+    Ok(FileMeta {
+        path: path.clone(),
+        name: file_stem.to_string(),
+        extension: ext,
+        size_bytes: meta.len(),
+        is_file: meta.is_file(),
+        is_video,
+        is_image,
+    })
+}
+
+#[tauri::command]
+fn batch_import_media_files(
+    app: AppHandle,
+    paths: Vec<String>,
+    copy_threshold_mb: u64,
+    storage_mode: String,
+) -> Result<Vec<BatchImportResult>, String> {
+    let library_dir = get_wallpaper_library_dir(&app);
+    let threshold_bytes = copy_threshold_mb.max(1) * 1024 * 1024;
+    let mut results = Vec::new();
+
+    let video_exts = ["mp4", "webm", "mkv", "avi", "mov", "wmv", "flv"];
+    let image_exts = ["png", "jpg", "jpeg", "webp", "bmp", "gif", "avif"];
+
+    let now_ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    for (idx, source_path) in paths.into_iter().enumerate() {
+        let src = std::path::Path::new(&source_path);
+        if !src.exists() || !src.is_file() {
+            results.push(BatchImportResult {
+                original_path: source_path.clone(),
+                final_path: source_path,
+                name: "Unknown".to_string(),
+                storage_type: "error".to_string(),
+                size_bytes: 0,
+                media_type: "unknown".to_string(),
+                thumbnail: None,
+                success: false,
+                error: Some("File does not exist or is not a file".to_string()),
+            });
+            continue;
+        }
+
+        let meta = match std::fs::metadata(src) {
+            Ok(m) => m,
+            Err(e) => {
+                results.push(BatchImportResult {
+                    original_path: source_path.clone(),
+                    final_path: source_path,
+                    name: "Unknown".to_string(),
+                    storage_type: "error".to_string(),
+                    size_bytes: 0,
+                    media_type: "unknown".to_string(),
+                    thumbnail: None,
+                    success: false,
+                    error: Some(e.to_string()),
+                });
+                continue;
+            }
+        };
+
+        let file_stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("wallpaper");
+        let ext = src.extension().and_then(|s| s.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+        let is_video = video_exts.contains(&ext.as_str());
+        let is_image = image_exts.contains(&ext.as_str());
+        let media_type = if is_video { "video" } else if is_image { "image" } else { "other" };
+        let size_bytes = meta.len();
+
+        let should_copy = match storage_mode.as_str() {
+            "always-copy" => true,
+            "always-reference" => false,
+            _ => size_bytes < threshold_bytes, // default: hybrid
+        };
+
+        let is_already_in_library = src.starts_with(&library_dir);
+
+        let (final_path, storage_type) = if is_already_in_library {
+            (source_path.clone(), "copy".to_string())
+        } else if should_copy {
+            let sanitized_stem: String = file_stem
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
+                .collect();
+            let dest_filename = format!("{}_{}_{}.{}", now_ts, idx, sanitized_stem.trim(), ext);
+            let dest_path = library_dir.join(&dest_filename);
+
+            match std::fs::copy(src, &dest_path) {
+                Ok(_) => (dest_path.to_string_lossy().to_string(), "copy".to_string()),
+                Err(e) => {
+                    log_msg(&format!("[BATCH IMPORT] Copy failed for {}: {}. Using reference fallback.", source_path, e));
+                    (source_path.clone(), "reference".to_string())
+                }
+            }
+        } else {
+            (source_path.clone(), "reference".to_string())
+        };
+
+        // Extract thumbnail for videos
+        let thumbnail = if is_video {
+            let wall_id = format!("local-{}-{}", now_ts, idx);
+            let base = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let thumb_dir = base.join("thumbnails");
+            let _ = std::fs::create_dir_all(&thumb_dir);
+            let out_thumb = thumb_dir.join(format!("{}.jpg", wall_id));
+            #[cfg(windows)]
+            {
+                let vpath = std::path::Path::new(&final_path);
+                if thumbnail_extractor::extract_shell_thumbnail(vpath, &out_thumb, 640, 360).is_ok() {
+                    Some(out_thumb.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                None
+            }
+        } else {
+            None
+        };
+
+        results.push(BatchImportResult {
+            original_path: source_path.clone(),
+            final_path,
+            name: file_stem.replace('_', " ").replace('-', " "),
+            storage_type,
+            size_bytes,
+            media_type: media_type.to_string(),
+            thumbnail,
+            success: true,
+            error: None,
+        });
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+fn scan_directory_media(dir_path: String) -> Result<Vec<String>, String> {
+    let dir = std::path::Path::new(&dir_path);
+    if !dir.exists() || !dir.is_dir() {
+        return Err(format!("Directory does not exist: {}", dir_path));
+    }
+    let supported_exts = ["mp4", "webm", "mkv", "avi", "mov", "wmv", "flv", "png", "jpg", "jpeg", "webp", "bmp"];
+    let mut files = Vec::new();
+
+    fn visit_dir(dir: &std::path::Path, exts: &[&str], out: &mut Vec<String>, depth: u32) {
+        if depth > 4 { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    if let Some(ext) = p.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()) {
+                        if exts.contains(&ext.as_str()) {
+                            out.push(p.to_string_lossy().to_string());
+                        }
+                    }
+                } else if p.is_dir() {
+                    visit_dir(&p, exts, out, depth + 1);
+                }
+            }
+        }
+    }
+
+    visit_dir(dir, &supported_exts, &mut files, 0);
+    Ok(files)
+}
+
+#[tauri::command]
+fn get_library_storage_stats(app: AppHandle) -> Result<LibraryStorageStats, String> {
+    let lib = get_wallpaper_library_dir(&app);
+    let mut total_files = 0;
+    let mut total_bytes = 0;
+    if let Ok(entries) = std::fs::read_dir(&lib) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    total_files += 1;
+                    total_bytes += meta.len();
+                }
+            }
+        }
+    }
+    Ok(LibraryStorageStats {
+        library_dir: lib.to_string_lossy().to_string(),
+        total_files,
+        total_bytes,
+    })
+}
+
+#[tauri::command]
+fn set_watch_folder(path: Option<String>, enabled: bool) -> Result<(), String> {
+    if let Ok(mut p_guard) = WATCH_FOLDER_PATH.lock() {
+        *p_guard = path.clone();
+    }
+    WATCH_FOLDER_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+    log_msg(&format!("[WATCH FOLDER] Settings updated: enabled={}, path={:?}", enabled, path));
+    Ok(())
+}
+
+#[tauri::command]
+fn get_watch_folder_settings() -> Result<serde_json::Value, String> {
+    let path = WATCH_FOLDER_PATH.lock().ok().and_then(|g| g.clone());
+    let enabled = WATCH_FOLDER_ENABLED.load(std::sync::atomic::Ordering::Relaxed);
+    Ok(serde_json::json!({
+        "path": path,
+        "enabled": enabled
+    }))
+}
+
+#[tauri::command]
+fn scan_watch_folder(app: AppHandle) -> Result<Vec<String>, String> {
+    let path_opt = WATCH_FOLDER_PATH.lock().ok().and_then(|g| g.clone());
+    let folder_str = match path_opt {
+        Some(p) if !p.trim().is_empty() => p,
+        _ => return Ok(Vec::new()),
+    };
+    let folder = std::path::Path::new(&folder_str);
+    if !folder.exists() || !folder.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut new_files = Vec::new();
+    let supported_exts = ["mp4", "webm", "mkv", "avi", "mov", "wmv", "flv", "png", "jpg", "jpeg", "webp", "bmp"];
+
+    if let Ok(entries) = std::fs::read_dir(folder) {
+        let mut seen = SEEN_WATCH_FILES.lock().unwrap_or_else(|e| e.into_inner());
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()) {
+                    if supported_exts.contains(&ext.as_str()) {
+                        let full_str = p.to_string_lossy().to_string();
+                        if !seen.contains(&full_str) {
+                            seen.insert(full_str.clone());
+                            new_files.push(full_str);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !new_files.is_empty() {
+        log_msg(&format!("[WATCH FOLDER] Detected {} new media files: {:?}", new_files.len(), new_files));
+        let _ = app.emit("aether:watch-folder-new-items", &new_files);
+    }
+    Ok(new_files)
+}
+
+#[tauri::command]
+fn sync_playlist_timers(timers: Vec<PlaylistTimerConfig>) -> Result<(), String> {
+    if let Ok(mut guard) = PLAYLIST_TIMERS.lock() {
+        log_msg(&format!("[PLAYLIST] Synced {} active playlist timers", timers.len()));
+        *guard = timers;
+    }
+    if let Ok(mut ticks) = PLAYLIST_LAST_TICK.lock() {
+        ticks.clear();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -5521,6 +5887,14 @@ fn main() {
             get_grid_detection_state,
             get_or_create_video_thumbnail,
             sync_all_custom_video_thumbnails,
+            get_file_metadata,
+            batch_import_media_files,
+            scan_directory_media,
+            get_library_storage_stats,
+            set_watch_folder,
+            get_watch_folder_settings,
+            scan_watch_folder,
+            sync_playlist_timers,
         ])
         .setup(|app| {
             #[cfg(windows)]

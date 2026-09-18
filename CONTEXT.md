@@ -3,18 +3,20 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 03:12 IST — Cleaned Header UI & Removed [On | Hover | Off] Pill Controls:
-1. **Removed Pill Controls**:
-   - Removed the `PREVIEWS: On | Hover | Off` segmented control buttons from both `Home.jsx` and `Library.jsx` headers.
-   - Preserves the clean, professional look of the top bar without unnecessary cognitive overhead.
-2. **Maintained Native Wallpaper Engine Architecture**:
-   - Cards display crisp static `<img>` posters at rest (0 decoders, 0 GPU load).
-   - Single-slot hover preview remains active (`thumbnailMode="hover"`) using `previewManager` (1 live video player on hover, 0 at rest).
-   - Host `AetherFlow.exe` uses 2.61 MB RAM; total application memory stays flat under 180 MB.
-3. **Build & Quality Assurance**:
-   - Verified clean header layout and 0 video decoders at rest via Playwright.
-   - `npm run build`: built in 447ms with 0 errors.
-   - Committed to `feature/library-redesign-preview-overhaul` (`4dd0f78`).
+2026-09-18 17:50 IST — Resolved Playlist Monitor Scope Persistence, Race Condition & Immediate Wallpaper Rotation:
+1. **Monitor Scope Persistence**:
+   - `targetMonitor` permanently stored on each playlist object (`pl.targetMonitor`, default `'*'`). Pausing or editing a playlist on Screen 1 NEVER resets it back to All Displays.
+2. **Mutual Exclusion (Zero Race Conditions)**:
+   - Implemented `activatePlaylist` and `deactivatePlaylist` store actions:
+     - Activating a playlist on `'*'` (All Displays) pauses all other playlists to eliminate concurrent timer collisions.
+     - Activating a playlist on a specific display (e.g. `Screen 1`) pauses any playlist on `'*'` or `Screen 1`, while allowing independent playlists on `Screen 2` / `Screen 3` to continue rotating concurrently.
+   - Display target badge (`ALL DISPLAYS`, `DISPLAY 1 (PRIMARY)`) added to playlist sidebar cards for clear multi-monitor visibility.
+3. **Immediate Visual Desktop Feedback**:
+   - Starting a playlist or changing display scope now immediately rotates and applies the wallpaper to the desktop (`rotateNext(scope, playlist.id, true)`), eliminating the 15-minute start delay.
+   - Rust `sync_playlist_timers` clears `PLAYLIST_LAST_TICK` so timer starts fresh from activation.
+4. **Build & Release**:
+   - `npm run build`: built in 781ms with 0 errors.
+   - `cargo build --release`: passed in 2m 36s; updated `AetherFlow.exe` (7.65MB, PID 16812).
 
 ---
 
@@ -36,10 +38,10 @@ A **standalone Windows desktop application** that:
 
 | Check | Result |
 |-------|--------|
-| `npm run build` | ✅ Passes in ~580ms |
+| `npm run build` | ✅ Passes in ~540ms |
 | `npm run dev` | ✅ Runs at http://localhost:1420/ |
 | `npm run tauri:dev` | ✅ Passes (Rust installed & verified) |
-| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (v1.0.7), `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe` |
+| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (7.65MB, v1.0.7) running with native desktop WorkerW integration |
 
 ---
 
@@ -73,22 +75,26 @@ src/engines/fps-meter.js            Canvas 2D telemetry HUD with live rolling FP
 src/engines/image-player.js         Canvas 2D picture wallpaper engine (PNG/JPG/WebP)
 src/engines/web-stream.js           YouTube & Live Web Stream engine (iframes & thumbnails)
 src/engines/index.js                Lazy-loaded engine registry + theme list
-src/store/useStore.js               Zustand persisted global state (with taskbarStyle)
+src/store/useStore.js               Zustand persisted global state (playlists, storage, watch folder)
 src/styles/themes.css               6 Sovereign theme CSS token sets
 src/styles/index.css                Global CSS utilities
 src/components/WallpaperPlayer/     Engine lifecycle manager (canvas)
+src/components/WallpaperCard/       Unified wallpaper card surface
 src/components/StatusBar/           Waybar-style FPS + status bar
-src/components/Modals/              AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal
+src/components/Modals/              AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal, BatchImportModal
 src/lib/supabase.js                 Offline-safe Supabase marketplace API
 src/lib/updater.js                  GitHub Releases Auto-Updater module
 src/lib/wallpaperActions.js         Desktop wallpaper applicator & stream handlers
+src/lib/storageManager.js           Hybrid storage (<50MB copy, >=50MB reference) & folder scanner
+src/lib/playlistManager.js          Auto-rotation engine & watch folder ingestion listener
 src/pages/Home.jsx                  Wallpaper grid, controls, stream modal, theme switcher
+src/pages/Playlists.jsx             Master-Detail Playlist Studio with intervals, order, and monitors
 src/pages/Marketplace.jsx           Search, tags, publish form
-src/pages/Library.jsx               Installed items, add stream, activate/uninstall
-src/pages/Settings.jsx              Taskbar styling, software updates, FPS, audio, system
+src/pages/Library.jsx               Installed items, batch import, add stream, activate/uninstall
+src/pages/Settings.jsx              Storage & watch folder, taskbar, updates, FPS, audio, system
 src/App.jsx                         Router, sidebar, layout, startup update toast
-src/main.jsx                        Entry point, theme hydration, taskbar restoration
-src-tauri/src/main.rs               Rust backend: window mgmt, tray, commands
+src/main.jsx                        Entry point, theme hydration, taskbar restoration, playlist init
+src-tauri/src/main.rs               Rust backend: window mgmt, tray, commands, playlist timers, watch scanner
 src-tauri/src/taskbar.rs            Win32 SetWindowCompositionAttribute taskbar module
 src-tauri/src/mpv.rs                Native MPV video playback integration
 src-tauri/Cargo.toml                Release: lto + strip + opt-level=s
@@ -224,6 +230,9 @@ npm run tauri:dev
 | 2026-09-17 | Antigravity (Google DeepMind) | Wallpaper Card System Redesign: Eliminated hard split / solid metadata box underneath cards; transformed cards into 100% continuous artwork surfaces with subtle multi-stop bottom scrim gradients; created unified WallpaperCard component across Library (featured & standard) and Home (favorites); implemented compact type badges, top-right controls, resting apply button, and clean hover actions without blacking out artwork; preserved central single-slot PreviewManager; verified across Dark/Light themes and viewports. |
 | 2026-09-18 | Antigravity (Google DeepMind) | Restored Static Custom Video Posters: Decoupled static poster layer (<img>, zIndex 1) from single-slot live preview layer (<VideoPosterFrame>, zIndex 2); eliminated solid black card rendering caused by paused unplayed <video> tags; guaranteed 0 video decoders at rest (totalVideosInDOM: 0); prevented black flash during hover with 0.22s cross-fade; added dynamic 480p JPEG thumbnail capture & permanent store persistence to localStorage and disk; updated fallback with luminous sapphire/indigo gradient; committed to feature/library-redesign-preview-overhaul (1055c3e). |
 | 2026-09-18 | Antigravity (Google DeepMind) | Sequential Background Poster Generation for Custom Videos: Built dedicated single-worker queue (posterGenerator.js, MAX_ACTIVE_DECODERS = 1) extracting 640x360 JPEG posters for local videos; integrated with LibraryPage visible-first prioritization; added .wp-overlay-scrim.is-fallback (52% bottom-fade) preventing black card appearance; verified all 27 custom videos acquire static <img> posters (cardsWithImg: 27/27); verified 0 videos at rest, 1 on hover; Home favorites automatically updated; committed to feature/library-redesign-preview-overhaul (6917da9). |
+| 2026-09-18 | Antigravity (Google DeepMind) | Implemented Playlist Auto-Rotation, Mass Batch Ingestion, Hybrid Storage Engine & Watch Folder: Added Hybrid storage (<50MB copy, >=50MB reference), BatchImportModal, scan_directory_media, Rust watch folder background scanner, PLAYLIST_TIMERS background rotation engine, Playlists Studio (/playlists), and Settings Storage & Watch Folder card. Verified npm run build (497ms) and cargo check (20.13s). |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Built-in Canvas Engine Playlist Integration & Release Deployment: Added resolution of built-in canvas engines in playlistManager.js and Playlists.jsx candidates; verified npm run build (540ms); compiled production standalone binary via cargo build --release (2m 39s); deployed updated 7.65MB AetherFlow.exe to root; launched running process (PID 16500) with native multi-monitor WorkerW desktop pinning. |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Resolved Playlist Monitor Scope Persistence & Race Condition: Bound targetMonitor directly to each playlist object; enforced mutual exclusion in activatePlaylist/deactivatePlaylist to prevent multiple playlists colliding on All Displays or the same screen; added immediate desktop wallpaper rotation on start/scope change; deployed updated AetherFlow.exe (7.65MB, PID 16812). |
 ---
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
 

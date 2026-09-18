@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary/index.jsx'
 import './styles/index.css'
 import { useStore, syncCustomWallpapersFromDisk } from './store/useStore.js'
 import { tauriInvoke, safeConvertFileSrc } from './lib/wallpaperActions.js'
+import { initPlaylistManager } from './lib/playlistManager.js'
 
 // Global safety bridge: ensure convertFileSrc is always defined everywhere
 if (typeof window !== 'undefined') {
@@ -14,6 +15,9 @@ if (typeof window !== 'undefined') {
 
 // Automatically sync and restore custom wallpapers from disk
 syncCustomWallpapersFromDisk()
+
+// Initialize background playlist auto-rotation listeners & timers
+initPlaylistManager()
 
 // Frontend lifecycle diagnostics
 console.log('[FRONTEND DIAG] Initializing main.jsx, readyState:', document.readyState)

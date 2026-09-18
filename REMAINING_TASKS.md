@@ -335,4 +335,11 @@ Mark these off as you complete them:
   - [x] Protected normal, custom, canvas, and locker wallpapers: retained existing HWNDs, WorkerW pinning, and visibility without recreation or unpinning, ensuring zero 80% WebView popups.
   - [x] Added WinSta0 window station and desktop attachment at process startup.
   - [x] Verified with automated end-to-end test suite (`scratch/run_full_transition_suite.ps1`): rapid A -> B -> C -> D switching, Video <-> Canvas transitions, and 0 popup windows verified.
+- [x] TASK 20: Playlist Auto-Rotation, Mass Batch Ingestion, Hybrid Storage Engine & Watch Folder:
+  - [x] 20.1: Hybrid Storage Strategy (`src-tauri/src/main.rs`, `src/lib/storageManager.js`): copy files < 50MB to `%APPDATA%\AetherFlow\library\` for self-containment; reference files >= 50MB in-place with `storageType: 'reference'`; added `get_file_metadata`, `batch_import_media_files`, and `get_library_storage_stats`.
+  - [x] 20.2: Batch Ingestion & Recursive Folder Scanning: upgraded dialog to `multiple: true`, added batch drag-and-drop listener, created `BatchImportModal` with live progress and auto-playlist creation, and added `scan_directory_media` for folder import.
+  - [x] 20.3: Native Background Watch Folder: Rust monitor loop scans watch folder every 4.5s, detects newly added files, emits `aether:watch-folder-new-items`, and auto-ingests into library.
+  - [x] 20.4: Playlist Auto-Rotation Engine: multi-playlist Zustand state with non-repeating shuffle cycle pools and sequential modes; Rust background timer thread evaluates `PLAYLIST_TIMERS` every 750ms and emits rotation triggers with screensaver inhibition.
+  - [x] 20.5: Dedicated Playlist Studio & Settings UI: added `/playlists` route and sidebar navigation item; built Master-Detail Playlist Studio (`Playlists.jsx`) with live active toggles, target monitor scope assignment, interval presets (1m-24h), and interactive wallpaper picker; added "Storage & Watch Folder" section in `Settings.jsx`.
+
 
