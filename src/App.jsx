@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import { Home, Users, Library, Settings, Zap, Sparkles, X as CloseIcon, LogOut, User, ChevronUp, LogIn, Moon, Monitor, Palette, Volume2, ListMusic } from 'lucide-react'
-import { checkForUpdate } from './lib/updater.js'
+import { checkForUpdate, APP_VERSION } from './lib/updater.js'
 import { useStore, syncCustomWallpapersFromDisk } from './store/useStore.js'
 import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperActions.js'
 import { supabase, onAuthStateChange, signOut, processOAuthCallback } from './lib/supabase.js'
@@ -581,12 +581,24 @@ export default function App() {
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             <div style={{
-              width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-              background: 'var(--color-brand)',
+              width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+              background: 'radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, rgba(168, 85, 247, 0.12) 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 16px var(--color-glow), var(--surface-bevel)',
+              boxShadow: '0 0 16px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+              overflow: 'hidden',
+              padding: 2,
             }}>
-              <Zap size={16} color="#fff" />
+              <img
+                src="/logo.png"
+                alt="AetherFlow"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 2px 6px rgba(6, 182, 212, 0.35))'
+                }}
+              />
             </div>
             {!sidebarCollapsed && (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -594,7 +606,7 @@ export default function App() {
                   AetherFlow
                 </span>
                 <span style={{ fontSize: 9.5, color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
-                  v1.0.7 SOVEREIGN
+                  v{APP_VERSION} SOVEREIGN
                 </span>
               </div>
             )}

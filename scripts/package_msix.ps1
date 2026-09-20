@@ -56,6 +56,10 @@ if (-not (Test-Path $DistDir)) {
     New-Item -ItemType Directory -Path $DistDir -Force | Out-Null
 }
 
+# Clean up older package versions from packages directory
+Get-ChildItem -Path $DistDir -Filter "*.msix" | Where-Object { $_.FullName -ne $OutputMsix } | Remove-Item -Force
+Get-ChildItem -Path $DistDir -Filter "*-setup.exe" | Where-Object { $_.Name -ne "AetherFlow_${AppVersion}_x64-setup.exe" } | Remove-Item -Force
+
 if (Test-Path $LayoutDir) {
     Remove-Item $LayoutDir -Recurse -Force
 }
