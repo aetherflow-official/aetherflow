@@ -399,7 +399,7 @@ export default function SettingsPage() {
 
         <SettingRow
           label="YouTube Wallpaper Playback Engine"
-          desc="Choose between native MPV hardware decoding (Zero YouTube UI, no Windows SMTC) or legacy WebView2 browser player"
+          desc="Native MPV uses isolated hardware decoding with auto-fallback. WebView2 uses the native browser player (Recommended — 100% immune to YouTube bot checks)."
         >
           <AetherSegmented
             options={[

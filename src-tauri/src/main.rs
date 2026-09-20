@@ -3008,6 +3008,47 @@ async fn apply_wallpaper(
                                 &format!("ticket={} monitor='{}'; preserving active wallpaper", my_ticket, label_clone),
                             );
                             proc.terminate();
+
+                            // Seamless automatic fallback to WebView2 for YouTube streams!
+                            if is_yt {
+                                log_lifecycle(
+                                    "YOUTUBE_BOT_BLOCKED_FALLBACK_TO_WEBVIEW",
+                                    &format!("ticket={} monitor='{}'; switching to web-stream player", my_ticket, label_clone),
+                                );
+                                if let Some(win) = app_handle.get_webview_window(&label_clone) {
+                                    #[cfg(windows)]
+                                    if let Ok(raw_hwnd) = win.hwnd() {
+                                        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
+                                        unsafe {
+                                            ShowWindow(raw_hwnd.0 as HWND, SW_SHOWNOACTIVATE);
+                                        }
+                                    }
+
+                                    let fallback_cfg = serde_json::json!({
+                                        "streamUrl": vpath_clone,
+                                        "url": vpath_clone,
+                                        "streamType": "youtube",
+                                        "youtubeBackend": "webview2",
+                                        "muted": screen_muted || is_currently_paused,
+                                        "volume": screen_volume,
+                                        "speedMultiplier": speed_val,
+                                    });
+                                    let payload = serde_json::json!({
+                                        "engineId": "web-stream",
+                                        "config": fallback_cfg,
+                                        "target": label_clone.clone(),
+                                    });
+                                    let _ = win.emit_to(label_clone.as_str(), "aether:set-engine", payload.clone());
+                                    let _ = win.emit_to(label_clone.as_str(), "aura:set-engine", payload.clone());
+                                    let _ = win.emit_to(label_clone.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": brightness_val, "target": label_clone.clone() }));
+                                    let _ = win.emit_to(label_clone.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": opacity_val, "target": label_clone.clone() }));
+                                    let _ = app_handle.emit("aether:toast", serde_json::json!({
+                                        "title": "YouTube Live Stream",
+                                        "message": "Switched to browser player to bypass YouTube bot challenge.",
+                                        "type": "info"
+                                    }));
+                                }
+                            }
                             return;
                         }
 

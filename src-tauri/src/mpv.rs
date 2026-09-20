@@ -403,26 +403,26 @@ pub fn kill_all_mpv_processes() {
 #[cfg(not(windows))]
 pub fn kill_all_mpv_processes() {}
 
-/// Find the mpv executable path
+/// Find the mpv/AetherFlow-VideoEngine executable path
 pub fn find_mpv_binary() -> Result<PathBuf, String> {
-    // 1. Try bundled relative to the running executable
+    // 1. Try bundled relative to the running executable (AetherFlow-VideoEngine first)
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
             let candidates = [
-                exe_dir.join("resources").join("bin").join("mpv").join("mpv.exe"),
                 exe_dir.join("resources").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("resources").join("bin").join("mpv.exe"),
                 exe_dir.join("resources").join("bin").join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("bin").join("mpv").join("mpv.exe"),
                 exe_dir.join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("src-tauri").join("bin").join("mpv").join("mpv.exe"),
                 exe_dir.join("src-tauri").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("bin").join("mpv.exe"),
                 exe_dir.join("bin").join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("mpv.exe"),
                 exe_dir.join("AetherFlow-VideoEngine.exe"),
-                exe_dir.join("..").join("..").join("src-tauri").join("bin").join("mpv").join("mpv.exe"),
                 exe_dir.join("..").join("..").join("src-tauri").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
+                exe_dir.join("resources").join("bin").join("mpv").join("mpv.exe"),
+                exe_dir.join("resources").join("bin").join("mpv.exe"),
+                exe_dir.join("bin").join("mpv").join("mpv.exe"),
+                exe_dir.join("src-tauri").join("bin").join("mpv").join("mpv.exe"),
+                exe_dir.join("bin").join("mpv.exe"),
+                exe_dir.join("mpv.exe"),
+                exe_dir.join("..").join("..").join("src-tauri").join("bin").join("mpv").join("mpv.exe"),
             ];
             for candidate in &candidates {
                 if candidate.exists() {
@@ -434,10 +434,12 @@ pub fn find_mpv_binary() -> Result<PathBuf, String> {
 
     // 2. Try development path in project root
     let dev_paths = [
-        PathBuf::from("bin/mpv/mpv.exe"),
-        PathBuf::from("src-tauri/bin/mpv/mpv.exe"),
         PathBuf::from("bin/mpv/AetherFlow-VideoEngine.exe"),
         PathBuf::from("src-tauri/bin/mpv/AetherFlow-VideoEngine.exe"),
+        PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\bin\mpv\AetherFlow-VideoEngine.exe"),
+        PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\src-tauri\bin\mpv\AetherFlow-VideoEngine.exe"),
+        PathBuf::from("bin/mpv/mpv.exe"),
+        PathBuf::from("src-tauri/bin/mpv/mpv.exe"),
         PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\bin\mpv\mpv.exe"),
         PathBuf::from(r"C:\Users\Yashpreet_o7\Desktop\AetherFlow\src-tauri\bin\mpv\mpv.exe"),
     ];
@@ -452,10 +454,10 @@ pub fn find_mpv_binary() -> Result<PathBuf, String> {
         let lad = PathBuf::from(local_app_data);
         let appdata_paths = [
             lad.join("AetherFlow").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
-            lad.join("AetherFlow").join("bin").join("mpv").join("mpv.exe"),
             lad.join("Programs").join("AetherFlow").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
-            lad.join("Programs").join("AetherFlow").join("bin").join("mpv").join("mpv.exe"),
             lad.join("Programs").join("AetherFlow").join("resources").join("bin").join("mpv").join("AetherFlow-VideoEngine.exe"),
+            lad.join("AetherFlow").join("bin").join("mpv").join("mpv.exe"),
+            lad.join("Programs").join("AetherFlow").join("bin").join("mpv").join("mpv.exe"),
             lad.join("Programs").join("AetherFlow").join("resources").join("bin").join("mpv").join("mpv.exe"),
         ];
         for p in &appdata_paths {
@@ -813,108 +815,6 @@ pub fn spawn_mpv_wallpaper(
     paused: Option<bool>,
 ) -> Result<MpvProcess, String> {
     let safe_label = monitor_label.replace("\\", "").replace(".", "_").replace(" ", "_");
-    let inproc_pipe_name = if let Some(t) = ticket {
-        format!("inprocess:{}-{}", safe_label, t)
-    } else {
-        format!("inprocess:{}", safe_label)
-    };
-
-    // ── 1. Attempt In-Process libmpv Video Engine First ───────────────────────
-    if let Ok(_lib) = crate::mpv_player::get_or_load_libmpv() {
-        println!("[MPV] Initializing In-Process libmpv video engine for monitor '{}'", monitor_label);
-        log_mpv_msg(&format!(
-            "[MPV] Initializing in-process libmpv: label='{}', bounds=({},{}) {}x{}, video='{}'",
-            monitor_label, mon_x, mon_y, mon_w, mon_h, video_path
-        ));
-
-        let existing_hwnds = crate::get_all_active_mpv_hwnds();
-        match crate::mpv_player::InProcessMpv::new(
-            video_path,
-            monitor_label,
-            mon_x,
-            mon_y,
-            mon_w,
-            mon_h,
-            volume,
-            muted,
-            speed,
-            brightness,
-            paused,
-            &existing_hwnds,
-        ) {
-            Ok(player) => {
-                let hwnd = player.hwnd;
-                #[cfg(windows)]
-                if hwnd != 0 {
-                    let h = hwnd as HWND;
-                    log_mpv_msg(&format!("[MPV] Located in-process MPV HWND: 0x{:X}", hwnd));
-                    dump_window_diagnostics("INPROCESS_MPV_PRE_LAYERED", h);
-                    use windows_sys::Win32::UI::WindowsAndMessaging::{
-                        GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, SetWindowPos,
-                        ShowWindow, SW_SHOWNOACTIVATE,
-                        GWL_STYLE, GWL_EXSTYLE, WS_POPUP, WS_CAPTION, WS_THICKFRAME,
-                        WS_BORDER, WS_DLGFRAME, WS_SYSMENU, WS_MINIMIZE, WS_MAXIMIZE,
-                        WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-                        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_FRAMECHANGED,
-                        LWA_ALPHA
-                    };
-                    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
-                    unsafe {
-                        windows_sys::Win32::UI::Shell::SetWindowSubclass(
-                            h,
-                            Some(crate::borderless_wallpaper_subclass_proc),
-                            2001,
-                            0,
-                        );
-
-                        let style = GetWindowLongW(h, GWL_STYLE) as u32;
-                        let new_style = (style | WS_POPUP) & !(WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZE | WS_MAXIMIZE | 0x10000000);
-                        SetWindowLongW(h, GWL_STYLE, new_style as i32);
-
-                        let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
-                        let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE) & !(WS_EX_APPWINDOW | 0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
-                        SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
-
-                        let border_none: u32 = 0xFFFFFFFE;
-                        DwmSetWindowAttribute(h, 34, &border_none as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
-                        let ncr_disabled: u32 = 1;
-                        DwmSetWindowAttribute(h, 2, &ncr_disabled as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
-                        let do_not_round: u32 = 1;
-                        DwmSetWindowAttribute(h, 33, &do_not_round as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
-
-                        SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
-                        ShowWindow(h, SW_SHOWNOACTIVATE);
-                        SetWindowPos(h, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                    }
-                    dump_window_diagnostics("INPROCESS_MPV_POST_LAYERED", h);
-                }
-
-                crate::mpv_player::register_inprocess_player(&inproc_pipe_name, player.clone());
-                crate::mpv_player::register_inprocess_player(&safe_label, player.clone());
-
-                return Ok(MpvProcess {
-                    child: None,
-                    in_process: Some(player),
-                    pipe_name: inproc_pipe_name,
-                    monitor_label: monitor_label.to_string(),
-                    video_path: video_path.to_string(),
-                    hwnd,
-                });
-            }
-            Err(err) => {
-                log_mpv_msg(&format!(
-                    "[MPV WARN] Failed to spawn in-process libmpv: {}, falling back to external process",
-                    err
-                ));
-                eprintln!(
-                    "[MPV WARN] Failed to spawn in-process libmpv: {}, falling back to external process",
-                    err
-                );
-            }
-        }
-    }
-
-    // ── 2. Fallback to external MPV process if libmpv is unavailable ─────────
     let mpv_exe = find_mpv_binary()?;
     let pipe_name = if let Some(t) = ticket {
         format!(r"\\.\pipe\aetherflow-mpv-{}-{}", safe_label, t)
@@ -925,7 +825,7 @@ pub fn spawn_mpv_wallpaper(
     let is_network = is_network_url(video_path);
     let is_yt = is_youtube_url(video_path);
 
-    let mut script_opts = vec!["osc-visibility=never".to_string()];
+    let mut script_opts = vec!["osc-visibility=never".to_string(), "ytdl_hook-try_ytdl_first=yes".to_string()];
     if is_yt {
         if let Ok(ytdl_path) = find_ytdl_binary() {
             let path_str = ytdl_path.to_string_lossy().replace('\\', "/");
@@ -938,8 +838,8 @@ pub fn spawn_mpv_wallpaper(
 
     let mut cmd = Command::new(&mpv_exe);
 
-    // Lively-style standalone borderless window flags:
-    // MPV initializes its own Direct3D 11 swapchain without cross-process --wid restrictions.
+    // Dedicated AetherFlow Video Engine borderless window flags:
+    // Initializes its own Direct3D 11 swapchain with total process crash isolation.
     cmd.arg("--no-config")
         .arg("--window-minimized=yes")
         .arg("--force-window=immediate")
@@ -989,7 +889,7 @@ pub fn spawn_mpv_wallpaper(
             .arg("--demuxer-max-back-bytes=16M");
         if is_yt {
             cmd.arg("--ytdl=yes")
-                .arg("--ytdl-raw-options=js-runtimes=\"node\",remote-components=\"ejs:github\",cookies-from-browser=firefox")
+                .arg("--ytdl-raw-options=js-runtimes=\"node\",remote-components=\"ejs:github\",extractor-args=\"youtube:player_client=android,web\"")
                 .arg("--ytdl-format=bestvideo[height<=1080]+bestaudio/best");
         }
     } else {
