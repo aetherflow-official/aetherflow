@@ -32,9 +32,17 @@ export function createAudioSpectrum(canvas, options = {}) {
   // Idle simulation (used in preview mode, default simulation, and when mic is denied)
   let idleTime = 0
 
+  let idleBuffer = null
+  let gradCache = new Array(64)
+
+  function clearGradCache() {
+    gradCache = new Array(64)
+  }
+
   function resize() {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
+    clearGradCache()
   }
 
   async function initAudio() {
@@ -88,6 +96,24 @@ export function createAudioSpectrum(canvas, options = {}) {
     }
   }
 
+  function getCachedGrad(bucket, rawVal, H) {
+    if (gradCache[bucket]) return gradCache[bucket]
+
+    const [r1, g1, b1] = hexToRgb(color)
+    const [r2, g2, b2] = hexToRgb(accentColor)
+    const t = rawVal / 255
+    const r = Math.round(r1 + (r2 - r1) * t)
+    const g = Math.round(g1 + (g2 - g1) * t)
+    const b = Math.round(b1 + (b2 - b1) * t)
+    const barH = (rawVal / 255) * H * 0.8
+
+    const grad = ctx.createLinearGradient(0, Math.max(0, H - barH), 0, H)
+    grad.addColorStop(0, `rgba(${r},${g},${b},0.9)`)
+    grad.addColorStop(1, `rgba(${r},${g},${b},0.2)`)
+    gradCache[bucket] = grad
+    return grad
+  }
+
   function hexToRgb(hex) {
     return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
   }
@@ -100,31 +126,20 @@ export function createAudioSpectrum(canvas, options = {}) {
 
     ctx.clearRect(0, 0, W, H)
 
-    const [r1, g1, b1] = hexToRgb(color)
-    const [r2, g2, b2] = hexToRgb(accentColor)
-
     for (let i = 0; i < halfBars; i++) {
       const idx = Math.floor(i / halfBars * (freqData.length || halfBars))
       const rawVal = freqData[idx] ?? 0
       const barH = (rawVal / 255) * H * 0.8
+      const bucket = Math.min(63, Math.floor(rawVal / 4))
+      const grad = getCachedGrad(bucket, rawVal, H)
 
-      const t = rawVal / 255
-      const r = Math.round(r1 + (r2 - r1) * t)
-      const g = Math.round(g1 + (g2 - g1) * t)
-      const b = Math.round(b1 + (b2 - b1) * t)
-
-      const grad = ctx.createLinearGradient(0, H - barH, 0, H)
-      grad.addColorStop(0, `rgba(${r},${g},${b},0.9)`)
-      grad.addColorStop(1, `rgba(${r},${g},${b},0.2)`)
       ctx.fillStyle = grad
-
       const x = i * (barW + 1)
       ctx.beginPath()
       ctx.roundRect(x, H - barH, barW, barH, [3, 3, 0, 0])
       ctx.fill()
 
       if (mirror) {
-        ctx.fillStyle = grad
         ctx.beginPath()
         ctx.roundRect(W - x - barW, H - barH, barW, barH, [3, 3, 0, 0])
         ctx.fill()
@@ -133,13 +148,15 @@ export function createAudioSpectrum(canvas, options = {}) {
   }
 
   function idleFrame() {
-    const fake = new Uint8Array(barCount)
+    if (!idleBuffer || idleBuffer.length !== barCount) {
+      idleBuffer = new Uint8Array(barCount)
+    }
     for (let i = 0; i < barCount; i++) {
-      fake[i] = 30 + Math.abs(Math.sin(idleTime * speedMultiplier + i * 0.3)) * 80
+      idleBuffer[i] = 30 + Math.abs(Math.sin(idleTime * speedMultiplier + i * 0.3)) * 80
         + Math.sin(idleTime * speedMultiplier * 2 + i * 0.5) * 20
     }
     idleTime += 0.025
-    return fake
+    return idleBuffer
   }
 
   function frame(ts) {
@@ -209,8 +226,8 @@ export function createAudioSpectrum(canvas, options = {}) {
     }
     if (newOpts.speedMultiplier !== undefined) speedMultiplier = newOpts.speedMultiplier
     if (newOpts.fps !== undefined) fps = newOpts.fps
-    if (newOpts.color !== undefined) color = newOpts.color
-    if (newOpts.accentColor !== undefined) accentColor = newOpts.accentColor
+    if (newOpts.color !== undefined) { color = newOpts.color; clearGradCache() }
+    if (newOpts.accentColor !== undefined) { accentColor = newOpts.accentColor; clearGradCache() }
     if (newOpts.barCount !== undefined) barCount = newOpts.barCount
     if (newOpts.paused !== undefined) {
       if (newOpts.paused) pause()

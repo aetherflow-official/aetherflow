@@ -19,10 +19,17 @@ export function createMatrixRain(canvas, options = {}) {
   let animId = null
   let drops = []
   let lastFrame = 0
+  let bgStyle = `rgba(0,0,0,${bgAlpha})`
+  const charsLen = CHARS.length
+
+  function applyFont() {
+    ctx.font = `${fontSize}px 'JetBrains Mono', monospace`
+  }
 
   function resize() {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
+    applyFont()
     const cols = Math.floor(canvas.width / fontSize)
     drops = Array.from({ length: cols }, () => Math.random() * -canvas.height / fontSize)
   }
@@ -37,14 +44,11 @@ export function createMatrixRain(canvas, options = {}) {
     }
     lastFrame = ts
 
-    ctx.fillStyle = `rgba(0,0,0,${bgAlpha})`
+    ctx.fillStyle = bgStyle
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    ctx.fillStyle = color
-    ctx.font = `${fontSize}px 'JetBrains Mono', monospace`
-
     for (let i = 0; i < drops.length; i++) {
-      const char = CHARS[Math.floor(Math.random() * CHARS.length)]
+      const char = CHARS[Math.floor(Math.random() * charsLen)]
       const x = i * fontSize
       const y = drops[i] * fontSize
 
@@ -54,7 +58,7 @@ export function createMatrixRain(canvas, options = {}) {
 
       ctx.fillStyle = color
       if (y > 20) {
-        ctx.fillText(CHARS[Math.floor(Math.random() * CHARS.length)], x, y - fontSize)
+        ctx.fillText(CHARS[Math.floor(Math.random() * charsLen)], x, y - fontSize)
       }
 
       if (y > canvas.height && Math.random() > 0.975) {
@@ -93,8 +97,14 @@ export function createMatrixRain(canvas, options = {}) {
   function updateOptions(newOpts) {
     Object.assign(options, newOpts)
     if (newOpts.color !== undefined) color = newOpts.color
-    if (newOpts.bgAlpha !== undefined) bgAlpha = newOpts.bgAlpha
-    if (newOpts.fontSize !== undefined) fontSize = newOpts.fontSize
+    if (newOpts.bgAlpha !== undefined) {
+      bgAlpha = newOpts.bgAlpha
+      bgStyle = `rgba(0,0,0,${bgAlpha})`
+    }
+    if (newOpts.fontSize !== undefined) {
+      fontSize = newOpts.fontSize
+      applyFont()
+    }
     if (newOpts.speedMultiplier !== undefined) speedMultiplier = newOpts.speedMultiplier
     if (newOpts.fps !== undefined) fps = newOpts.fps
     if (newOpts.paused !== undefined) {

@@ -43,29 +43,42 @@ export function createTokyoRain(canvas, options = {}) {
     return buildings
   }
 
-  function drawCity(buildings, W, H) {
+  let cityCanvas = null
+  let cityCtx = null
+
+  function renderCityCache(W, H) {
+    if (!cityCanvas) {
+      cityCanvas = document.createElement('canvas')
+    }
+    cityCanvas.width = W
+    cityCanvas.height = H
+    cityCtx = cityCanvas.getContext('2d')
+    drawCity(cityCtx, buildingsCache, W, H)
+  }
+
+  function drawCity(cCtx, buildings, W, H) {
     // Background gradient (city sky)
-    const sky = ctx.createLinearGradient(0, 0, 0, H)
+    const sky = cCtx.createLinearGradient(0, 0, 0, H)
     sky.addColorStop(0, '#0a001a')
     sky.addColorStop(0.4, '#100020')
     sky.addColorStop(0.8, '#1a0035')
     sky.addColorStop(1, '#0d0020')
-    ctx.fillStyle = sky
-    ctx.fillRect(0, 0, W, H)
+    cCtx.fillStyle = sky
+    cCtx.fillRect(0, 0, W, H)
 
     // Neon ground glow
-    const glow = ctx.createLinearGradient(0, H * 0.8, 0, H)
+    const glow = cCtx.createLinearGradient(0, H * 0.8, 0, H)
     glow.addColorStop(0, 'rgba(180,0,255,0.0)')
     glow.addColorStop(0.5, 'rgba(180,0,255,0.12)')
     glow.addColorStop(1, 'rgba(0,212,255,0.18)')
-    ctx.fillStyle = glow
-    ctx.fillRect(0, H * 0.8, W, H * 0.2)
+    cCtx.fillStyle = glow
+    cCtx.fillRect(0, H * 0.8, W, H * 0.2)
 
     // Buildings
     for (const b of buildings) {
       // Building body
-      ctx.fillStyle = '#050010'
-      ctx.fillRect(b.x, b.y, b.w, b.h)
+      cCtx.fillStyle = '#050010'
+      cCtx.fillRect(b.x, b.y, b.w, b.h)
 
       // Random lit windows
       const cols = Math.floor(b.w / 10)
@@ -74,8 +87,8 @@ export function createTokyoRain(canvas, options = {}) {
         for (let c = 0; c < cols; c++) {
           if (Math.random() < 0.3) {
             const wc = neonColors[Math.floor(Math.random() * neonColors.length)]
-            ctx.fillStyle = wc + '88'
-            ctx.fillRect(b.x + c * 10 + 2, b.y + r * 14 + 3, 6, 8)
+            cCtx.fillStyle = wc + '88'
+            cCtx.fillRect(b.x + c * 10 + 2, b.y + r * 14 + 3, 6, 8)
           }
         }
       }
@@ -83,12 +96,12 @@ export function createTokyoRain(canvas, options = {}) {
       // Neon edge glow on some buildings
       if (Math.random() < 0.3) {
         const nc = neonColors[Math.floor(Math.random() * neonColors.length)]
-        ctx.shadowColor = nc
-        ctx.shadowBlur = 12
-        ctx.strokeStyle = nc + 'aa'
-        ctx.lineWidth = 1
-        ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h)
-        ctx.shadowBlur = 0
+        cCtx.shadowColor = nc
+        cCtx.shadowBlur = 12
+        cCtx.strokeStyle = nc + 'aa'
+        cCtx.lineWidth = 1
+        cCtx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h)
+        cCtx.shadowBlur = 0
       }
     }
   }
@@ -97,6 +110,7 @@ export function createTokyoRain(canvas, options = {}) {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
     buildingsCache = buildCity(canvas.width, canvas.height)
+    renderCityCache(canvas.width, canvas.height)
     drops = Array.from({ length: rainCount }, () => new RainDrop(canvas.width, canvas.height))
   }
 
@@ -113,22 +127,27 @@ export function createTokyoRain(canvas, options = {}) {
     const W = canvas.width
     const H = canvas.height
 
-    ctx.clearRect(0, 0, W, H)
-    drawCity(buildingsCache, W, H)
+    // Draw cached procedural city
+    if (cityCanvas) {
+      ctx.drawImage(cityCanvas, 0, 0)
+    }
 
-    // Rain
+    // Rain (zero string churn: set color once, adjust primitive globalAlpha)
     ctx.lineCap = 'round'
+    ctx.lineWidth = 1
+    ctx.strokeStyle = rainColor.startsWith('rgba') ? rainColor.replace(/,[^,]+\)$/, ')') : rainColor
+
     for (const d of drops) {
+      ctx.globalAlpha = d.alpha
       ctx.beginPath()
       ctx.moveTo(d.x, d.y)
       ctx.lineTo(d.x - 1, d.y + d.len)
-      ctx.strokeStyle = rainColor.replace('0.55', String(d.alpha))
-      ctx.lineWidth = 1
       ctx.stroke()
 
       d.y += d.speed
       if (d.y > H) d.reset(W, H)
     }
+    ctx.globalAlpha = 1
 
     // Fog overlay
     ctx.fillStyle = 'rgba(10,0,30,0.12)'
@@ -145,6 +164,8 @@ export function createTokyoRain(canvas, options = {}) {
     if (animId) cancelAnimationFrame(animId)
     animId = null
     window.removeEventListener('resize', resize)
+    cityCanvas = null
+    cityCtx = null
   }
 
   function pause() {
@@ -171,7 +192,12 @@ export function createTokyoRain(canvas, options = {}) {
     }
     if (newOpts.fps !== undefined) fps = newOpts.fps
     if (newOpts.rainColor !== undefined) rainColor = newOpts.rainColor
-    if (newOpts.neonColors !== undefined) neonColors = newOpts.neonColors
+    if (newOpts.neonColors !== undefined) {
+      neonColors = newOpts.neonColors
+      if (canvas.width && canvas.height) {
+        renderCityCache(canvas.width, canvas.height)
+      }
+    }
     if (newOpts.paused !== undefined) {
       if (newOpts.paused) pause()
       else resume()

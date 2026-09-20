@@ -18,9 +18,45 @@ export function createSynthwaveGrid(canvas, options = {}) {
   let offset = 0
   let lastFrame = 0
 
+  let bgGrad = null
+  let sunGrad = null
+  let hGlowGrad = null
+  let scanlinePattern = null
+
+  function initGradients() {
+    const W = canvas.width
+    const H = canvas.height
+    const horizon = H * 0.5
+
+    bgGrad = ctx.createLinearGradient(0, 0, 0, H)
+    bgGrad.addColorStop(0, '#0d0019')
+    bgGrad.addColorStop(0.5, '#1a0033')
+    bgGrad.addColorStop(1, '#000010')
+
+    const sunX = W / 2
+    const sunY = horizon
+    const sunR = Math.min(W, H) * 0.14
+    sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR)
+    sunColors.forEach((c, i) => sunGrad.addColorStop(i / (sunColors.length - 1), c))
+
+    hGlowGrad = ctx.createLinearGradient(0, horizon - 30, 0, horizon + 30)
+    hGlowGrad.addColorStop(0, 'rgba(255,45,120,0)')
+    hGlowGrad.addColorStop(0.5, 'rgba(255,45,120,0.6)')
+    hGlowGrad.addColorStop(1, 'rgba(255,45,120,0)')
+
+    const pCanvas = document.createElement('canvas')
+    pCanvas.width = 1
+    pCanvas.height = 4
+    const pCtx = pCanvas.getContext('2d')
+    pCtx.fillStyle = 'rgba(0,0,0,0.06)'
+    pCtx.fillRect(0, 0, 1, 2)
+    scanlinePattern = ctx.createPattern(pCanvas, 'repeat')
+  }
+
   function resize() {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
+    initGradients()
   }
 
   function frame(ts) {
@@ -36,24 +72,23 @@ export function createSynthwaveGrid(canvas, options = {}) {
     const H = canvas.height
     const horizon = H * 0.5
 
-    // Background gradient
-    const bg = ctx.createLinearGradient(0, 0, 0, H)
-    bg.addColorStop(0, '#0d0019')
-    bg.addColorStop(0.5, '#1a0033')
-    bg.addColorStop(1, '#000010')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
+    // Background gradient (reusing cached gradient)
+    if (bgGrad) {
+      ctx.fillStyle = bgGrad
+      ctx.fillRect(0, 0, W, H)
+    }
 
     // Sun
     const sunX = W / 2
     const sunY = horizon
     const sunR = Math.min(W, H) * 0.14
-    const sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR)
-    sunColors.forEach((c, i) => sunGrad.addColorStop(i / (sunColors.length - 1), c))
-    ctx.beginPath()
-    ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2)
-    ctx.fillStyle = sunGrad
-    ctx.fill()
+
+    if (sunGrad) {
+      ctx.beginPath()
+      ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2)
+      ctx.fillStyle = sunGrad
+      ctx.fill()
+    }
 
     // Sun scanlines
     ctx.save()
@@ -66,16 +101,14 @@ export function createSynthwaveGrid(canvas, options = {}) {
     }
     ctx.restore()
 
-    // Horizon glow
-    const hGlow = ctx.createLinearGradient(0, horizon - 30, 0, horizon + 30)
-    hGlow.addColorStop(0, 'rgba(255,45,120,0)')
-    hGlow.addColorStop(0.5, 'rgba(255,45,120,0.6)')
-    hGlow.addColorStop(1, 'rgba(255,45,120,0)')
-    ctx.fillStyle = hGlow
-    ctx.fillRect(0, horizon - 30, W, 60)
+    // Horizon glow (reusing cached gradient)
+    if (hGlowGrad) {
+      ctx.fillStyle = hGlowGrad
+      ctx.fillRect(0, horizon - 30, W, 60)
+    }
 
     // ── Perspective Grid ──────────────────────────────────────────
-    const vp = { x: W / 2, y: horizon }         // vanishing point
+    const vpX = W / 2
     const gridCols = 14
     const gridRows = 10
     const gridBottom = H + 40
@@ -88,16 +121,16 @@ export function createSynthwaveGrid(canvas, options = {}) {
     ctx.strokeStyle = gridColor
     ctx.lineWidth = 1
 
-    // Vertical lines
+    // Vertical lines (batched into single path)
+    ctx.globalAlpha = 0.55
+    ctx.beginPath()
     for (let i = 0; i <= gridCols; i++) {
       const t = i / gridCols
       const bx = W * t
-      ctx.globalAlpha = 0.55
-      ctx.beginPath()
-      ctx.moveTo(vp.x + (bx - vp.x) * 0.01, horizon)
+      ctx.moveTo(vpX + (bx - vpX) * 0.01, horizon)
       ctx.lineTo(bx, gridBottom)
-      ctx.stroke()
     }
+    ctx.stroke()
 
     // Horizontal lines (scrolling)
     for (let i = 0; i < gridRows; i++) {
@@ -106,8 +139,8 @@ export function createSynthwaveGrid(canvas, options = {}) {
       const y = horizon + (gridBottom - horizon) * t
       const alpha = rawT * 0.7
       ctx.globalAlpha = alpha
-      const lx = vp.x + (0 - vp.x) * (1 - rawT * 0.95)
-      const rx = vp.x + (W - vp.x) * (1 - rawT * 0.95)
+      const lx = vpX + (0 - vpX) * (1 - rawT * 0.95)
+      const rx = vpX + (W - vpX) * (1 - rawT * 0.95)
       ctx.beginPath()
       ctx.moveTo(lx, y)
       ctx.lineTo(rx, y)
@@ -117,10 +150,10 @@ export function createSynthwaveGrid(canvas, options = {}) {
     ctx.restore()
     ctx.globalAlpha = 1
 
-    // Scanlines overlay
-    for (let y = 0; y < H; y += 4) {
-      ctx.fillStyle = 'rgba(0,0,0,0.06)'
-      ctx.fillRect(0, y, W, 2)
+    // Scanlines overlay (single fillRect using repeating pattern)
+    if (scanlinePattern) {
+      ctx.fillStyle = scanlinePattern
+      ctx.fillRect(0, 0, W, H)
     }
 
     offset += 0.003 * speedMultiplier
@@ -136,6 +169,10 @@ export function createSynthwaveGrid(canvas, options = {}) {
     if (animId) cancelAnimationFrame(animId)
     animId = null
     window.removeEventListener('resize', resize)
+    bgGrad = null
+    sunGrad = null
+    hGlowGrad = null
+    scanlinePattern = null
   }
 
   function pause() {
@@ -156,9 +193,13 @@ export function createSynthwaveGrid(canvas, options = {}) {
     Object.assign(options, newOpts)
     if (newOpts.speedMultiplier !== undefined) speedMultiplier = newOpts.speedMultiplier
     if (newOpts.fps !== undefined) fps = newOpts.fps
-    if (newOpts.horizonColor !== undefined) horizonColor = newOpts.horizonColor
+    let needRegen = false
+    if (newOpts.horizonColor !== undefined) { horizonColor = newOpts.horizonColor; needRegen = true }
     if (newOpts.gridColor !== undefined) gridColor = newOpts.gridColor
-    if (newOpts.sunColors !== undefined) sunColors = newOpts.sunColors
+    if (newOpts.sunColors !== undefined) { sunColors = newOpts.sunColors; needRegen = true }
+    if (needRegen && canvas.width && canvas.height) {
+      initGradients()
+    }
     if (newOpts.paused !== undefined) {
       if (newOpts.paused) pause()
       else resume()

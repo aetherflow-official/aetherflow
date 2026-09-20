@@ -19,9 +19,27 @@ export function createAurora(canvas, options = {}) {
   let stars = []
   let lastFrame = 0
 
+  let bgGrad = null
+  let refGrad = null
+  let colorsRgb = colors.map(hexToRgb)
+
+  function initGradients() {
+    const W = canvas.width
+    const H = canvas.height
+    bgGrad = ctx.createLinearGradient(0, 0, 0, H)
+    bgGrad.addColorStop(0, '#000810')
+    bgGrad.addColorStop(0.6, '#000d1a')
+    bgGrad.addColorStop(1, '#001022')
+
+    refGrad = ctx.createLinearGradient(0, H * 0.85, 0, H)
+    refGrad.addColorStop(0, 'rgba(0,255,136,0.03)')
+    refGrad.addColorStop(1, 'rgba(0,136,255,0.06)')
+  }
+
   function resize() {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
+    initGradients()
     stars = Array.from({ length: starCount }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height * 0.5,
@@ -39,11 +57,13 @@ export function createAurora(canvas, options = {}) {
     }
   }
 
-  function drawAuroraLayer(W, H, color, phaseOffset, yBase, amplitude, alpha) {
-    const { r, g, b } = hexToRgb(color)
-    const points = []
+  function drawAuroraLayer(W, H, rgb, phaseOffset, yBase, amplitude, alpha) {
+    const { r, g, b } = rgb
     const steps = 80
 
+    // Draw aurora curtain as filled shape directly without allocating intermediate points
+    ctx.beginPath()
+    ctx.moveTo(0, H)
     for (let i = 0; i <= steps; i++) {
       const t = i / steps
       const x = t * W
@@ -51,13 +71,8 @@ export function createAurora(canvas, options = {}) {
         + Math.sin(t * 3 + time * 0.5 + phaseOffset) * amplitude * 0.4
         + Math.sin(t * 7 + time * 0.3 + phaseOffset * 2) * amplitude * 0.15
         + Math.cos(t * 5 + time * 0.7 + phaseOffset * 0.5) * amplitude * 0.25
-      points.push({ x, y })
+      ctx.lineTo(x, y)
     }
-
-    // Draw aurora curtain as filled shape
-    ctx.beginPath()
-    ctx.moveTo(0, H)
-    for (const p of points) ctx.lineTo(p.x, p.y)
     ctx.lineTo(W, H)
     ctx.closePath()
 
@@ -83,40 +98,39 @@ export function createAurora(canvas, options = {}) {
     const W = canvas.width
     const H = canvas.height
 
-    // Night sky bg
-    const bg = ctx.createLinearGradient(0, 0, 0, H)
-    bg.addColorStop(0, '#000810')
-    bg.addColorStop(0.6, '#000d1a')
-    bg.addColorStop(1, '#001022')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
+    // Night sky bg (using cached gradient)
+    if (bgGrad) {
+      ctx.fillStyle = bgGrad
+      ctx.fillRect(0, 0, W, H)
+    }
 
-    // Stars
-    for (const s of stars) {
+    // Stars (zero string allocations: reuse white color + primitive globalAlpha)
+    ctx.fillStyle = '#ffffff'
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i]
       s.tw += 0.02
-      const alpha = s.a * (0.7 + Math.sin(s.tw) * 0.3)
+      ctx.globalAlpha = s.a * (0.7 + Math.sin(s.tw) * 0.3)
       ctx.beginPath()
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`
       ctx.fill()
     }
+    ctx.globalAlpha = 1
 
     // Aurora layers
     const baseY = H * 0.35
-    colors.forEach((color, i) => {
-      const phaseOff = (i / colors.length) * Math.PI * 2
-      const yOff = (i - colors.length / 2) * H * 0.06
+    for (let i = 0; i < colorsRgb.length; i++) {
+      const phaseOff = (i / colorsRgb.length) * Math.PI * 2
+      const yOff = (i - colorsRgb.length / 2) * H * 0.06
       const amp = H * (0.08 + i * 0.02)
       const alpha = 0.25 + i * 0.05
-      drawAuroraLayer(W, H, color, phaseOff, baseY + yOff, amp, alpha)
-    })
+      drawAuroraLayer(W, H, colorsRgb[i], phaseOff, baseY + yOff, amp, alpha)
+    }
 
-    // Ground reflection
-    const ref = ctx.createLinearGradient(0, H * 0.85, 0, H)
-    ref.addColorStop(0, 'rgba(0,255,136,0.03)')
-    ref.addColorStop(1, 'rgba(0,136,255,0.06)')
-    ctx.fillStyle = ref
-    ctx.fillRect(0, H * 0.85, W, H * 0.15)
+    // Ground reflection (using cached gradient)
+    if (refGrad) {
+      ctx.fillStyle = refGrad
+      ctx.fillRect(0, H * 0.85, W, H * 0.15)
+    }
 
     time += 0.008 * speedMultiplier
   }
@@ -131,6 +145,8 @@ export function createAurora(canvas, options = {}) {
     if (animId) cancelAnimationFrame(animId)
     animId = null
     window.removeEventListener('resize', resize)
+    bgGrad = null
+    refGrad = null
   }
 
   function pause() {
@@ -152,7 +168,10 @@ export function createAurora(canvas, options = {}) {
     if (newOpts.speedMultiplier !== undefined) speedMultiplier = newOpts.speedMultiplier
     if (newOpts.fps !== undefined) fps = newOpts.fps
     if (newOpts.intensity !== undefined) intensity = newOpts.intensity
-    if (newOpts.colors !== undefined) colors = newOpts.colors
+    if (newOpts.colors !== undefined) {
+      colors = newOpts.colors
+      colorsRgb = colors.map(hexToRgb)
+    }
     if (newOpts.paused !== undefined) {
       if (newOpts.paused) pause()
       else resume()

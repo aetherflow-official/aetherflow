@@ -45,9 +45,41 @@ export function createDeepSpace(canvas, options = {}) {
     }
   }
 
+  let backdropCanvas = null
+  let backdropCtx = null
+
+  function renderBackdrop(W, H) {
+    if (!backdropCanvas) {
+      backdropCanvas = document.createElement('canvas')
+    }
+    backdropCanvas.width = W
+    backdropCanvas.height = H
+    backdropCtx = backdropCanvas.getContext('2d')
+
+    // Radial background
+    const bg = backdropCtx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8)
+    bg.addColorStop(0, '#070012')
+    bg.addColorStop(0.4, '#040009')
+    bg.addColorStop(1, '#000005')
+    backdropCtx.fillStyle = bg
+    backdropCtx.fillRect(0, 0, W, H)
+
+    // Nebula clouds
+    nebulaColors.forEach((c, i) => {
+      const nx = W * (0.2 + i * 0.3)
+      const ny = H * (0.2 + (i % 2) * 0.5)
+      const ng = backdropCtx.createRadialGradient(nx, ny, 0, nx, ny, W * 0.25)
+      ng.addColorStop(0, c + '18')
+      ng.addColorStop(1, 'transparent')
+      backdropCtx.fillStyle = ng
+      backdropCtx.fillRect(0, 0, W, H)
+    })
+  }
+
   function resize() {
     canvas.width = canvas.offsetWidth || window.innerWidth
     canvas.height = canvas.offsetHeight || window.innerHeight
+    renderBackdrop(canvas.width, canvas.height)
     stars = Array.from({ length: starCount }, () => new Star(canvas.width, canvas.height))
   }
 
@@ -70,47 +102,39 @@ export function createDeepSpace(canvas, options = {}) {
     const W = canvas.width
     const H = canvas.height
 
-    // Background
-    const bg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8)
-    bg.addColorStop(0, '#070012')
-    bg.addColorStop(0.4, '#040009')
-    bg.addColorStop(1, '#000005')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
+    // Draw cached space backdrop
+    if (backdropCanvas) {
+      ctx.drawImage(backdropCanvas, 0, 0)
+    }
 
-    // Nebula clouds
-    nebulaColors.forEach((c, i) => {
-      const nx = W * (0.2 + i * 0.3)
-      const ny = H * (0.2 + (i % 2) * 0.5)
-      const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, W * 0.25)
-      ng.addColorStop(0, c + '18')
-      ng.addColorStop(1, 'transparent')
-      ctx.fillStyle = ng
-      ctx.fillRect(0, 0, W, H)
-    })
-
-    // Stars
-    for (const s of stars) {
+    // Stars (zero string allocations: reuse white color + primitive globalAlpha)
+    ctx.fillStyle = '#ffffff'
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i]
       s.twinkle += 0.03
-      const alpha = s.alpha * (0.85 + Math.sin(s.twinkle) * 0.15)
+      ctx.globalAlpha = s.alpha * (0.85 + Math.sin(s.twinkle) * 0.15)
       ctx.beginPath()
       ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`
       ctx.fill()
 
       s.y += s.speed
       if (s.y > H) s.reset(W, H)
     }
 
-    // Shooting stars
+    // Shooting stars (in-place array update: zero array allocations)
     spawnShooter()
-    shooters = shooters.filter(s => s.active)
-    for (const s of shooters) {
+    for (let i = shooters.length - 1; i >= 0; i--) {
+      const s = shooters[i]
+      if (!s.active) {
+        shooters.splice(i, 1)
+        continue
+      }
       const tx = s.x + Math.cos(s.angle) * s.len
       const ty = s.y + Math.sin(s.angle) * s.len
       const grad = ctx.createLinearGradient(s.x, s.y, tx, ty)
-      grad.addColorStop(0, `rgba(255,255,255,${s.alpha})`)
+      grad.addColorStop(0, '#ffffff')
       grad.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.globalAlpha = s.alpha
       ctx.beginPath()
       ctx.moveTo(s.x, s.y)
       ctx.lineTo(tx, ty)
@@ -123,6 +147,7 @@ export function createDeepSpace(canvas, options = {}) {
       s.alpha -= 0.015
       if (s.alpha <= 0 || s.x > W || s.y > H) s.active = false
     }
+    ctx.globalAlpha = 1
   }
 
   function start() {
@@ -135,6 +160,8 @@ export function createDeepSpace(canvas, options = {}) {
     if (animId) cancelAnimationFrame(animId)
     animId = null
     window.removeEventListener('resize', resize)
+    backdropCanvas = null
+    backdropCtx = null
   }
 
   function pause() {

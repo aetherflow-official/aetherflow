@@ -31,6 +31,7 @@ export function createCyberParticles(canvas, options = {}) {
       this.vy = (Math.random() - 0.5) * 0.8
       this.size = Math.random() * 2 + 1
       this.alpha = Math.random() * 0.5 + 0.3
+      this.fillStyle = `rgba(${rgb},${this.alpha})`
     }
   }
 
@@ -71,7 +72,8 @@ export function createCyberParticles(canvas, options = {}) {
     ctx.clearRect(0, 0, w, h)
 
     // Update + draw particles
-    for (const p of particles) {
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i]
       // Mouse repulsion
       if (mouseRepel) {
         const dx = p.x - mouse.x
@@ -96,30 +98,36 @@ export function createCyberParticles(canvas, options = {}) {
       if (p.y < 0) p.y = h
       if (p.y > h) p.y = 0
 
-      // Draw dot
+      // Draw dot (using cached fillStyle)
       ctx.beginPath()
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-      ctx.fillStyle = `rgba(${rgb},${p.alpha})`
+      ctx.fillStyle = p.fillStyle
       ctx.fill()
     }
 
-    // Draw connections
+    // Draw connections (zero string allocations: reuse color & primitive globalAlpha)
+    const connDistSq = connectionDistance * connectionDistance
+    ctx.strokeStyle = color
+    ctx.lineWidth = 0.8
+
     for (let i = 0; i < particles.length; i++) {
+      const pi = particles[i]
       for (let j = i + 1; j < particles.length; j++) {
-        const dx = particles[i].x - particles[j].x
-        const dy = particles[i].y - particles[j].y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        if (dist < connectionDistance) {
-          const alpha = (1 - dist / connectionDistance) * 0.4
+        const pj = particles[j]
+        const dx = pi.x - pj.x
+        const dy = pi.y - pj.y
+        const distSq = dx * dx + dy * dy
+        if (distSq < connDistSq) {
+          const dist = Math.sqrt(distSq)
+          ctx.globalAlpha = (1 - dist / connectionDistance) * 0.4
           ctx.beginPath()
-          ctx.moveTo(particles[i].x, particles[i].y)
-          ctx.lineTo(particles[j].x, particles[j].y)
-          ctx.strokeStyle = `rgba(${rgb},${alpha})`
-          ctx.lineWidth = 0.8
+          ctx.moveTo(pi.x, pi.y)
+          ctx.lineTo(pj.x, pj.y)
           ctx.stroke()
         }
       }
     }
+    ctx.globalAlpha = 1
   }
 
   function start() {
@@ -155,6 +163,9 @@ export function createCyberParticles(canvas, options = {}) {
     if (newOpts.color !== undefined) {
       color = newOpts.color
       rgb = hexToRgb(color)
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].fillStyle = `rgba(${rgb},${particles[i].alpha})`
+      }
     }
     if (newOpts.speedMultiplier !== undefined) speedMultiplier = newOpts.speedMultiplier
     if (newOpts.fps !== undefined) fps = newOpts.fps
