@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Monitor, Play, Square } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import {
