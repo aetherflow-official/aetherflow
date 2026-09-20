@@ -1,5 +1,13 @@
 # package_msix.ps1 — Build & Sign AetherFlow as an official Windows MSIX Package
 # Enables Windows Package Identity for full Task Manager grouping of all child processes.
+# Supports both local testing and Microsoft Store Partner Center packaging.
+
+param(
+    [string]$PackageName = "AetherFlow",
+    [string]$Publisher = "CN=AetherFlowDev",
+    [string]$PublisherDisplayName = "AetherFlow",
+    [switch]$SkipSign = $false
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -11,13 +19,16 @@ $SignTool = Join-Path $SDKBin "signtool.exe"
 if (-not (Test-Path $MakeAppx)) {
     Write-Error "MakeAppx.exe not found at $MakeAppx"
 }
-if (-not (Test-Path $SignTool)) {
+if (-not $SkipSign -and -not (Test-Path $SignTool)) {
     Write-Error "SignTool.exe not found at $SignTool"
 }
 
 Write-Host "==> [1/5] Checking Code Signing Certificate..." -ForegroundColor Cyan
-$PublisherName = "CN=AetherFlowDev"
-$Cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $PublisherName } | Select-Object -First 1
+$PublisherName = $Publisher
+$Cert = $null
+
+if (-not $SkipSign) {
+    $Cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq $PublisherName } | Select-Object -First 1
 
 if (-not $Cert) {
     Write-Host "Creating local trusted developer certificate for AetherFlow..." -ForegroundColor Yellow
@@ -43,6 +54,7 @@ if (-not $Cert) {
         $TrustedStore.Close()
     }
     Write-Host "Found trusted certificate: $($Cert.Thumbprint)" -ForegroundColor Green
+}
 }
 
 $TauriConf = Get-Content (Join-Path $ProjectRoot "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
@@ -95,14 +107,14 @@ $ManifestContent = @"
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="AetherFlow"
+    Name="$PackageName"
     Publisher="$PublisherName"
     Version="${AppVersion}.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>AetherFlow</DisplayName>
-    <PublisherDisplayName>AetherFlow</PublisherDisplayName>
+    <PublisherDisplayName>$PublisherDisplayName</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>AetherFlow — Lightweight live wallpaper and theme engine for Windows</Description>
   </Properties>
@@ -143,10 +155,14 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "MakeAppx pack failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "==> [5/5] Digitally Signing MSIX with SignTool..." -ForegroundColor Cyan
-& $SignTool sign /fd SHA256 /sha1 $Cert.Thumbprint /v $OutputMsix
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "SignTool failed with exit code $LASTEXITCODE"
+if (-not $SkipSign) {
+    Write-Host "==> [5/5] Digitally Signing MSIX with SignTool..." -ForegroundColor Cyan
+    & $SignTool sign /fd SHA256 /sha1 $Cert.Thumbprint /v $OutputMsix
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "SignTool failed with exit code $LASTEXITCODE"
+    }
+} else {
+    Write-Host "==> [5/5] Skipping signing step (Store will ingest and sign package automatically)..." -ForegroundColor Yellow
 }
 
 # Clean up layout staging directory to keep packages directory clean
