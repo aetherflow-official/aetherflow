@@ -336,8 +336,24 @@ pub struct ActiveWallpaperState {
 static ACTIVE_WALLPAPERS: Mutex<Option<HashMap<String, ActiveWallpaperState>>> = Mutex::new(None);
 
 pub mod mpv;
+pub mod mpv_ffi;
+pub mod mpv_player;
 pub mod taskbar;
 static MPV_PLAYERS: Mutex<Option<HashMap<String, mpv::MpvProcess>>> = Mutex::new(None);
+
+pub fn get_all_active_mpv_hwnds() -> Vec<usize> {
+    let mut hwnds = Vec::new();
+    if let Ok(guard) = MPV_PLAYERS.lock() {
+        if let Some(ref map) = *guard {
+            for proc in map.values() {
+                if proc.hwnd != 0 {
+                    hwnds.push(proc.hwnd);
+                }
+            }
+        }
+    }
+    hwnds
+}
 static MONITOR_APPLY_TICKETS: std::sync::LazyLock<Mutex<HashMap<String, u64>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -770,7 +786,9 @@ pub fn inspect_monitor_occlusion_states(app: &AppHandle) -> (HashMap<String, Mon
     if let Ok(guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *guard {
             for proc in map.values() {
-                mpv_pids.push(proc.child.id());
+                if let Some(child) = &proc.child {
+                    mpv_pids.push(child.id());
+                }
                 if proc.hwnd != 0 {
                     mpv_hwnds.push(proc.hwnd);
                 }
@@ -5889,7 +5907,7 @@ fn get_diagnostics(app: AppHandle) -> serde_json::Value {
         if let Some(ref map) = *guard {
             for (label, proc) in map {
                 mpv_status.insert(label.clone(), serde_json::json!({
-                    "pid": proc.child.id(),
+                    "pid": proc.pid(),
                     "pipe": proc.pipe_name,
                     "video": proc.video_path,
                 }));

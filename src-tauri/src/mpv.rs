@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::io::Write;
+use std::sync::Arc;
 
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
@@ -82,7 +83,8 @@ pub fn assign_child_to_mpv_job(child: &Child) {
 pub fn assign_child_to_mpv_job(_child: &Child) {}
 
 pub struct MpvProcess {
-    pub child: Child,
+    pub child: Option<Child>,
+    pub in_process: Option<Arc<crate::mpv_player::InProcessMpv>>,
     pub pipe_name: String,
     pub monitor_label: String,
     pub video_path: String,
@@ -92,6 +94,46 @@ pub struct MpvProcess {
 static IPC_REQ_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(100);
 
 pub fn send_ipc_cmd(pipe_name: &str, command: serde_json::Value) -> Result<(), String> {
+    if pipe_name.starts_with("inprocess:") {
+        let key = &pipe_name["inprocess:".len()..];
+        if let Some(ip) = crate::mpv_player::get_inprocess_player(key) {
+            if let Some(arr) = command.get("command").and_then(|c| c.as_array()) {
+                let cmd_name = arr.get(0).and_then(|v| v.as_str()).unwrap_or("");
+                match cmd_name {
+                    "set_property" => {
+                        let prop = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                        let val_str = match arr.get(2) {
+                            Some(serde_json::Value::String(s)) => s.clone(),
+                            Some(serde_json::Value::Bool(b)) => (if *b { "yes" } else { "no" }).to_string(),
+                            Some(serde_json::Value::Number(n)) => n.to_string(),
+                            Some(v) => v.to_string(),
+                            None => String::new(),
+                        };
+                        return ip.set_property(prop, &val_str);
+                    }
+                    "loadfile" => {
+                        let path = arr.get(1).and_then(|v| v.as_str()).unwrap_or("");
+                        return ip.load_file(path);
+                    }
+                    "seek" => {
+                        let sec = arr.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let mode = arr.get(2).and_then(|v| v.as_str()).unwrap_or("absolute");
+                        return ip.seek(sec, mode == "absolute+exact");
+                    }
+                    "quit" => {
+                        ip.terminate();
+                        return Ok(());
+                    }
+                    _ => {
+                        let cmd_str = command.to_string();
+                        return ip.command_string(&cmd_str);
+                    }
+                }
+            }
+        }
+        return Ok(());
+    }
+
     #[cfg(windows)]
     {
         let mut file = match std::fs::OpenOptions::new().write(true).open(pipe_name) {
@@ -123,6 +165,14 @@ pub fn send_ipc_cmd(pipe_name: &str, command: serde_json::Value) -> Result<(), S
 }
 
 pub fn query_ipc_property(pipe_name: &str, prop: &str) -> Option<serde_json::Value> {
+    if pipe_name.starts_with("inprocess:") {
+        let key = &pipe_name["inprocess:".len()..];
+        if let Some(ip) = crate::mpv_player::get_inprocess_player(key) {
+            return ip.query_property(prop);
+        }
+        return None;
+    }
+
     #[cfg(windows)]
     {
         use std::io::BufRead;
@@ -172,11 +222,22 @@ pub fn query_ipc_property(pipe_name: &str, prop: &str) -> Option<serde_json::Val
 }
 
 impl MpvProcess {
+    pub fn pid(&self) -> u32 {
+        if let Some(child) = &self.child {
+            child.id()
+        } else {
+            std::process::id()
+        }
+    }
+
     pub fn send_ipc_command(&self, command: serde_json::Value) -> Result<(), String> {
         send_ipc_cmd(&self.pipe_name, command)
     }
 
     pub fn set_speed(&self, speed: f64) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.set_speed(speed);
+        }
         let speed_clamped = speed.max(0.1).min(10.0);
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "speed", speed_clamped]
@@ -184,6 +245,9 @@ impl MpvProcess {
     }
 
     pub fn set_brightness(&self, brightness: f64) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.set_brightness(brightness);
+        }
         let mpv_br = ((brightness - 1.0) * 100.0).round().max(-100.0).min(100.0);
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "brightness", mpv_br]
@@ -191,12 +255,18 @@ impl MpvProcess {
     }
 
     pub fn set_pause(&self, paused: bool) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.set_pause(paused);
+        }
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "pause", paused]
         }))
     }
 
     pub fn seek(&self, seconds: f64, exact: bool) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.seek(seconds, exact);
+        }
         let mode = if exact { "absolute+exact" } else { "absolute" };
         self.send_ipc_command(serde_json::json!({
             "command": ["seek", seconds, mode]
@@ -204,6 +274,9 @@ impl MpvProcess {
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.set_volume(volume);
+        }
         let vol_clamped = volume.max(0.0).min(100.0);
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "volume", vol_clamped]
@@ -211,6 +284,9 @@ impl MpvProcess {
     }
 
     pub fn set_mute(&self, muted: bool) -> Result<(), String> {
+        if let Some(ref ip) = self.in_process {
+            return ip.set_mute(muted);
+        }
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "mute", muted]
         }))
@@ -218,23 +294,33 @@ impl MpvProcess {
 
     pub fn load_file(&mut self, new_video_path: &str) -> Result<(), String> {
         self.video_path = new_video_path.to_string();
+        if let Some(ref ip) = self.in_process {
+            return ip.load_file(new_video_path);
+        }
         self.send_ipc_command(serde_json::json!({
             "command": ["loadfile", new_video_path]
         }))
     }
 
     pub fn query_property(&self, prop: &str) -> Option<serde_json::Value> {
+        if let Some(ref ip) = self.in_process {
+            return ip.query_property(prop);
+        }
         query_ipc_property(&self.pipe_name, prop)
     }
 
     pub fn wait_for_playback(&mut self, max_wait_ms: u64) -> bool {
+        if let Some(ref ip) = self.in_process {
+            return ip.wait_for_playback(max_wait_ms);
+        }
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(max_wait_ms);
         while start.elapsed() < timeout {
-            // Check if child exited prematurely (e.g. yt-dlp error or stream unavailable)
-            if let Ok(Some(status)) = self.child.try_wait() {
-                log_mpv_msg(&format!("[MPV] Process for {} exited early during wait_for_playback: {:?}", self.monitor_label, status));
-                return false;
+            if let Some(ref mut child) = self.child {
+                if let Ok(Some(status)) = child.try_wait() {
+                    log_mpv_msg(&format!("[MPV] Process for {} exited early during wait_for_playback: {:?}", self.monitor_label, status));
+                    return false;
+                }
             }
 
             if let Some(val) = self.query_property("playback-time") {
@@ -264,10 +350,20 @@ impl MpvProcess {
     }
 
     pub fn terminate(&mut self) {
-        println!("[MPV] Terminating MPV process for monitor {}", self.monitor_label);
-        let _ = self.send_ipc_command(serde_json::json!({ "command": ["quit"] }));
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        println!("[MPV] Terminating MPV for monitor {}", self.monitor_label);
+        if let Some(ref ip) = self.in_process {
+            ip.terminate();
+            crate::mpv_player::unregister_inprocess_player(&self.pipe_name);
+            crate::mpv_player::unregister_inprocess_player(&self.monitor_label);
+        }
+
+        if self.child.is_some() {
+            let _ = self.send_ipc_command(serde_json::json!({ "command": ["quit"] }));
+            if let Some(ref mut child) = self.child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
 
         #[cfg(windows)]
         if self.hwnd != 0 {
@@ -716,8 +812,110 @@ pub fn spawn_mpv_wallpaper(
     ticket: Option<u64>,
     paused: Option<bool>,
 ) -> Result<MpvProcess, String> {
-    let mpv_exe = find_mpv_binary()?;
     let safe_label = monitor_label.replace("\\", "").replace(".", "_").replace(" ", "_");
+    let inproc_pipe_name = if let Some(t) = ticket {
+        format!("inprocess:{}-{}", safe_label, t)
+    } else {
+        format!("inprocess:{}", safe_label)
+    };
+
+    // ── 1. Attempt In-Process libmpv Video Engine First ───────────────────────
+    if let Ok(_lib) = crate::mpv_player::get_or_load_libmpv() {
+        println!("[MPV] Initializing In-Process libmpv video engine for monitor '{}'", monitor_label);
+        log_mpv_msg(&format!(
+            "[MPV] Initializing in-process libmpv: label='{}', bounds=({},{}) {}x{}, video='{}'",
+            monitor_label, mon_x, mon_y, mon_w, mon_h, video_path
+        ));
+
+        let existing_hwnds = crate::get_all_active_mpv_hwnds();
+        match crate::mpv_player::InProcessMpv::new(
+            video_path,
+            monitor_label,
+            mon_x,
+            mon_y,
+            mon_w,
+            mon_h,
+            volume,
+            muted,
+            speed,
+            brightness,
+            paused,
+            &existing_hwnds,
+        ) {
+            Ok(player) => {
+                let hwnd = player.hwnd;
+                #[cfg(windows)]
+                if hwnd != 0 {
+                    let h = hwnd as HWND;
+                    log_mpv_msg(&format!("[MPV] Located in-process MPV HWND: 0x{:X}", hwnd));
+                    dump_window_diagnostics("INPROCESS_MPV_PRE_LAYERED", h);
+                    use windows_sys::Win32::UI::WindowsAndMessaging::{
+                        GetWindowLongW, SetWindowLongW, SetLayeredWindowAttributes, SetWindowPos,
+                        ShowWindow, SW_SHOWNOACTIVATE,
+                        GWL_STYLE, GWL_EXSTYLE, WS_POPUP, WS_CAPTION, WS_THICKFRAME,
+                        WS_BORDER, WS_DLGFRAME, WS_SYSMENU, WS_MINIMIZE, WS_MAXIMIZE,
+                        WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+                        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_FRAMECHANGED,
+                        LWA_ALPHA
+                    };
+                    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+                    unsafe {
+                        windows_sys::Win32::UI::Shell::SetWindowSubclass(
+                            h,
+                            Some(crate::borderless_wallpaper_subclass_proc),
+                            2001,
+                            0,
+                        );
+
+                        let style = GetWindowLongW(h, GWL_STYLE) as u32;
+                        let new_style = (style | WS_POPUP) & !(WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZE | WS_MAXIMIZE | 0x10000000);
+                        SetWindowLongW(h, GWL_STYLE, new_style as i32);
+
+                        let ex = GetWindowLongW(h, GWL_EXSTYLE) as u32;
+                        let new_ex = (ex | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE) & !(WS_EX_APPWINDOW | 0x00000100 | 0x00000200 | 0x00000001 | 0x00020000);
+                        SetWindowLongW(h, GWL_EXSTYLE, new_ex as i32);
+
+                        let border_none: u32 = 0xFFFFFFFE;
+                        DwmSetWindowAttribute(h, 34, &border_none as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                        let ncr_disabled: u32 = 1;
+                        DwmSetWindowAttribute(h, 2, &ncr_disabled as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+                        let do_not_round: u32 = 1;
+                        DwmSetWindowAttribute(h, 33, &do_not_round as *const u32 as *const _, std::mem::size_of::<u32>() as u32);
+
+                        SetLayeredWindowAttributes(h, 0, 0, LWA_ALPHA);
+                        ShowWindow(h, SW_SHOWNOACTIVATE);
+                        SetWindowPos(h, std::ptr::null_mut(), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                    }
+                    dump_window_diagnostics("INPROCESS_MPV_POST_LAYERED", h);
+                }
+
+                crate::mpv_player::register_inprocess_player(&inproc_pipe_name, player.clone());
+                crate::mpv_player::register_inprocess_player(&safe_label, player.clone());
+
+                return Ok(MpvProcess {
+                    child: None,
+                    in_process: Some(player),
+                    pipe_name: inproc_pipe_name,
+                    monitor_label: monitor_label.to_string(),
+                    video_path: video_path.to_string(),
+                    hwnd,
+                });
+            }
+            Err(err) => {
+                log_mpv_msg(&format!(
+                    "[MPV WARN] Failed to spawn in-process libmpv: {}, falling back to external process",
+                    err
+                ));
+                eprintln!(
+                    "[MPV WARN] Failed to spawn in-process libmpv: {}, falling back to external process",
+                    err
+                );
+            }
+        }
+    }
+
+    // ── 2. Fallback to external MPV process if libmpv is unavailable ─────────
+    let mpv_exe = find_mpv_binary()?;
     let pipe_name = if let Some(t) = ticket {
         format!(r"\\.\pipe\aetherflow-mpv-{}-{}", safe_label, t)
     } else {
@@ -926,7 +1124,8 @@ pub fn spawn_mpv_wallpaper(
     let mpv_hwnd = 0usize;
 
     Ok(MpvProcess {
-        child,
+        child: Some(child),
+        in_process: None,
         pipe_name,
         monitor_label: monitor_label.to_string(),
         video_path: video_path.to_string(),

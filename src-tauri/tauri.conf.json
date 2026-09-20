@@ -40,6 +40,8 @@
       }
     },
     "resources": [
+      "bin/mpv/libmpv-2.dll",
+      "bin/mpv/mpv-2.dll",
       "bin/mpv/mpv.exe",
       "bin/mpv/AetherFlow-VideoEngine.exe",
       "bin/mpv/yt-dlp.exe"
