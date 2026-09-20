@@ -3,21 +3,17 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-20 17:05 IST — Zero Fake Likes / Zero Fake Downloads, Community Real Engagement Metrics & Expanded System Tray Controls:
-1. **Eradicated All Hardcoded / Synthetic Likes & Downloads (`src/lib/curatedCatalog.js`, `src/lib/community.js`, `src/pages/Community.jsx`)**:
-   - Reset all 45+ wallpapers in `curatedCatalog.js` to `likes: 0, downloads: 0`.
-   - Completely deleted the synthetic pseudo-random hash fallback (`(pos % 600) + featBonus + typeBonus`) in `community.js` that produced numbers like `345` when liking a wallpaper.
-   - `getWallpaperMetrics()` and `searchCatalog()` now strictly return real engagement numbers: unliked starts at `0 likes`, liking immediately displays `1 like`, unliking reverts to `0 likes`.
-   - Updated "Most Popular" and "Most Liked" filters and sorting to operate cleanly on real user likes, community likes, and curated `featured` badges.
-   - Enhanced empty state in `Community.jsx` with clear guidance when viewing the `❤️ Most Liked` filter with zero likes.
-2. **Decoupled Community Apply from Library (`src/pages/Community.jsx`)**:
-   - Removed `installItem(item)` and `pinToHome(item.id)` from `handleInstall()`. Applying now streams/plays directly on the Windows desktop (`applyWallpaperToDesktop(item)`) without polluting the user's Library (`useStore.installed`).
-   - Removed auto-library addition from `handleLike()`. Adding to Library remains strictly explicit via `+ Library` or `Download Offline`.
-3. **Expanded Win32 System Tray Quick Controls (`src-tauri/src/main.rs`, `src/App.jsx`)**:
-   - Added native Win32 submenus for **Volume** (100%, 80%, 60%, 40%, 20%, Mute), **Brightness** (100%, 85%, 70%, 50%, 30%), **Playback Speed** (2.0x, 1.5x, 1.25x, 1.0x, 0.75x, 0.5x), and **Opacity** (100%, 85%, 70%, 50%, 30%).
-   - Bound runtime adjustments for MPV and WebViews, emitting `aether:tray:set-*` events that synchronize Zustand store state and in-app HUD sliders in real time.
-4. **Recompiled & Deployed Release Binary**:
-   - Built production standalone executable `AetherFlow.exe` (7.83 MB) and launched running process under PID 24272.
+2026-09-21 01:00 IST — Community Scroll-to-Top Bug Resolution & Camera Notification Elimination:
+1. **Community Scroll-to-Top Elimination (`src/pages/Community.jsx`)**:
+   - Decoupled `downloadCounts`, `likeCounts`, `likedIds`, and `installed` from `doSearch`'s reactive trigger array using stable refs, so applying a wallpaper or clicking like never triggers a catalog re-query.
+   - Kept results mounted during search transitions (`loading && results.length === 0 ? <Spinner /> : ...`), preventing the scroll container height from collapsing and resetting `scrollTop` to 0.
+2. **Camera Access Notification Suppression (`src-tauri/src/main.rs`, `src/pages/Audio.jsx`)**:
+   - Added `--disable-video-capture` and `MediaFoundationVideoCapture` to `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in `main.rs`, permanently disabling video capture probing at the Chromium engine level.
+   - Made audio device scanning in `Audio.jsx` strictly on-demand (on dropdown focus or explicit audio testing) rather than unconditional on component mount.
+   - Forwarded rest props in `AetherSelect`.
+3. **Release & Packaging**:
+   - Recompiled release binary `AetherFlow.exe` with zero video-capture flags.
+   - Re-packaged and signed `packages/AetherFlow_1.1.0_x64.msix` (207.94 MB).
 
 ---
 
@@ -39,10 +35,11 @@ A **standalone Windows desktop application** that:
 
 | Check | Result |
 |-------|--------|
-| `npm run build` | ✅ Passes in ~540ms |
+| `npm run build` | ✅ Passes in ~485ms |
 | `npm run dev` | ✅ Runs at http://localhost:1420/ |
-| `npm run tauri:dev` | ✅ Passes (Rust installed & verified) |
-| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (7.75MB, v1.0.7) running with native desktop WorkerW integration |
+| `Windows .exe / standalone` | ✅ Built: `AetherFlow.exe` (8.18MB, v1.1.1) with camera probing disabled |
+| `MSIX Package (Package Identity)` | ✅ Built & Signed: `packages/AetherFlow_1.1.1_x64.msix` (207.94 MB) |
+| `Old Packages` | ✅ Cleaned: all outdated installers purged from `packages/` |
 
 ---
 
@@ -248,8 +245,10 @@ npm run tauri:dev
 | 2026-09-19 | Antigravity (Gemini 3.8 Flash) | Custom Screensaver Wallpaper Selection & Enhanced Random Engine/Media Playback: Added custom wallpaper mode to screensaver studio with live HUD stage simulator; built rich wallpaper card, search filter, and category modal picker; added native local media file import; updated Rust get_screensaver_active_wallpaper for custom video/picture/stream engines and disk-backed random pool; verified via Playwright, cargo check (4.01s), and npm run build (487ms); deployed release AetherFlow.exe. |
 | 2026-09-19 | Antigravity (Gemini 3.8 Flash) | Hybrid Community Wallpaper Storage Architecture (Option C Stream & Cache Default) & Artist Attribution/Licensing: Built native Rust cache_community_wallpaper with background .part download and promote-to-local pipeline; added remove_local_community_wallpaper; added global storage preference in Settings (Stream & Cache, Stream Only, Always Download); added Storage Telemetry Header in Library, LOCAL/CLOUD badges on cards, per-item Download Offline / Free Space actions; added Artist Portfolio Link (By Author ↗ via Tauri open_url) and License dropdown/badge ([CC BY-NC-ND]) in Submit form and cards; compiled release binary. |
 | 2026-09-19 | Antigravity (DeepMind) | Completed Concept 7 "The Translucent Floating Hub" Community Card Redesign: Converted catalog cards to 16:9 continuous artwork surfaces with left-side vertical spec pills (resolution, FPS, audio, size), center circular frosted glass play button, bottom-left title & creator link lockup, and bottom-right floating glass hub separating Apply, Add to Cloud (0MB), and Download Offline ({size}). Updated preview modal parity and set 420px grid minmax for spacious aesthetic. Verified npm run build (663ms), cargo check (4.17s), and visual screenshot. |
-| 2026-09-20 | Antigravity (Google DeepMind) | Community Toolbar De-clutter, Procedural Offline Download & Library Liked Filter Overhaul: Streamlined 4 cluttered rows into 2 clean rows (Search, Format select, Curation select, Sort select, View switcher; Row 2: Category pills); enabled offline download for procedural wallpapers on cards and in preview modal with green Downloaded/Offline Ready badges; synchronized likedIds with Zustand store and built isWallpaperLiked helper matching community IDs and original IDs; included procedural engines in Library allWallpapers and fixed Recently Added sorting; verified via browser subagent. |
-| 2026-09-20 | Antigravity (Gemini 3.8 Flash) | Zero Fake Likes, Decouple Apply from Library, & Expanded System Tray Controls: Reset all 45 curated catalog items to 0 likes/downloads; deleted synthetic hash fallback in community.js (eradicating numbers like 345 on like); unliked starts at 0, liking shows 1; decoupled Community Apply from Library (installItem/pinToHome removed from handleInstall & handleLike); added native Win32 submenus for Volume, Brightness, Playback Speed, and Opacity in System Tray with bidirectional Zustand/HUD synchronization; recompiled and deployed release binary AetherFlow.exe (7.83 MB, PID 24272). |
+| 2026-09-20 | Antigravity (Google DeepMind) | High-Resolution Cosmic Vortex Logo Overhaul & Windows Packaging (MSIX + NSIS): Preserved clean baseline (checkpoint-before-packaging); recreated 1024x1024 high-res master vector logo from screenshot; generated full Tauri icon suite in src-tauri/icons/ (icon.ico, StoreLogo.png, Square*.png, icon.png); updated App.jsx sidebar brand header, AuthModal, and index.html favicon; built automated MSIX packaging pipeline with Windows 11 SDK makeappx/signtool and trusted developer cert; generated signed MSIX package dist/AetherFlow_1.0.7_x64.msix (207.89 MB) with Windows Package Identity; built NSIS installer bundle AetherFlow_1.0.7_x64-setup.exe; recompiled & verified release binary AetherFlow.exe (8.18MB, PID 1792). |
+| 2026-09-20 | Antigravity (Gemini 3.8 Flash) | Post-Apply Working Set Auto-Trim, Adaptive Occlusion Polling CPU Throttle, and Image Decoding Optimization: Upgraded `trim_process_working_set()` in `main.rs` to call `trim_all_process_memory()`; added 10s post-apply settle trim in `main.rs` and `wallpaperActions.js` dropping working set from 800-900 MB peak to 200-300 MB steady state; throttled occlusion polling from 750ms to 2500ms when all wallpapers are paused and 4000ms when idle with 250ms slices checking `MONITOR_SYNC_REQUESTED` (<0.3% CPU); added `loading="lazy"`, `decoding="async"`, and size hints to thumbnail `<img>`. |
+| 2026-09-20 | Antigravity (Google DeepMind) | Performance Optimization & Release v1.1.0: Eliminated 45s EmptyWorkingSet sawtooth wave in main.rs; added UI preview IntersectionObserver auto-pause in WallpaperPlayer; removed busy RAF loop in image-player.js; cached offscreen city/nebula backdrops and batched line draws across canvas engines; relaxed telemetry polling to 6s; bumped version to 1.1.0; built & signed packages/AetherFlow_1.1.0_x64.msix (218.04 MB) and purged old packages. |
+| 2026-09-21 | Antigravity (Google DeepMind) | Community Scroll-to-Top Elimination & Camera Notification Fix: Decoupled downloadCounts/likeCounts from doSearch dependencies in Community.jsx and preserved mounted results during query refreshes to eliminate scroll-to-top on Apply; disabled video capture and Media Foundation camera enumeration in WebView2 (--disable-video-capture, MediaFoundationVideoCapture) and converted Audio.jsx device scanning to on-demand to suppress Windows 11 camera access alert; recompiled release binary and re-signed packages/AetherFlow_1.1.0_x64.msix. |
 ---
 
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*

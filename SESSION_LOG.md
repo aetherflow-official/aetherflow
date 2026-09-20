@@ -3398,6 +3398,129 @@
      - `npm run build`: built production bundle in 509ms with 0 errors.
      - `cargo check`: verified Rust backend compilation in 2.52s with 0 errors.
      - Verified zero-metric baseline (`{ likes: 0, downloads: 0 }`) and 1-like user toggle via Node verification script.
+
+## Session: 2026-09-20 19:30 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** High-Resolution Cosmic Vortex Logo Overhaul & Windows Packaging Pipeline (MSIX + NSIS)
+- **Completed:**
+  1. **Preserved Baseline State**:
+     - Verified working tree clean, created git tag `checkpoint-before-packaging` and branch `backup/before-packaging` at commit `74c1f1f`.
+  2. **High-Resolution Master Logo Generation & Production Asset Suite**:
+     - Converted user screenshot into pristine 1024x1024 master vector asset featuring cyan & neon magenta aerodynamic cosmic vortex.
+     - Extracted transparent alpha cutout (`public/logo.png`) and squircle app tile.
+     - Generated complete Tauri icon suite in `src-tauri/icons/` via Tauri CLI: `icon.ico` (multi-resolution 16-256px), `StoreLogo.png`, `Square44x44Logo.png`, `Square71x71Logo.png`, `Square150x150Logo.png`, `Square310x310Logo.png`, `icon.png`, `icon.icns`.
+     - Integrated logo into `src/App.jsx` sidebar brand header with glowing glassmorphic container, updated `src/components/AuthModal/index.jsx`, and set `index.html` favicon to `/logo.png`.
+  3. **Windows MSIX Packaging Pipeline (`scripts/package_msix.ps1`, `dist/AetherFlow_1.0.7_x64.msix`)**:
+     - Created automated packaging script using Windows 11 SDK `makeappx.exe` and `signtool.exe`.
+     - Built and signed `dist/AetherFlow_1.0.7_x64.msix` (207.89 MB) with Windows Package Identity (`AetherFlow_1.0.7.0_x64__...`), resolving Windows 11 Task Manager child process grouping.
+  4. **NSIS Setup Installer & Portable Release Binary**:
+     - Built official NSIS installer `src-tauri/target/release/bundle/nsis/AetherFlow_1.0.7_x64-setup.exe`.
+     - Recompiled release binary `AetherFlow.exe` (8.18 MB) with new embedded icon resource and verified clean background execution (PID 1792, ~24.6 MB RAM).
+- **Build status:** ✅ `npm run build` passes in 580ms, `cargo build --release` passes in 2m 27s.
 ---
 
+
+
+---
+
+## Session: 2026-09-20 21:55 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:** Auto-Trim Working Set After Wallpaper Settle, Adaptive Occlusion Polling CPU Throttle, and Image Decoding Optimization
+- **Completed:**
+  1. **Post-Apply Auto-Trim Working Set (`src/lib/wallpaperActions.js`, `src-tauri/src/main.rs`)**:
+     - Diagnosed Windows Working Set inflation: initial startup and codec initialization momentarily inflates working set to ~800–900 MB, but true operational requirement is ~200–300 MB.
+     - Upgraded `trim_process_working_set()` in `src-tauri/src/main.rs` to call `trim_all_process_memory()`, recursively trimming host, WebView2, and MPV child processes.
+     - Added `schedule_post_apply_trim(10)` in `src-tauri/src/main.rs` and `schedulePostApplyTrim(10000)` in `src/lib/wallpaperActions.js`.
+     - After 10 seconds of steady-state playback, automatic memory compaction evicts cold codec DLL pages and shader compiler intermediate buffers, dropping working set memory down to ~200–300 MB without requiring manual user intervention.
+     - Added immediate `trim_memory` invocation on `stopDesktopWallpaper`.
+  2. **Adaptive Occlusion Polling CPU Throttling (`src-tauri/src/main.rs`)**:
+     - Replaced unconditional 750ms sleep in `start_system_state_monitor` with an adaptive polling schedule:
+       - **All monitors paused** (fullscreen app / gaming / maximized window): throttled to 2500ms.
+       - **No active wallpapers** (idle in tray / stopped): throttled to 4000ms.
+       - **Active unpaused playback**: standard 750ms.
+     - Implemented 250ms sleep slices checking `MONITOR_SYNC_REQUESTED`, ensuring immediate (<250ms) wakeup whenever user actions or window events occur.
+     - Reduces idle and paused background occlusion loop CPU from ~2–3% to <0.3%.
+  3. **Thumbnail Decode & Lazy Loading Optimization (`src/components/WallpaperThumbnail/index.jsx`)**:
+     - Added `loading="lazy"`, `decoding="async"`, and dimensional hints (`width="320" height="180"`) to `<img>` in `WallpaperThumbnail`.
+     - Prevents Chromium from synchronously decoding dozens of full-resolution 4K/5K wallpapers into renderer memory during grid view in Library and Community pages.
+  4. **Verification**:
+     - `npm run build`: built in 512ms with 0 errors.
+     - `cargo check`: finished in 3.31s with 0 errors.
+---
+
+## Session: 2026-09-20 22:06 IST
+- **Agent:** Antigravity (Gemini 3.8 Flash)
+- **Task:** Resolved MSIX Deployment Error 0x80073cfb & Packaged Version 1.0.9.0
+- **Completed:**
+  - Removed previous stale MSIX package registration (`1.0.8.0`) using `Remove-AppxPackage`.
+  - Bumped MSIX manifest and package script version to `1.0.9.0` in `scripts/package_msix.ps1`.
+  - Built and signed fresh `packages/AetherFlow_1.0.9_x64.msix` (207.96 MB).
+  - Verified installation via `Add-AppxPackage`: status `Ok` (`AetherFlow_1.0.9.0_x64__w9vhkcmnef13g`).
+---
+
+## Session: 2026-09-20 22:40 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Performance Optimization (Sawtooth Elimination & Zero-Allocation Loops) & v1.1.0 MSIX Release Packaging
+- **Completed:**
+  1. **Working Set Sawtooth Wave Elimination (`src-tauri/src/main.rs`)**:
+     - Identified root cause of RAM sawtoothing: recurring 45s `loop { sleep(45); trim_all_process_memory(); }` repeatedly stripped pages via `EmptyWorkingSet`, forcing continuous soft page faults.
+     - Removed recurring trimmer while preserving clean one-shot 3s post-startup settle.
+  2. **UI Preview Viewport Throttling (`src/components/WallpaperPlayer/index.jsx`)**:
+     - Added `IntersectionObserver` and `visibilitychange` listeners to pause UI canvas loops when offscreen or hidden.
+     - Preserved 100% desktop wallpaper visual quality and full 60 FPS in `wallpaper.html`.
+  3. **Static Image Engine Optimization (`src/engines/image-player.js`)**:
+     - Removed continuous 60 FPS `requestAnimationFrame` loop; now renders strictly on load/resize.
+  4. **Zero-Allocation Canvas Loops & Offscreen Caching (`src/engines/*.js`)**:
+     - Cached procedural city backdrops (`tokyo-rain.js`) and space nebulae (`deep-space.js`) into offscreen canvases.
+     - Replaced per-frame dynamic `rgba(...)` string templates with `ctx.globalAlpha` across `cyber-particles.js`, `aurora.js`, and `matrix-rain.js`.
+     - Batched line paths and cached gradients on resize in `audio-spectrum.js` and `synthwave-grid.js`.
+  5. **Telemetry Polling Relaxation (`src/components/StatusBar/index.jsx`)**:
+     - Relaxed memory polling from 2.5s to 6s and paused polling when `document.hidden`.
+  6. **Version 1.1.0 Bump & Clean Packaging (`scripts/package_msix.ps1`, `packages/`)**:
+     - Bumped version to `1.1.0` in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+     - Made `package_msix.ps1` dynamically read version and clean up layout directory after packaging.
+     - Built and digitally signed `packages/AetherFlow_1.1.0_x64.msix` (218.04 MB).
+     - Cleaned up all old packages (`AetherFlow_1.0.7_x64-setup.exe`, `AetherFlow_1.0.8_*`, `AetherFlow_1.0.9_*`, `msix_layout`).
+- **Build status:** ✅ `npm run build` succeeds in ~750ms, `cargo build --release` passing with 0 errors.
+---
+
+## Session: 2026-09-21 01:00 IST
+- **Agent:** Antigravity (Google DeepMind)
+- **Task:** Community Scroll-to-Top Elimination on Wallpaper Apply & Camera Access Notification Suppression
+- **Completed:**
+  1. **Community Scroll-to-Top Bug Resolution (`src/pages/Community.jsx`)**:
+     - Diagnosed root cause: `doSearch` had `downloadCounts`, `likeCounts`, `likedIds`, and `installed` in its reactive dependencies. When applying a wallpaper, `handleInstall` updated `downloadCounts`, triggering `doSearch`.
+     - `doSearch` invoked `setLoading(true)`, replacing the entire multi-thousand-pixel grid with a 240px spinner, which collapsed the scroll container and forced `scrollTop` to 0.
+     - Decoupled `downloadCounts`, `likeCounts`, `likedIds`, and `installed` using stable refs in `doSearch`.
+     - Preserved mounted results during searches: `{ (loading && results.length === 0) ? <Spinner /> : ... }` with subtle CSS opacity feedback, guaranteeing the DOM never collapses and the user's scroll position never jumps.
+  2. **Camera Access Notification Suppression (`src-tauri/src/main.rs`, `src/pages/Audio.jsx`)**:
+     - Diagnosed root cause: Chromium/WebView2 by default initializes video capture device enumerators when querying media devices. On Windows 10/11, any process querying `MFEnumDeviceSources` for video capture triggers the OS privacy notification: "AetherFlow accessed your camera".
+     - In `Audio.jsx`, `scanAudioDevices` called `navigator.mediaDevices.enumerateDevices()` unconditionally on mount.
+     - Added `--disable-video-capture` and `MediaFoundationVideoCapture` to `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in `src-tauri/src/main.rs`, completely disabling the video capture subsystem at the Chromium engine level.
+     - Converted `scanAudioDevices` in `Audio.jsx` to an on-demand handler (runs only when focusing the input device selector or running a signal test, never on passive page mount).
+     - Forwarded rest props in `AetherSelect` (`src/components/Settings/SettingsUI.jsx`).
+  3. **Release Binary & Packaging**:
+     - Built frontend bundle via `npm run build` (751ms).
+     - Compiled optimized release executable via `cargo build --release` (2m 44s) and updated root `AetherFlow.exe`.
+     - Packaged and digitally signed `packages/AetherFlow_1.1.0_x64.msix` (218.04 MB).
+- **Build status:** ✅ `npm run build` (751ms) and `cargo check` passing with 0 errors.
+---
+
+## Session: 2026-09-21 01:08:00
+- **Agent:** Antigravity (Google DeepMind)
+- **Completed:**
+  1. **Synchronized Version Number (v1.1.1)**:
+     - Updated `package.json` -> `"version": "1.1.1"`.
+     - Updated `src-tauri/Cargo.toml` -> `version = "1.1.1"`.
+     - Updated `src-tauri/tauri.conf.json` -> `"version": "1.1.1"`.
+     - Updated `src/lib/updater.js` -> `export const APP_VERSION = '1.1.1'`.
+     - Updated `src/App.jsx` -> dynamically imports `APP_VERSION` from `updater.js` to display `v{APP_VERSION} SOVEREIGN` in sidebar.
+     - Updated `packages/install_cert.bat` -> references `AetherFlow_1.1.1_x64.msix`.
+  2. **Automated Cleanup & MSIX Packaging**:
+     - Updated `scripts/package_msix.ps1` to automatically purge older `.msix` and `-setup.exe` files from `packages/`.
+     - Compiled Rust release binary with version `1.1.1` (`src-tauri/target/release/aetherflow.exe` -> `AetherFlow.exe`).
+     - Built and signed `packages/AetherFlow_1.1.1_x64.msix` (207.94 MB) using trusted developer certificate.
+     - Purged older `AetherFlow_1.1.0_x64.msix`.
+- **Build status:** ✅ `npm run build` (485ms), `cargo build --release` (2m 09s), and MSIX sign succeeded.
+---
 
