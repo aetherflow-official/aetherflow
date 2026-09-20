@@ -2,6 +2,8 @@
   "name": "aetherflow",
   "private": true,
   "version": "1.0.7",
+  "author": "Yashpreet",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",

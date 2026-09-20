@@ -28,8 +28,12 @@ function getWallpaperTypeInfo(wallpaper) {
   const engineId = wallpaper.engine || wallpaper.id
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
   const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
-  const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
+  const isEngine = wallpaper.type === 'engine' || (Boolean(wallpaper.engine) && wallpaper.engine !== 'video-player' && wallpaper.engine !== 'image-player' && wallpaper.engine !== 'web-stream')
+  const isVideo = !isImage && !isStream && !isEngine && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
 
+  if (isEngine) {
+    return { label: 'Canvas 2D', color: 'var(--color-purple)', icon: Sparkles, type: 'canvas' }
+  }
   if (isStream) {
     const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
     const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)

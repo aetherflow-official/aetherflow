@@ -1,5 +1,5 @@
 # AetherFlow — Session Handoff File
-> **Updated:** 2026-09-18 18:05 IST | **Current Version:** `1.0.7` | **Active Branch:** `feature/library-redesign-preview-overhaul` | **Status:** ✅ COMPLETE — Eliminated Main Window Restore & Focus Stealing on Wallpaper Change; verified silent background wallpaper rotation during fullscreen video & gaming; release binary deployed (PID 20992).
+> **Updated:** 2026-09-20 04:15 IST | **Current Version:** `1.0.7` | **Status:** ✅ COMPLETE — Community Discovery Toolbar De-clutter (clean 2-row layout), Offline Download option for Procedural Wallpapers, and Library Liked Filter & Recently Added sorting fully implemented, tested, and verified.
 
 ---
 
@@ -58,6 +58,26 @@ We are building **AetherFlow** — a **high-performance, standalone Windows desk
 ---
 
 ## 🔍 Recent Major Achievements & Architectural Decisions
+
+### 0. Universal Search, Category Bar & 30 Community Procedural Engines
+- **Feature Overview**:
+  - **Universal Multi-Field Search**: Updated search algorithm in `src/lib/community.js` to index wallpaper name, description, author, category, format type, engine ID, and all tags. Typing keywords such as "anime", "space", "cyberpunk" now returns all matching wallpapers immediately.
+  - **First-Class Category Bar**: Built an interactive horizontal category navigation bar in `src/pages/Community.jsx` with 10 curated categories (`All Categories`, `Anime & Manga`, `Cyberpunk`, `Space & Cosmos`, `Nature`, `Retro Synth`, `City & Urban`, `Lofi & Chill`, `Abstract & Math`, `Gaming & Pixel`).
+  - **30 New Procedural Canvas 2D Engines**: Implemented 30 lightweight, zero-leak procedural animation engines in `src/engines/communityEngines.js` across Space, Cyberpunk, Anime/Nature, Abstract/Math, and Retro/Gaming pillars.
+  - **Home Page Isolation**: Tagged all 30 engines as `isCommunity: true` and excluded them from `WALLPAPER_LIST` in `src/engines/index.js`, keeping the Home page's default wallpaper list clean with only the 8 built-in engines.
+  - **Community Catalog Expansion**: Seeded all 30 procedural engines into `src/lib/curatedCatalog.js` with rich metadata, descriptions, category assignments, and `Vector 60FPS` / `Procedural Engine` badges. Total catalog count expanded to 66 wallpapers.
+  - **Dynamic Chunking**: Grouped community engines into a single lazy-loaded chunk (`communityEngines-*.js`, 31KB raw / 5.8KB gzip), maintaining sub-500ms initial app boot.
+
+### 0b. Custom Screensaver Wallpaper Selection & Enhanced Random Mode
+- **Feature Overview**:
+  - Expanded screensaver visual presentation modes to 5 options: Mirror Active Wallpaper (`current`), Custom Screensaver (`custom`), Procedural Engine (`specific`), Random Wallpaper (`random`), and OLED Blackout Sleep (`blackout`).
+  - Added Custom Screensaver section in Screensaver Studio (`src/pages/Screensaver.jsx`) displaying the currently selected wallpaper with preview artwork/video, type badge, title, and storage path.
+  - Implemented interactive modal wallpaper picker with real-time title search filtering and category pills (`All`, `Videos`, `Pictures`, `Streams`, `Procedural`), enabling 1-click wallpaper selection.
+  - Added direct local media file browsing (`.mp4`, `.webm`, `.mkv`, `.png`, `.jpg`, `.jpeg`, `.webp`) via native OS file dialog.
+  - Added `screensaverCustomWallpaper` with data-URL thumbnail sanitization to `useStore.js` and registered in `partialize` for restart persistence.
+  - Updated Rust `get_screensaver_active_wallpaper` in `src-tauri/src/main.rs` to resolve custom media and procedural engines cleanly.
+  - Upgraded `"random"` idle screensaver mode in Rust to read installed custom wallpapers from disk (`get_custom_wallpapers_file`) combined with procedural canvas engines, selecting non-repeating candidates upon idle.
+  - Updated widescreen simulator stage to render custom videos, pictures, streams, and canvas animations with real-time digital clock HUD.
 
 ### 1. Win32 Occlusion & Multi-Monitor Pausing Engine Overhaul (v1.0.7+)
 - **Problem**:
@@ -161,17 +181,21 @@ C:\Users\Yashpreet_o7\Desktop\AetherFlow\
 │   │   ├── aurora.js               ✅ Northern lights simulation
 │   │   ├── tokyo-rain.js           ✅ Procedural neon cyberpunk rain
 │   │   ├── audio-spectrum.js       ✅ Microphone-reactive CAVA-style visualizer
+│   │   ├── quantum-flux.js         ✅ Procedural interactive cyber hex matrix with energy waves & sparks
 │   │   ├── fps-meter.js            ✅ Telemetry HUD with rolling FPS graph
 │   │   ├── image-player.js         ✅ Picture wallpaper engine (PNG/JPG/WebP) with url fallback
 │   │   ├── video-player.js         ✅ MPV bridge engine
 │   │   └── web-stream.js           ✅ YouTube & live web stream engine with CORS fix
 │   ├── lib/
+│   │   ├── curatedCatalog.js       ✅ 15 curated wallpapers (60FPS video loops, procedural engines, 4K streams)
 │   │   ├── supabase.js             ✅ Offline-safe Supabase client & OAuth handlers
+│   │   ├── community.js            ✅ Community moderation & submission service
 │   │   ├── marketplace.js          ✅ Supabase direct RPC backend (likes, installs, submissions, stats)
 │   │   ├── updater.js              ✅ GitHub Releases auto-updater module (v1.0.7)
 │   │   └── wallpaperActions.js     ✅ Desktop wallpaper apply, pause, and IPC bridge
 │   ├── pages/
 │   │   ├── Home.jsx                ✅ Active wallpaper preview, hero card, controls, theme switcher
+│   │   ├── Community.jsx           ✅ Community Hub, catalog, submission & moderation UI
 │   │   ├── Marketplace.jsx         ✅ Browse, search, tag filter, direct 1-click apply, submit
 │   │   ├── Library.jsx             ✅ Installed wallpapers, custom media add, activate/uninstall
 │   │   └── Settings.jsx            ✅ Performance controls, taskbar styling, theme studio, account, updates

@@ -714,6 +714,7 @@ pub fn spawn_mpv_wallpaper(
     brightness: Option<f64>,
     _opacity: Option<f64>,
     ticket: Option<u64>,
+    paused: Option<bool>,
 ) -> Result<MpvProcess, String> {
     let mpv_exe = find_mpv_binary()?;
     let safe_label = monitor_label.replace("\\", "").replace(".", "_").replace(" ", "_");
@@ -813,8 +814,15 @@ pub fn spawn_mpv_wallpaper(
         cmd.arg(format!("--brightness={}", mpv_br));
     }
 
+    // Playback pause state
+    if paused.unwrap_or(false) {
+        cmd.arg("--pause=yes");
+    } else {
+        cmd.arg("--pause=no");
+    }
+
     // Audio handling
-    if muted.unwrap_or(false) {
+    if muted.unwrap_or(false) || paused.unwrap_or(false) {
         cmd.arg("--mute=yes");
     } else {
         cmd.arg("--mute=no");

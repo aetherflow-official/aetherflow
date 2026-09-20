@@ -4,8 +4,10 @@ import {
   Search, Download, Globe, Image, MonitorPlay, Upload, Users, Palette,
   LogIn, Play, Check, Heart, Clock, CheckCircle, XCircle, FileText,
   Award, Eye, X, FolderPlus, Shield, ShieldCheck, ShieldAlert, Trash2,
-  Star, Lock, Unlock, AlertTriangle, RefreshCw, Filter, Sparkles,
-  LayoutGrid, List, SlidersHorizontal, ShieldX, Volume2, VolumeX
+  Star, AlertTriangle, RefreshCw, Filter, Sparkles,
+  LayoutGrid, List, SlidersHorizontal, ShieldX, Volume2, VolumeX, UserPlus,
+  Video, FileUp, Music, FolderOpen, ExternalLink,
+  Cloud, HardDrive, DownloadCloud
 } from 'lucide-react'
 import {
   searchCatalog,
@@ -23,28 +25,54 @@ import {
   removeCommunityWallpaper,
   toggleFeaturedWallpaper,
   checkIsAdmin,
-  verifyAdminPasscode,
   clearCatalogCache,
+  fetchCommunityAdmins,
+  addCommunityAdmin,
+  removeCommunityAdmin,
+  ROOT_OWNER_EMAIL,
+  COMMUNITY_MEDIA_LIMITS,
+  inspectMediaFile,
+  LICENSE_OPTIONS,
+  downloadCommunityWallpaper,
+  getWallpaperMetrics,
 } from '../lib/community.js'
 import { useStore } from '../store/useStore.js'
-import { applyWallpaperToDesktop } from '../lib/wallpaperActions.js'
+import { applyWallpaperToDesktop, isTauri, openExternalUrl } from '../lib/wallpaperActions.js'
 import { parseYouTubeId } from '../engines/web-stream.js'
+import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
 import UserAvatar from '../components/UserAvatar/index.jsx'
 
 const TAGS = ['anime', 'nature', 'city', 'space', 'minimal', 'retro', 'lofi', 'abstract', '4K', 'dark', 'neon', 'cyberpunk']
 
+const CATEGORIES = [
+  { id: 'all',       label: 'All Categories',  icon: Sparkles,          emoji: '✨' },
+  { id: 'anime',     label: 'Anime & Manga',   icon: Sparkles,          emoji: '🌸' },
+  { id: 'cyberpunk', label: 'Cyberpunk',       icon: Video,             emoji: '🌆' },
+  { id: 'space',     label: 'Space & Cosmos',  icon: Globe,             emoji: '🌌' },
+  { id: 'nature',    label: 'Nature',          icon: Image,             emoji: '🌿' },
+  { id: 'retro',     label: 'Retro Synth',     icon: MonitorPlay,       emoji: '🕹️' },
+  { id: 'city',      label: 'City & Urban',    icon: Globe,             emoji: '🏙️' },
+  { id: 'lofi',      label: 'Lofi & Chill',    icon: Music,             emoji: '🎧' },
+  { id: 'abstract',  label: 'Abstract & Math', icon: Palette,           emoji: '🔮' },
+  { id: 'gaming',    label: 'Gaming & Pixel',  icon: LayoutGrid,        emoji: '🎮' },
+  { id: 'minimal',   label: 'Minimal',         icon: SlidersHorizontal, emoji: '🕊️' },
+]
+
 const TYPE_FILTERS = [
   { id: '',        label: 'All',        icon: null },
+  { id: 'video',   label: 'Video Loop', icon: Video },
+  { id: 'engine',  label: 'Procedural', icon: Sparkles },
   { id: 'youtube', label: 'YouTube',    icon: MonitorPlay },
   { id: 'stream',  label: 'Web Stream', icon: Globe },
   { id: 'image',   label: 'Image',      icon: Image },
 ]
 
 const TYPE_BADGES = {
-  youtube: { label: 'YouTube', color: 'var(--color-rose)' },
-  stream:  { label: 'Stream',  color: 'var(--color-cyan)' },
-  image:   { label: 'Image',   color: 'var(--color-emerald)' },
-  video:   { label: 'Video',   color: 'var(--color-purple)' },
+  youtube: { label: 'YouTube',    color: 'var(--color-rose)' },
+  stream:  { label: 'Stream',     color: 'var(--color-cyan)' },
+  image:   { label: 'Image',      color: 'var(--color-emerald)' },
+  video:   { label: 'Video',      color: 'var(--color-purple)' },
+  engine:  { label: 'Procedural', color: 'var(--color-brand)' },
 }
 
 const STATUS_BADGES = {
@@ -58,6 +86,7 @@ export default function CommunityPage() {
   const [tab, setTab] = useState('browse')
   const [browseView, setBrowseView] = useState('grid') // 'grid' | 'compact'
   const [query, setQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedTags, setSelectedTags] = useState([])
   const [typeFilter, setTypeFilter] = useState('')
   const [filterMode, setFilterMode] = useState('all') // 'all' | 'featured' | 'community'
@@ -67,11 +96,14 @@ export default function CommunityPage() {
   const [stats, setStats] = useState({ totalWallpapers: 0, activeUsers: 0 })
 
   // Likes & Downloads state
-  const [likedIds, setLikedIds] = useState(new Set())
+  const storeLikedIds = useStore(s => s.likedWallpaperIds) || []
+  const [likedIds, setLikedIds] = useState(() => new Set(storeLikedIds))
   const [likeCounts, setLikeCounts] = useState({}) // wallpaperId -> count
   const [likingId, setLikingId] = useState(null)
   const [downloadCounts, setDownloadCounts] = useState({}) // wallpaperId -> count
   const [addingLibraryId, setAddingLibraryId] = useState(null)
+  const [downloadingIds, setDownloadingIds] = useState(() => new Set())
+  const [downloadProgress, setDownloadProgress] = useState({}) // wallpaperId -> percent
 
   // Live Preview Modal state
   const [previewItem, setPreviewItem] = useState(null)
@@ -86,14 +118,17 @@ export default function CommunityPage() {
   const [moderatingId, setModeratingId] = useState(null)
   const [actionNotice, setActionNotice] = useState(null)
 
+  // Team & Moderator Management state
+  const [adminsList, setAdminsList] = useState([])
+  const [loadingAdmins, setLoadingAdmins] = useState(false)
+  const [newAdminEmail, setNewAdminEmail] = useState('')
+  const [addingAdmin, setAddingAdmin] = useState(false)
+  const [adminError, setAdminError] = useState(null)
+  const [revokingAdminEmail, setRevokingAdminEmail] = useState(null)
+
   // Manage Catalog tab state
   const [manageSearch, setManageSearch] = useState('')
   const [quickTakedownInput, setQuickTakedownInput] = useState('')
-
-  // Admin passcode modal & status
-  const [showAdminModal, setShowAdminModal] = useState(false)
-  const [passcodeInput, setPasscodeInput] = useState('')
-  const [passcodeError, setPasscodeError] = useState(false)
 
   // Takedown confirm modal
   const [takedownTarget, setTakedownTarget] = useState(null)
@@ -115,17 +150,107 @@ export default function CommunityPage() {
   const audioVolume = useStore(s => s.audioVolume) ?? 50
   const [applyingId, setApplyingId] = useState(null)
 
-  // Admin store persistence
-  const communityAdminUnlocked = useStore(s => s.communityAdminUnlocked)
-  const setCommunityAdminUnlocked = useStore(s => s.setCommunityAdminUnlocked)
-  const isAdmin = checkIsAdmin(authUser, communityAdminUnlocked)
+  const isAdmin = checkIsAdmin(authUser)
 
   // Submit form state
   const [submitForm, setSubmitForm] = useState({
-    title: '', description: '', type: 'youtube', source: '', tags: [], authorName: '',
+    title: '', description: '', type: 'video', source: '', tags: [], authorName: '',
+    authorPortfolio: '', license: 'CC BY-NC-ND 4.0',
   })
+  const [selectedMediaFile, setSelectedMediaFile] = useState(null)
+  const [mediaInspection, setMediaInspection] = useState(null)
+  const [inspectingMedia, setInspectingMedia] = useState(false)
+  const [inspectError, setInspectError] = useState(null)
+  const [uploadProgress, setUploadProgress] = useState(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState(null)
+
+  const handleMediaSelection = async (fileOrPath) => {
+    if (!fileOrPath) return
+    setInspectingMedia(true)
+    setInspectError(null)
+    try {
+      const inspection = await inspectMediaFile(fileOrPath)
+      setSelectedMediaFile(fileOrPath)
+      setMediaInspection(inspection)
+      setSubmitForm(f => {
+        const rawName = inspection.name || (fileOrPath?.name || (typeof fileOrPath === 'string' ? fileOrPath.split(/[/\\]/).pop() : ''))
+        const autoTitle = rawName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim()
+        return {
+          ...f,
+          title: f.title.trim() ? f.title : autoTitle,
+          type: inspection.type,
+        }
+      })
+    } catch (err) {
+      console.warn('Media inspection error:', err)
+      setInspectError(err.message || 'Failed to inspect file')
+      setSelectedMediaFile(null)
+      setMediaInspection(null)
+    } finally {
+      setInspectingMedia(false)
+    }
+  }
+
+  const handleBrowseComputer = async () => {
+    if (isTauri()) {
+      try {
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        const isVid = submitForm.type === 'video'
+        const selected = await open({
+          multiple: false,
+          filters: isVid
+            ? [{ name: 'Video Loops (*.mp4, *.webm)', extensions: ['mp4', 'webm', 'mov', 'mkv'] }]
+            : [{ name: 'Pictures (*.png, *.jpg, *.webp)', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }]
+        })
+        if (selected && typeof selected === 'string') {
+          await handleMediaSelection(selected)
+          return
+        }
+      } catch (err) {
+        console.warn('[Community] Native file picker error:', err)
+      }
+    }
+    fileInputRef.current?.click()
+  }
+
+  const handleDropMedia = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer?.files?.[0]
+    if (file) handleMediaSelection(file)
+  }
+
+  // Native Tauri drag-and-drop support: captures absolute Windows path directly
+  useEffect(() => {
+    if (!isTauri()) return
+    let unlisten = null
+    import('@tauri-apps/api/webviewWindow')
+      .then(({ getCurrentWebviewWindow }) => {
+        const appWindow = getCurrentWebviewWindow()
+        return appWindow.onDragDropEvent((event) => {
+          if (event.payload.type === 'drop') {
+            setIsDragOver(false)
+            const paths = event.payload.paths
+            if (paths && paths.length > 0) {
+              handleMediaSelection(paths[0])
+            }
+          } else if (event.payload.type === 'over') {
+            setIsDragOver(true)
+          } else if (event.payload.type === 'leave') {
+            setIsDragOver(false)
+          }
+        })
+      })
+      .then(fn => { unlisten = fn })
+      .catch(() => {})
+
+    return () => {
+      if (typeof unlisten === 'function') unlisten()
+    }
+  }, [])
 
   // Toast notification helper
   const showNotice = (msg, type = 'success') => {
@@ -136,16 +261,22 @@ export default function CommunityPage() {
   // Fetch wallpapers
   const doSearch = useCallback(async (forceRefresh = false) => {
     setLoading(true)
+    const installedSet = new Set((installed || []).map(i => i?.id || i?.communityMeta?.originalId).filter(Boolean))
     const data = await searchCatalog({
       query,
+      category: selectedCategory,
       tags: selectedTags,
       type: typeFilter,
       filterMode,
       sortMode,
+      likeCounts,
+      downloadCounts,
+      likedIds,
+      installedIds: installedSet,
     })
     setResults(data)
     setLoading(false)
-  }, [query, selectedTags, typeFilter, filterMode, sortMode])
+  }, [query, selectedCategory, selectedTags, typeFilter, filterMode, sortMode, likeCounts, downloadCounts, likedIds, installed])
 
   useEffect(() => {
     const timer = setTimeout(doSearch, 200)
@@ -165,14 +296,16 @@ export default function CommunityPage() {
     loadStatsAndCounts()
   }, [loadStatsAndCounts])
 
-  // Fetch user likes when authenticated
+  // Fetch user likes when authenticated or sync from local store
   useEffect(() => {
     if (isAuthenticated) {
-      getUserLikes().then(ids => setLikedIds(new Set(ids))).catch(() => {})
+      getUserLikes().then(ids => {
+        setLikedIds(new Set([...(ids || []), ...(storeLikedIds || [])]))
+      }).catch(() => {})
     } else {
-      setLikedIds(new Set())
+      setLikedIds(new Set(storeLikedIds || []))
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, storeLikedIds])
 
   // Fetch my submissions when tab switches
   useEffect(() => {
@@ -205,15 +338,43 @@ export default function CommunityPage() {
     }
   }, [isAdmin, loadPendingQueue])
 
+  // Fetch team & moderators list
+  const loadAdminsList = useCallback(async (force = false) => {
+    if (!isAdmin) return
+    setLoadingAdmins(true)
+    setAdminError(null)
+    try {
+      const list = await fetchCommunityAdmins(force)
+      setAdminsList(list || [])
+    } catch (e) {
+      console.warn('Failed to load admins list:', e)
+    } finally {
+      setLoadingAdmins(false)
+    }
+  }, [isAdmin])
+
+  useEffect(() => {
+    if (isAdmin && tab === 'manage') {
+      loadAdminsList()
+    }
+  }, [isAdmin, tab, loadAdminsList])
+
   const toggleTag = (tag) => setSelectedTags(prev =>
     prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
   )
 
+  const isItemLikedByUser = useCallback((item) => {
+    if (!item) return false
+    const rawId = item.id || ''
+    const altId = rawId.startsWith('community-') ? rawId.replace('community-', '') : `community-${rawId}`
+    const origId = item.communityMeta?.originalId
+    return likedIds.has(rawId) || likedIds.has(altId) || (Boolean(origId) && likedIds.has(origId))
+  }, [likedIds])
+
   const handleLike = async (wallpaperId) => {
-    if (!isAuthenticated) {
-      setShowAuthModal(true)
-      return
-    }
+    // 1. Instantly toggle in global Zustand store for Library, Home, and local persistence
+    useStore.getState().toggleLikeWallpaper(wallpaperId)
+
     const wasLiked = likedIds.has(wallpaperId)
     setLikedIds(prev => {
       const next = new Set(prev)
@@ -227,26 +388,40 @@ export default function CommunityPage() {
         [wallpaperId]: Math.max(0, base + (wasLiked ? -1 : 1)),
       }
     })
+
+    // 2. Sync to Supabase if authenticated (liking does NOT auto-add to Library)
+    if (!isAuthenticated) return
     setLikingId(wallpaperId)
-    const result = await toggleLike(wallpaperId)
-    if (result) {
-      setLikedIds(prev => {
-        const next = new Set(prev)
-        result.liked ? next.add(wallpaperId) : next.delete(wallpaperId)
-        return next
-      })
-      setLikeCounts(prev => ({ ...prev, [wallpaperId]: result.totalLikes }))
+    try {
+      const result = await toggleLike(wallpaperId)
+      if (result) {
+        setLikedIds(prev => {
+          const next = new Set(prev)
+          result.liked ? next.add(wallpaperId) : next.delete(wallpaperId)
+          return next
+        })
+        setLikeCounts(prev => ({ ...prev, [wallpaperId]: result.totalLikes }))
+      }
+    } catch (err) {
+      console.warn('[Community] Sync like to server skipped:', err)
+    } finally {
+      setLikingId(null)
     }
-    setLikingId(null)
   }
 
   const handleAddToLibrary = async (wallpaper) => {
     setAddingLibraryId(wallpaper.id)
     try {
       const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
-      const isStream = !isVideo && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
-      const resolvedEngine = isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player')
+      const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
+      const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player'))
       const targetVolume = audioVolume > 0 ? audioVolume : 50
+      const cleanAuthor = wallpaper.author || 'Community Contributor'
+      const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
+      const cleanLicense = wallpaper.license || 'CC BY-NC-ND 4.0'
+      const storageMode = useStore.getState().communityStorageMode || 'stream_and_cache'
+
       const item = {
         id: `community-${wallpaper.id}`,
         name: wallpaper.name,
@@ -256,8 +431,17 @@ export default function CommunityPage() {
         installedAt: Date.now(),
         preview: wallpaper.preview,
         tags: wallpaper.tags || ['community'],
+        remoteUrl: wallpaper.source,
+        localPath: isEngine ? 'builtin:canvas' : null,
+        storageStatus: isEngine ? 'downloaded' : 'cloud',
+        author: cleanAuthor,
+        authorPortfolio: cleanPortfolio,
+        license: cleanLicense,
+        mediaType: isEngine ? 'canvas' : (isVideo ? 'video' : (isStream ? 'stream' : 'image')),
         config: {
-          ...(isVideo
+          ...(isEngine
+            ? { speedMultiplier: 1, ...(wallpaper.config || {}) }
+            : isVideo
             ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
             : isStream
             ? {
@@ -272,14 +456,33 @@ export default function CommunityPage() {
           ),
         },
         communityMeta: {
-          author: wallpaper.author,
+          author: cleanAuthor,
+          authorPortfolio: cleanPortfolio,
+          license: cleanLicense,
           originalId: wallpaper.id,
           source: wallpaper.source,
+          hasAudio: Boolean(wallpaper.hasAudio || wallpaper.has_audio),
+          fileSize: wallpaper.fileSize || wallpaper.file_size || 0,
+          dimensions: wallpaper.dimensions || '',
+          mediaFormat: wallpaper.mediaFormat || wallpaper.media_format || '',
+          duration: wallpaper.duration || 0,
         },
       }
 
       installItem(item)
       setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
+
+      if (isVideo && storageMode === 'always_download') {
+        downloadCommunityWallpaper(wallpaper).then(res => {
+          if (res?.localPath) {
+            useStore.getState().updateInstalledStorage(item.id, {
+              localPath: res.localPath,
+              storageStatus: 'downloaded',
+              fileSize: res.fileSize,
+            })
+          }
+        }).catch(err => console.warn('[Community] Download failed:', err))
+      }
 
       setDownloadCounts(prev => {
         const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
@@ -290,7 +493,7 @@ export default function CommunityPage() {
       if (serverTotal !== null && serverTotal !== undefined) {
         setDownloadCounts(prev => ({ ...prev, [wallpaper.id]: serverTotal }))
       }
-      showNotice(`Added "${wallpaper.name}" to your Library!`)
+      showNotice(`Saved "${wallpaper.name}" to Library!`)
     } catch (err) {
       console.error('Failed to add wallpaper to library:', err)
     } finally {
@@ -298,15 +501,47 @@ export default function CommunityPage() {
     }
   }
 
-  const handleInstall = async (wallpaper) => {
-    setApplyingId(wallpaper.id)
-    try {
-      const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
-      const isStream = !isVideo && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
-      const resolvedEngine = isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player')
-      const targetVolume = audioVolume > 0 ? audioVolume : 50
+  const handleDownloadOffline = async (wallpaper) => {
+    if (!wallpaper) return
+    const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
+    const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
+    const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+    
+    if (isStream) {
+      showNotice(`"${wallpaper.name}" is an external live stream and does not support local offline file saving.`, 'info')
+      return
+    }
+
+    const targetId = `community-${wallpaper.id}`
+
+    // Procedural engines run natively: save to library and mark as 100% downloaded offline
+    if (isEngine) {
+      await handleAddToLibrary(wallpaper)
+      useStore.getState().updateInstalledStorage(targetId, {
+        storageStatus: 'downloaded',
+        localPath: 'builtin:canvas',
+        fileSize: 0,
+      })
+      setDownloadCounts(prev => {
+        const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
+        return { ...prev, [wallpaper.id]: base + 1 }
+      })
+      trackInstall(wallpaper.id).catch(() => {})
+      showNotice(`Downloaded "${wallpaper.name}" for 100% offline playback!`)
+      return
+    }
+
+    const resolvedEngine = isVideo ? 'video-player' : 'image-player'
+    const targetVolume = audioVolume > 0 ? audioVolume : 50
+    const cleanAuthor = wallpaper.author || 'Community Contributor'
+    const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
+    const cleanLicense = wallpaper.license || 'CC BY-NC-ND 4.0'
+
+    // 1. Ensure item exists in Library
+    let existingItem = (installed || []).find(i => i?.id === targetId || i?.communityMeta?.originalId === wallpaper.id)
+    if (!existingItem) {
       const item = {
-        id: `community-${wallpaper.id}`,
+        id: targetId,
         name: wallpaper.name,
         engine: resolvedEngine,
         type: 'wallpaper',
@@ -314,6 +549,12 @@ export default function CommunityPage() {
         installedAt: Date.now(),
         preview: wallpaper.preview,
         tags: wallpaper.tags || ['community'],
+        remoteUrl: wallpaper.source,
+        localPath: null,
+        storageStatus: 'cloud',
+        author: cleanAuthor,
+        authorPortfolio: cleanPortfolio,
+        license: cleanLicense,
         config: {
           ...(isVideo
             ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
@@ -330,17 +571,172 @@ export default function CommunityPage() {
           ),
         },
         communityMeta: {
-          author: wallpaper.author,
+          author: cleanAuthor,
+          authorPortfolio: cleanPortfolio,
+          license: cleanLicense,
           originalId: wallpaper.id,
           source: wallpaper.source,
+          hasAudio: Boolean(wallpaper.hasAudio || wallpaper.has_audio),
+          fileSize: wallpaper.fileSize || wallpaper.file_size || 0,
+          dimensions: wallpaper.dimensions || '',
+          mediaFormat: wallpaper.mediaFormat || wallpaper.media_format || '',
+          duration: wallpaper.duration || 0,
+        },
+      }
+      installItem(item)
+      setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
+    }
+
+    setDownloadingIds(prev => new Set(prev).add(wallpaper.id))
+    setDownloadProgress(prev => ({ ...prev, [wallpaper.id]: 0 }))
+    showNotice(`Downloading "${wallpaper.name}" for offline playback…`)
+
+    try {
+      const res = await downloadCommunityWallpaper(wallpaper, (progress) => {
+        if (progress && typeof progress.percent === 'number') {
+          setDownloadProgress(prev => ({ ...prev, [wallpaper.id]: Math.round(progress.percent) }))
+        }
+      })
+
+      if (res?.localPath) {
+        useStore.getState().updateInstalledStorage(targetId, {
+          localPath: res.localPath,
+          storageStatus: res.cached ? 'cached' : 'downloaded',
+          fileSize: res.fileSize,
+        })
+        showNotice(`Downloaded "${wallpaper.name}" to local disk for offline playback!`)
+      }
+
+      setDownloadCounts(prev => {
+        const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
+        return { ...prev, [wallpaper.id]: base + 1 }
+      })
+      trackInstall(wallpaper.id).then(total => {
+        if (total !== null && total !== undefined) {
+          setDownloadCounts(prev => ({ ...prev, [wallpaper.id]: total }))
+        }
+      }).catch(() => {})
+    } catch (err) {
+      console.error('[Community] Download offline error:', err)
+      showNotice(`Failed to download "${wallpaper.name}". It is still accessible via cloud stream.`, 'error')
+    } finally {
+      setDownloadingIds(prev => {
+        const next = new Set(prev)
+        next.delete(wallpaper.id)
+        return next
+      })
+      setDownloadProgress(prev => {
+        const next = { ...prev }
+        delete next[wallpaper.id]
+        return next
+      })
+    }
+  }
+
+  const handleInstall = async (wallpaper) => {
+    setApplyingId(wallpaper.id)
+    try {
+      const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
+      const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
+      const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player'))
+      const targetVolume = audioVolume > 0 ? audioVolume : 50
+      const cleanAuthor = wallpaper.author || 'Community Contributor'
+      const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
+      const cleanLicense = wallpaper.license || 'CC BY-NC-ND 4.0'
+      const storageMode = useStore.getState().communityStorageMode || 'stream_and_cache'
+
+      const item = {
+        id: `community-${wallpaper.id}`,
+        name: wallpaper.name,
+        engine: resolvedEngine,
+        type: 'wallpaper',
+        isCustom: true,
+        installedAt: Date.now(),
+        preview: wallpaper.preview,
+        tags: wallpaper.tags || ['community'],
+        remoteUrl: wallpaper.source,
+        localPath: null,
+        storageStatus: 'cloud',
+        author: cleanAuthor,
+        authorPortfolio: cleanPortfolio,
+        license: cleanLicense,
+        mediaType: isEngine ? 'canvas' : (isVideo ? 'video' : (isStream ? 'stream' : 'image')),
+        config: {
+          ...(isEngine
+            ? { speedMultiplier: 1, ...(wallpaper.config || {}) }
+            : isVideo
+            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
+            : isStream
+            ? {
+                streamUrl: wallpaper.source,
+                url: wallpaper.source,
+                streamType: wallpaper.type === 'youtube' ? 'youtube' : 'web',
+                muted: false,
+                volume: targetVolume,
+                speedMultiplier: 1,
+              }
+            : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
+          ),
+        },
+        communityMeta: {
+          author: cleanAuthor,
+          authorPortfolio: cleanPortfolio,
+          license: cleanLicense,
+          originalId: wallpaper.id,
+          source: wallpaper.source,
+          hasAudio: Boolean(wallpaper.hasAudio || wallpaper.has_audio),
+          fileSize: wallpaper.fileSize || wallpaper.file_size || 0,
+          dimensions: wallpaper.dimensions || '',
+          mediaFormat: wallpaper.mediaFormat || wallpaper.media_format || '',
+          duration: wallpaper.duration || 0,
         },
       }
 
-      installItem(item)
-      pinToHome(item.id)
+      if (isVideo && storageMode === 'always_download') {
+        showNotice(`Downloading "${wallpaper.name}" for offline playback…`)
+        try {
+          const res = await downloadCommunityWallpaper(wallpaper)
+          if (res?.localPath) {
+            item.localPath = res.localPath
+            item.storageStatus = res.cached ? 'cached' : 'downloaded'
+            item.config.videoPath = res.localPath
+          }
+        } catch (dlErr) {
+          console.warn('[Community] Pre-download error, falling back to stream:', dlErr)
+        }
+      }
+
+      // Applying from Community directly applies to Windows desktop without cluttering the user's Library
       setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
       setActiveWallpaper(item)
       await applyWallpaperToDesktop(item, { forceVolume: targetVolume, forceMuted: false })
+
+      if (isVideo && storageMode === 'stream_and_cache' && !item.localPath) {
+        downloadCommunityWallpaper(wallpaper).then(res => {
+          if (res?.localPath) {
+            const isInstalled = (useStore.getState().installed || []).some(i => i.id === item.id)
+            if (isInstalled) {
+              useStore.getState().updateInstalledStorage(item.id, {
+                localPath: res.localPath,
+                storageStatus: 'cached',
+                fileSize: res.fileSize,
+              })
+            }
+            const curDesk = useStore.getState().currentDesktopWallpaper
+            if (curDesk?.id === item.id) {
+              useStore.setState({
+                currentDesktopWallpaper: {
+                  ...curDesk,
+                  localPath: res.localPath,
+                  storageStatus: 'cached',
+                  config: { ...curDesk.config, videoPath: res.localPath },
+                }
+              })
+            }
+          }
+        }).catch(err => console.warn('[Community] Background caching failed:', err))
+      }
 
       setDownloadCounts(prev => {
         const base = prev[wallpaper.id] ?? wallpaper.downloads ?? 0
@@ -453,41 +849,92 @@ export default function CommunityPage() {
     }
   }
 
-  const handleUnlockAdmin = (e) => {
-    e.preventDefault()
-    if (verifyAdminPasscode(passcodeInput)) {
-      setCommunityAdminUnlocked(true)
-      setShowAdminModal(false)
-      setPasscodeInput('')
-      setPasscodeError(false)
-      showNotice('Admin Mode unlocked! Moderation tools are now active.')
-    } else {
-      setPasscodeError(true)
+  const handleAddModerator = async (e) => {
+    e?.preventDefault?.()
+    const targetEmail = newAdminEmail.trim().toLowerCase()
+    if (!targetEmail) return
+    setAddingAdmin(true)
+    setAdminError(null)
+    try {
+      const updated = await addCommunityAdmin(targetEmail)
+      setAdminsList(updated || [])
+      setNewAdminEmail('')
+      showNotice(`Granted moderator permissions to "${targetEmail}"!`)
+    } catch (err) {
+      setAdminError(err.message || 'Failed to add moderator.')
+      showNotice(err.message || 'Failed to add moderator.', 'error')
+    } finally {
+      setAddingAdmin(false)
     }
   }
 
-  const handleLockAdmin = () => {
-    setCommunityAdminUnlocked(false)
-    showNotice('Admin Mode locked.')
-    if (tab === 'moderation' || tab === 'manage') setTab('browse')
+  const handleRevokeModerator = async (admin) => {
+    if (!admin?.email) return
+    if (!window.confirm(`Are you sure you want to revoke moderator privileges from ${admin.email}?`)) {
+      return
+    }
+    setRevokingAdminEmail(admin.email)
+    setAdminError(null)
+    try {
+      const updated = await removeCommunityAdmin(admin.email)
+      setAdminsList(updated || [])
+      showNotice(`Revoked moderator privileges for "${admin.email}".`)
+    } catch (err) {
+      setAdminError(err.message || 'Failed to revoke moderator.')
+      showNotice(err.message || 'Failed to revoke moderator.', 'error')
+    } finally {
+      setRevokingAdminEmail(null)
+    }
   }
+
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!isAuthenticated) {
+      setShowAuthModal(true)
+      showNotice('Please sign in to submit your wallpaper to the community catalog.', 'error')
+      return
+    }
     setSubmitting(true)
     setSubmitResult(null)
+    setUploadProgress(null)
+
+    const isUploadType = submitForm.type === 'video' || submitForm.type === 'image'
+    if (isUploadType && !selectedMediaFile && !mediaInspection && !submitForm.source.trim()) {
+      setSubmitResult({ success: false, message: 'Please select or drag & drop a media file to upload.' })
+      setSubmitting(false)
+      return
+    }
+
     try {
       await submitWallpaper({
         ...submitForm,
         authorName: submitForm.authorName || authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0],
+        mediaFile: selectedMediaFile instanceof File ? selectedMediaFile : null,
+        mediaFilePath: mediaInspection?.filePath || (typeof selectedMediaFile === 'string' ? selectedMediaFile : null),
+        thumbnailBlob: mediaInspection?.thumbnailBlob,
+        mediaMetadata: mediaInspection || {},
+        onProgress: (prog) => setUploadProgress(prog),
       })
-      setSubmitResult({ success: true, message: 'Submitted! Your wallpaper is queued for review and will appear once approved by moderators.' })
-      setSubmitForm({ title: '', description: '', type: 'youtube', source: '', tags: [], authorName: '' })
+      setSubmitResult({
+        success: true,
+        message: 'Wallpaper uploaded & submitted! It is now queued in the Moderator Review Queue and will appear in the catalog once approved.',
+      })
+      setSubmitForm({
+        title: '', description: '', type: 'video', source: '', tags: [], authorName: '',
+        authorPortfolio: '', license: 'CC BY-NC-ND 4.0',
+      })
+      setSelectedMediaFile(null)
+      setMediaInspection(null)
+      setUploadProgress(null)
       if (isAdmin) loadPendingQueue()
     } catch (err) {
-      setSubmitResult({ success: false, message: err.message })
+      setSubmitResult({ success: false, message: err.message || 'Submission failed' })
     } finally {
       setSubmitting(false)
+      setUploadProgress(null)
     }
   }
 
@@ -502,6 +949,14 @@ export default function CommunityPage() {
       w.source?.toLowerCase().includes(q)
     )
   })
+
+  const hasActiveFilters = Boolean(
+    (selectedCategory && selectedCategory !== 'all') ||
+    Boolean(typeFilter) ||
+    (filterMode && filterMode !== 'all') ||
+    Boolean(query && query.trim()) ||
+    (selectedTags && selectedTags.length > 0)
+  )
 
   return (
     <div className="content-page-container animate-fadeIn">
@@ -561,35 +1016,11 @@ export default function CommunityPage() {
             </div>
           )}
 
-          {isAdmin ? (
-            <div className="flex items-center gap-1.5">
-              <div className="admin-badge-pill" style={{ height: 26, fontSize: 11 }}>
-                <ShieldCheck size={11} />
-                <span>Admin</span>
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={{ padding: '3px 8px', fontSize: 11, height: 26, display: 'flex', alignItems: 'center', gap: 4 }}
-                title="Lock Admin Mode"
-                onClick={handleLockAdmin}
-              >
-                <Unlock size={11} />
-                <span>Lock</span>
-              </button>
+          {isAdmin && (
+            <div className="admin-badge-pill" style={{ height: 26, fontSize: 11 }}>
+              <ShieldCheck size={11} />
+              <span>Admin</span>
             </div>
-          ) : (
-            <button
-              className="btn btn-ghost"
-              style={{ padding: '4px 10px', fontSize: 11, height: 28, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}
-              title="Enter Admin Passcode"
-              onClick={() => {
-                setPasscodeError(false)
-                setShowAdminModal(true)
-              }}
-            >
-              <Lock size={11} />
-              <span>Moderator Access</span>
-            </button>
           )}
         </div>
       </div>
@@ -634,16 +1065,17 @@ export default function CommunityPage() {
       {/* ── BROWSE TAB ── */}
       {tab === 'browse' && (
         <>
-          {/* Discovery Toolbar: Structured into Levels */}
-          <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* Level 1: Primary Search + Sort Dropdown */}
+          {/* Unified Discovery Toolbar */}
+          <div style={{ marginBottom: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Row 1: Search + Category + Format + Curation + Sort + View Mode */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
+              {/* Search Box */}
+              <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
                 <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search live wallpapers by title, creator, or keywords…"
+                  placeholder="Search wallpapers by title, tags, or creator…"
                   style={{
                     width: '100%', padding: '8px 12px 8px 36px',
                     background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
@@ -660,79 +1092,115 @@ export default function CommunityPage() {
                 )}
               </div>
 
+              {/* Category Dropdown */}
+              <select
+                value={selectedCategory}
+                onChange={e => setSelectedCategory(e.target.value)}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: selectedCategory !== 'all' ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+                  borderRadius: 7,
+                  padding: '7px 11px',
+                  fontSize: 12,
+                  color: selectedCategory !== 'all' ? 'var(--color-brand)' : 'var(--text-main)',
+                  fontWeight: selectedCategory !== 'all' ? 600 : 400,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  height: 36,
+                }}
+                title="Filter by category"
+              >
+                {CATEGORIES.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.emoji || '✨'} {cat.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Format / Type Dropdown */}
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: typeFilter ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+                  borderRadius: 7,
+                  padding: '7px 11px',
+                  fontSize: 12,
+                  color: typeFilter ? 'var(--color-brand)' : 'var(--text-main)',
+                  fontWeight: typeFilter ? 600 : 400,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  height: 36,
+                }}
+                title="Filter by content format"
+              >
+                <option value="">All Formats</option>
+                <option value="engine">⚡ Procedural Engines</option>
+                <option value="video">🎬 Video Loops</option>
+                <option value="youtube">📺 YouTube Live</option>
+                <option value="stream">🌐 Web Streams</option>
+                <option value="image">🖼️ Pictures / Art</option>
+              </select>
+
+              {/* Curation Filter Dropdown */}
+              <select
+                value={filterMode}
+                onChange={e => setFilterMode(e.target.value)}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: filterMode !== 'all' ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+                  borderRadius: 7,
+                  padding: '7px 11px',
+                  fontSize: 12,
+                  color: filterMode !== 'all' ? 'var(--color-brand)' : 'var(--text-main)',
+                  fontWeight: filterMode !== 'all' ? 600 : 400,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  height: 36,
+                }}
+                title="Filter curation"
+              >
+                <option value="all">All Wallpapers</option>
+                <option value="popular">🔥 Most Popular</option>
+                <option value="liked">❤️ Most Liked</option>
+                <option value="featured">⭐ Featured Only</option>
+                <option value="community">✨ Community Added</option>
+              </select>
+
               {/* Sort Selector */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="text-xs text-muted">Sort:</span>
-                <select
-                  value={sortMode}
-                  onChange={e => setSortMode(e.target.value)}
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 6,
-                    padding: '6px 10px',
-                    fontSize: 11.5,
-                    color: 'var(--text-main)',
-                    outline: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <option value="popular">Most Popular</option>
-                  <option value="newest">Newest First</option>
-                  <option value="likes">Most Liked</option>
-                  <option value="name">Alphabetical</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Level 2: Content Type Filters & Curation & View Mode */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                {/* Content Type Filter */}
-                <div className="flex gap-1">
-                  {TYPE_FILTERS.map(f => (
-                    <button
-                      key={f.id}
-                      className={`btn ${typeFilter === f.id ? 'btn-primary' : 'btn-ghost'}`}
-                      style={{ padding: '4px 10px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
-                      onClick={() => setTypeFilter(f.id)}
-                    >
-                      {f.icon && <f.icon size={11} />}
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Curation Filter: All, Featured, Community Added */}
-                <div className="flex gap-1" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: 8 }}>
-                  {[
-                    { id: 'all', label: 'All' },
-                    { id: 'featured', label: 'Featured', icon: Star },
-                    { id: 'community', label: 'Community Added', icon: Sparkles },
-                  ].map(m => (
-                    <button
-                      key={m.id}
-                      className={`btn ${filterMode === m.id ? 'btn-secondary' : 'btn-ghost'}`}
-                      style={{ padding: '4px 10px', fontSize: 11, height: 28, display: 'flex', alignItems: 'center', gap: 4 }}
-                      onClick={() => setFilterMode(m.id)}
-                    >
-                      {m.icon && <m.icon size={11} style={{ color: m.id === 'featured' ? 'var(--color-amber)' : 'var(--color-cyan)' }} />}
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <select
+                value={sortMode}
+                onChange={e => setSortMode(e.target.value)}
+                style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 7,
+                  padding: '7px 11px',
+                  fontSize: 12,
+                  color: 'var(--text-main)',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  height: 36,
+                }}
+                title="Sort order"
+              >
+                <option value="popular">Sort: Most Popular</option>
+                <option value="likes">Sort: Most Liked</option>
+                <option value="newest">Sort: Newest First</option>
+                <option value="name">Sort: Alphabetical</option>
+              </select>
 
               {/* View Mode Switcher */}
-              <div className="segmented-control">
+              <div className="segmented-control" style={{ height: 36 }}>
                 <button
                   type="button"
                   className={`segmented-item ${browseView === 'grid' ? 'active' : ''}`}
                   onClick={() => setBrowseView('grid')}
                   title="Grid Cards View"
-                  style={{ fontSize: 11, padding: '3px 8px' }}
+                  style={{ fontSize: 11.5, padding: '4px 10px' }}
                 >
-                  <LayoutGrid size={11} style={{ display: 'inline', marginRight: 4 }} />
+                  <LayoutGrid size={12} style={{ display: 'inline', marginRight: 4 }} />
                   <span>Cards</span>
                 </button>
                 <button
@@ -740,37 +1208,177 @@ export default function CommunityPage() {
                   className={`segmented-item ${browseView === 'compact' ? 'active' : ''}`}
                   onClick={() => setBrowseView('compact')}
                   title="Compact List View"
-                  style={{ fontSize: 11, padding: '3px 8px' }}
+                  style={{ fontSize: 11.5, padding: '4px 10px' }}
                 >
-                  <List size={11} style={{ display: 'inline', marginRight: 4 }} />
+                  <List size={12} style={{ display: 'inline', marginRight: 4 }} />
                   <span>List</span>
                 </button>
               </div>
             </div>
 
-            {/* Level 3: Curated Tags (Quiet row) */}
-            <div className="flex gap-1.5" style={{ flexWrap: 'wrap', alignItems: 'center', paddingTop: 2 }}>
-              <span className="text-xs text-subtle" style={{ marginRight: 2 }}>Tags:</span>
-              {TAGS.map(tag => (
+            {/* Active Filters Bar: Appears only when filtering, zero vertical clutter otherwise */}
+            {hasActiveFilters && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  padding: '2px 0',
+                }}
+              >
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+                  Active Filters:
+                </span>
+
+                {selectedCategory !== 'all' && (
+                  <span
+                    style={{
+                      background: 'rgba(var(--rgb-brand, 59, 130, 246), 0.15)',
+                      color: 'var(--color-brand)',
+                      border: '1px solid var(--color-brand)',
+                      borderRadius: 14,
+                      padding: '3px 9px',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>{CATEGORIES.find(c => c.id === selectedCategory)?.emoji} {CATEGORIES.find(c => c.id === selectedCategory)?.label || selectedCategory}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory('all')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center'
+                      }}
+                      title="Clear category filter"
+                    >
+                      <X size={11.5} />
+                    </button>
+                  </span>
+                )}
+
+                {typeFilter && (
+                  <span
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 14,
+                      padding: '3px 9px',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>Format: {TYPE_FILTERS.find(t => t.id === typeFilter)?.label || typeFilter}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTypeFilter('')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center'
+                      }}
+                      title="Clear format filter"
+                    >
+                      <X size={11.5} />
+                    </button>
+                  </span>
+                )}
+
+                {filterMode !== 'all' && (
+                  <span
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 14,
+                      padding: '3px 9px',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>
+                      {filterMode === 'popular' ? '🔥 Most Popular' :
+                       filterMode === 'liked' ? '❤️ Most Liked' :
+                       filterMode === 'featured' ? '⭐ Featured' : '✨ Community Added'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode('all')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center'
+                      }}
+                      title="Clear curation filter"
+                    >
+                      <X size={11.5} />
+                    </button>
+                  </span>
+                )}
+
+                {query && (
+                  <span
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 14,
+                      padding: '3px 9px',
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <span>"{query}"</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuery('')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        cursor: 'pointer', color: 'inherit', display: 'flex', alignItems: 'center'
+                      }}
+                      title="Clear search query"
+                    >
+                      <X size={11.5} />
+                    </button>
+                  </span>
+                )}
+
                 <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`badge ${selectedTags.includes(tag) ? 'badge-brand' : ''}`}
-                  style={{ cursor: 'pointer', border: '1px solid var(--border-subtle)', fontSize: 10.5, padding: '2px 8px' }}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory('all')
+                    setTypeFilter('')
+                    setFilterMode('all')
+                    setQuery('')
+                    setSelectedTags([])
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-brand)',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: '2px 6px',
+                  }}
                 >
-                  #{tag}
+                  Reset all filters
                 </button>
-              ))}
-              {selectedTags.length > 0 && (
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: 10, padding: '2px 6px', height: 22, color: 'var(--text-muted)' }}
-                  onClick={() => setSelectedTags([])}
-                >
-                  Clear tags
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Results Display */}
@@ -780,20 +1388,29 @@ export default function CommunityPage() {
             </div>
           ) : results.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-              <Palette size={44} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+              {filterMode === 'liked' ? (
+                <Heart size={44} style={{ margin: '0 auto 16px', opacity: 0.35, color: 'var(--color-rose, #f43f5e)' }} />
+              ) : (
+                <Palette size={44} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+              )}
               <div className="text-base font-semibold" style={{ marginBottom: 6, color: 'var(--text-main)' }}>
-                {query || selectedTags.length ? 'No wallpapers match your criteria' : 'No community wallpapers available'}
+                {filterMode === 'liked'
+                  ? 'No liked wallpapers yet'
+                  : (query || selectedTags.length || filterMode !== 'all' || selectedCategory !== 'all' || typeFilter ? 'No wallpapers match your criteria' : 'No community wallpapers available')}
               </div>
               <div className="text-xs text-subtle" style={{ maxWidth: 360, margin: '0 auto 16px' }}>
-                {query || selectedTags.length
-                  ? 'Try clearing some tags or search with broader terms.'
-                  : 'Be the first creator to share a wallpaper with the community!'}
+                {filterMode === 'liked'
+                  ? 'Click the heart icon on any wallpaper card to save it to your favorites.'
+                  : (query || selectedTags.length || filterMode !== 'all' || selectedCategory !== 'all' || typeFilter
+                      ? 'Try clearing some filters or search with broader terms.'
+                      : 'Be the first creator to share a wallpaper with the community!')}
               </div>
               <button
                 className="btn btn-primary"
                 style={{ fontSize: 12 }}
                 onClick={() => {
                   setQuery('')
+                  setSelectedCategory('all')
                   setSelectedTags([])
                   setTypeFilter('')
                   setFilterMode('all')
@@ -807,8 +1424,8 @@ export default function CommunityPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {results.map(item => {
                 const badge = TYPE_BADGES[item.type] || {}
-                const currentDownloads = Math.max(item.downloads || 0, downloadCounts[item.id] ?? 0)
-                const currentLikes = likeCounts[item.id] ?? item.likes ?? 0
+                const rowLiked = isItemLikedByUser(item)
+                const { likes: currentLikes, downloads: currentDownloads } = getWallpaperMetrics(item, likeCounts, downloadCounts, rowLiked)
                 const targetId = `community-${item.id}`
                 const isInstalled = (installed || []).some(i => i?.id === targetId || i?.communityMeta?.originalId === item.id)
                 const isCurrentlyApplied = isWallpaperRunning && (currentDesktopWallpaper?.id === targetId || activeWallpaper?.id === targetId)
@@ -868,10 +1485,61 @@ export default function CommunityPage() {
                         >
                           {badge.label || item.type}
                         </span>
+                        {item.hasAudio && (
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: 9.5,
+                              padding: '1px 5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              background: 'rgba(168,85,247,0.15)',
+                              color: 'var(--color-purple, #a855f7)',
+                              border: '1px solid rgba(168,85,247,0.3)',
+                            }}
+                          >
+                            <Music size={9} /> Audio
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                        by <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
-                        <span style={{ marginLeft: 8, color: 'var(--text-subtle)' }}>
+                      <div className="text-xs text-muted" style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>by</span>
+                        {item.authorPortfolio ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openExternalUrl(item.authorPortfolio)
+                            }}
+                            title={`Open ${item.author}'s portfolio (${item.authorPortfolio})`}
+                            style={{
+                              background: 'none', border: 'none', padding: 0,
+                              color: 'var(--color-brand)', fontWeight: 600, cursor: 'pointer',
+                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                              textDecoration: 'underline', textUnderlineOffset: 2,
+                              fontSize: 'inherit'
+                            }}
+                          >
+                            {item.author || 'Anonymous'} <ExternalLink size={10} />
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
+                        )}
+                        {item.license && (
+                          <span
+                            className="badge"
+                            title={LICENSE_OPTIONS.find(o => o.id === item.license)?.desc || item.license}
+                            style={{
+                              fontSize: 9.5, padding: '1px 5px', borderRadius: 4,
+                              background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)',
+                              border: '1px solid var(--border-subtle)', fontWeight: 600
+                            }}
+                          >
+                            {LICENSE_OPTIONS.find(o => o.id === item.license)?.badge || item.license}
+                          </span>
+                        )}
+                        <span style={{ color: 'var(--text-subtle)' }}>
                           • {currentDownloads} downloads • {currentLikes} likes
                         </span>
                       </div>
@@ -965,33 +1633,46 @@ export default function CommunityPage() {
               })}
             </div>
           ) : (
-            /* ── GRID CARDS VIEW (Editorial Experience) ── */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
+            /* ── GRID CARDS VIEW (Concept 7: The Translucent Floating Hub) ── */
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 24 }}>
               {results.map(item => {
-                const badge = TYPE_BADGES[item.type] || {}
-                const isLiked = likedIds.has(item.id)
-                const currentDownloads = Math.max(item.downloads || 0, downloadCounts[item.id] ?? 0)
-                const currentLikes = likeCounts[item.id] ?? item.likes ?? 0
+                const isLiked = isItemLikedByUser(item)
+                const { likes: currentLikes, downloads: currentDownloads } = getWallpaperMetrics(item, likeCounts, downloadCounts, isLiked)
 
                 const targetId = `community-${item.id}`
-                const isInstalled = (installed || []).some(i => i?.id === targetId || i?.communityMeta?.originalId === item.id)
+                const libraryItem = (installed || []).find(i => i?.id === targetId || i?.communityMeta?.originalId === item.id)
+                const isInstalledInLibrary = Boolean(libraryItem)
+                const isEngine = item.type === 'engine' || Boolean(item.engine)
+                const isLocallyCached = Boolean(libraryItem && (libraryItem.storageStatus === 'cached' || libraryItem.storageStatus === 'downloaded' || libraryItem.localPath || (isEngine && isInstalledInLibrary)))
                 const isCurrentlyApplied = isWallpaperRunning && (currentDesktopWallpaper?.id === targetId || activeWallpaper?.id === targetId)
                 const isApplying = applyingId === item.id
                 const isAddingLib = addingLibraryId === item.id
+                const isDownloading = downloadingIds.has(item.id)
+                const downloadPercent = downloadProgress[item.id] || 0
+                const isStreamItem = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
+                const isNoDownload = isStreamItem
+
+                // Spec calculations
+                const formatLabel = item.dimensions?.includes('3840') || item.tags?.includes('4K') || item.tags?.includes('4k')
+                  ? '4K UHD'
+                  : (item.dimensions ? item.dimensions : (item.type === 'video' ? '1080P FHD' : 'HD ART'))
+                const fpsOrDuration = item.duration ? `${item.duration}s • 60 FPS` : '60 FPS'
+                const fileSizeMb = item.fileSize
+                  ? Math.max(1, Math.round(item.fileSize / (1024 * 1024)))
+                  : (item.file_size ? Math.max(1, Math.round(item.file_size / (1024 * 1024))) : (item.type === 'video' ? 42 : 12))
+
+                const cleanAuthor = item.author || 'Community Artist'
+                const authorPortfolio = item.authorPortfolio || item.author_portfolio || ''
 
                 return (
-                  <div key={item.id} className="mp-card" style={{ position: 'relative' }}>
-                    {/* Thumbnail with overlay & preview trigger */}
-                    <div
-                      className="mp-thumb-container"
-                      onClick={() => setPreviewItem(item)}
-                      title={`Click to preview ${item.name}`}
-                    >
+                  <div key={item.id} className="hub-card">
+                    {/* 16:9 Artwork Background */}
+                    <div className="hub-card-media">
                       {item.preview ? (
                         <img
                           src={item.preview}
                           alt={item.name}
-                          className="mp-thumb-img"
+                          className="hub-card-img"
                           loading="lazy"
                         />
                       ) : (
@@ -999,279 +1680,284 @@ export default function CommunityPage() {
                           No preview available
                         </div>
                       )}
-
-                      {/* Top-Left: Featured Curated Badge */}
-                      {item.featured && (
-                        <div className="mp-badge-top-left">
-                          <div
-                            className="mp-pill-badge"
-                            style={{
-                              background: 'rgba(234, 179, 8, 0.9)',
-                              color: '#000',
-                              border: '1px solid rgba(255, 255, 255, 0.4)',
-                              fontWeight: 700,
-                              fontSize: 9.5,
-                            }}
-                          >
-                            <Star size={10} fill="#000" />
-                            <span>Featured</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Top-Right: Media Type Badge & Instant Admin Takedown */}
-                      <div className="mp-badge-top-right" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            className="btn btn-danger"
-                            style={{
-                              padding: '2px 7px',
-                              height: 22,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              borderRadius: 4,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 3,
-                              background: 'rgba(239, 68, 68, 0.88)',
-                              backdropFilter: 'blur(6px)',
-                              border: '1px solid rgba(255, 255, 255, 0.3)',
-                              color: '#ffffff',
-                              cursor: 'pointer',
-                              zIndex: 10,
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setTakedownTarget(item)
-                              setTakedownReason('')
-                            }}
-                            title="Instant Takedown"
-                          >
-                            <Trash2 size={11} />
-                            <span>Takedown</span>
-                          </button>
-                        )}
-                        <div
-                          className="mp-pill-badge"
-                          style={{
-                            background: 'rgba(15, 15, 20, 0.85)',
-                            color: badge.color || 'var(--text-main)',
-                            border: '1px solid rgba(255, 255, 255, 0.15)',
-                            fontSize: 10,
-                          }}
-                        >
-                          {badge.label || item.type}
-                        </div>
-                      </div>
-
-                      {/* Hover Center Overlay */}
-                      <div className="mp-thumb-overlay">
-                        <span className="mp-preview-pill">
-                          <Eye size={13} />
-                          <span>Live Preview</span>
-                        </span>
-                      </div>
                     </div>
 
-                    {/* Card Body */}
-                    <div style={{ padding: '14px 14px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <h3
-                            className="font-semibold text-sm"
-                            style={{
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              color: 'var(--text-main)',
-                            }}
-                            title={item.name}
-                          >
-                            {item.name}
-                          </h3>
-                          <div className="text-xs text-muted" style={{ marginTop: 2 }}>
-                            by <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
-                            {item.isCommunitySubmission && (
-                              <span style={{ marginLeft: 6, color: 'var(--color-cyan)', fontSize: 10, fontWeight: 600 }}>• Community</span>
-                            )}
-                          </div>
-                        </div>
+                    {/* Cinematic Scrim */}
+                    <div className="hub-card-scrim" />
 
-                        <button
-                          className={`mp-like-btn ${isLiked ? 'liked' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleLike(item.id)
-                          }}
-                          disabled={likingId === item.id}
-                          title={isLiked ? 'Unlike' : 'Like'}
-                        >
-                          <Heart size={11} fill={isLiked ? 'currentColor' : 'none'} />
-                          <span>{currentLikes}</span>
-                        </button>
-                      </div>
-
-                      {item.description && (
-                        <p
-                          className="text-xs text-muted"
+                    {/* Left-Side Vertical Spec Stack */}
+                    <div className="hub-specs-stack">
+                      {item.category && (
+                        <span
+                          className="hub-spec-pill"
                           style={{
-                            margin: '4px 0 8px',
-                            lineHeight: 1.4,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
+                            textTransform: 'uppercase',
+                            color: 'var(--color-brand)',
+                            borderColor: 'rgba(59, 130, 246, 0.4)',
+                            fontWeight: 700,
+                            letterSpacing: '0.04em',
                           }}
                         >
-                          {item.description}
-                        </p>
+                          {item.category}
+                        </span>
+                      )}
+                      <span className="hub-spec-pill">
+                        {formatLabel}
+                      </span>
+                      <span className="hub-spec-pill">
+                        {isEngine ? 'Procedural Engine' : (isStreamItem ? 'Live Stream' : fpsOrDuration)}
+                      </span>
+                      {item.hasAudio && (
+                        <span
+                          className="hub-spec-pill"
+                          style={{
+                            color: '#c084fc',
+                            borderColor: 'rgba(192, 132, 252, 0.35)',
+                            background: 'rgba(35, 18, 50, 0.65)',
+                          }}
+                        >
+                          <Music size={9.5} />
+                          <span>Audio Track</span>
+                        </span>
+                      )}
+                      {!isNoDownload && (
+                        <span className="hub-spec-pill">
+                          {fileSizeMb} MB
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Top-Right Badges & Controls */}
+                    <div className="hub-top-right">
+                      {item.featured && (
+                        <div
+                          className="hub-top-badge"
+                          style={{
+                            background: 'rgba(234, 179, 8, 0.92)',
+                            color: '#000',
+                            fontWeight: 700,
+                            boxShadow: '0 2px 8px rgba(234, 179, 8, 0.4)',
+                          }}
+                        >
+                          <Star size={9.5} fill="#000" />
+                          <span>Featured</span>
+                        </div>
                       )}
 
-                      {/* Tags & Downloads Row */}
-                      <div className="flex items-center justify-between gap-2" style={{ marginTop: 'auto', marginBottom: 10 }}>
-                        <div className="flex gap-1 truncate" style={{ maxWidth: '65%' }}>
-                          {item.tags?.slice(0, 2).map(t => (
-                            <span
-                              key={t}
-                              style={{
-                                fontSize: 9.5,
-                                padding: '1px 5px',
-                                borderRadius: 4,
-                                background: 'var(--bg-card-hover)',
-                                border: '1px solid var(--border-subtle)',
-                                color: 'var(--text-muted)',
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          style={{
+                            padding: '2px 8px',
+                            height: 22,
+                            fontSize: 9.5,
+                            fontWeight: 600,
+                            borderRadius: 999,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            background: 'rgba(239, 68, 68, 0.88)',
+                            backdropFilter: 'blur(8px)',
+                            WebkitBackdropFilter: 'blur(8px)',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setTakedownTarget(item)
+                            setTakedownReason('')
+                          }}
+                          title="Instant Admin Takedown"
+                        >
+                          <Trash2 size={10} />
+                          <span>Takedown</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className={`hub-like-btn ${isLiked ? 'liked' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleLike(item.id)
+                        }}
+                        disabled={likingId === item.id}
+                        title={isLiked ? 'Unlike' : 'Like'}
+                      >
+                        <Heart size={10.5} fill={isLiked ? 'currentColor' : 'none'} />
+                        <span>{currentLikes}</span>
+                      </button>
+                    </div>
+
+                    {/* Center Frosted Glass Play Trigger */}
+                    <button
+                      type="button"
+                      className="hub-center-play"
+                      onClick={() => setPreviewItem(item)}
+                      title={`Preview ${item.name}`}
+                      aria-label={`Preview ${item.name}`}
+                    >
+                      <Play size={20} fill="#ffffff" />
+                    </button>
+
+                    {/* Bottom Row: Title Lockup & Translucent Floating Hub */}
+                    <div className="hub-bottom-row">
+                      {/* Bottom-Left Title Lockup */}
+                      <div className="hub-title-lockup">
+                        <h3 className="hub-title-text" title={item.name}>
+                          {item.name}
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                          {authorPortfolio ? (
+                            <button
+                              type="button"
+                              className="hub-author-link"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openExternalUrl(authorPortfolio)
                               }}
+                              title={`Open ${cleanAuthor}'s portfolio (${authorPortfolio})`}
                             >
-                              #{t}
+                              <span>by {cleanAuthor}</span>
+                              <ExternalLink size={9.5} />
+                            </button>
+                          ) : (
+                            <span className="hub-author-link" style={{ cursor: 'default' }}>
+                              by {cleanAuthor}
                             </span>
-                          ))}
+                          )}
+                          {item.license && (
+                            <span
+                              className="hub-spec-pill"
+                              style={{
+                                padding: '1px 5px',
+                                fontSize: '8.5px',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1px solid rgba(255, 255, 255, 0.18)',
+                                borderRadius: 4,
+                                color: 'rgba(255, 255, 255, 0.75)',
+                                boxShadow: 'none',
+                              }}
+                              title={LICENSE_OPTIONS.find(o => o.id === item.license)?.desc || item.license}
+                            >
+                              {LICENSE_OPTIONS.find(o => o.id === item.license)?.badge || item.license}
+                            </span>
+                          )}
                         </div>
-                        <span className="text-xs text-subtle" style={{ fontSize: 10.5 }}>
-                          {currentDownloads} downloads
-                        </span>
                       </div>
 
-                      {/* Card Action Buttons: Library status & Apply status */}
-                      <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
-                        {/* 1. Library Status / Add Button */}
-                        {isInstalled ? (
-                          <div
-                            className="btn btn-ghost mp-btn-action"
-                            style={{
-                              flex: 1,
-                              padding: '0 6px',
-                              fontSize: 11,
-                              height: 32,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 4,
-                              color: 'var(--color-emerald)',
-                              border: '1px solid color-mix(in srgb, var(--color-emerald) 35%, transparent)',
-                              background: 'color-mix(in srgb, var(--color-emerald) 8%, transparent)',
-                              cursor: 'default',
-                            }}
-                            title="Installed in your permanent Library"
+                      {/* Bottom-Right Translucent Floating Hub */}
+                      <div className="hub-floating-dock" onClick={(e) => e.stopPropagation()}>
+                        <div className="hub-artist-header" style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-start' }}>
+                          <span style={{ fontSize: '8px', opacity: 0.65, flexShrink: 0 }}>BY</span>
+                          {authorPortfolio ? (
+                            <button
+                              type="button"
+                              className="hub-artist-header-link"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openExternalUrl(authorPortfolio)
+                              }}
+                              title={`Portfolio / Source: ${authorPortfolio}`}
+                              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cleanAuthor}</span>
+                              <ExternalLink size={7.5} style={{ flexShrink: 0 }} />
+                            </button>
+                          ) : (
+                            <span style={{ color: 'rgba(255,255,255,0.9)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                              {cleanAuthor}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 1. ▶ Apply */}
+                        {isCurrentlyApplied ? (
+                          <div className="hub-dock-btn hub-btn-apply active" title="Active live wallpaper on desktop">
+                            <Check size={11} />
+                            <span>Active</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="hub-dock-btn hub-btn-apply"
+                            disabled={isApplying || isDownloading}
+                            onClick={() => handleInstall(item)}
+                            title="Apply directly to desktop"
                           >
-                            <Check size={12} />
+                            {isApplying ? (
+                              <>
+                                <RefreshCw size={10.5} className="spin" />
+                                <span>Applying…</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play size={10} fill="currentColor" />
+                                <span>Apply</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* 2. 📁 Add to Library */}
+                        {isInstalledInLibrary ? (
+                          <div className="hub-dock-btn hub-btn-cloud saved" title="Saved to your Library">
+                            <Check size={11} />
                             <span>In Library</span>
                           </div>
                         ) : (
                           <button
-                            className="btn btn-secondary mp-btn-action"
-                            style={{ flex: 1, padding: '0 6px', fontSize: 11, height: 32 }}
+                            type="button"
+                            className="hub-dock-btn hub-btn-cloud"
                             disabled={isAddingLib || isApplying}
                             onClick={() => handleAddToLibrary(item)}
-                            title="Add to your permanent Library"
+                            title="Save to Library"
                           >
-                            <FolderPlus size={12} />
-                            <span>{isAddingLib ? 'Adding…' : '+ Library'}</span>
+                            {isAddingLib ? (
+                              <>
+                                <RefreshCw size={10.5} className="spin" />
+                                <span>Saving…</span>
+                              </>
+                            ) : (
+                              <>
+                                <FolderPlus size={11} />
+                                <span>+ Library</span>
+                              </>
+                            )}
                           </button>
                         )}
 
-                        {/* 2. Desktop Apply Status / Button */}
-                        {isCurrentlyApplied ? (
-                          <div
-                            className="btn btn-success mp-btn-action"
-                            style={{
-                              flex: 1.2,
-                              cursor: 'default',
-                              fontSize: 11,
-                              height: 32,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <Check size={12} /> Active
-                          </div>
-                        ) : (
-                          <button
-                            className="btn btn-primary mp-btn-action"
-                            style={{ flex: 1.2, padding: '0 6px', fontSize: 11, height: 32 }}
-                            disabled={isApplying || isAddingLib}
-                            onClick={() => handleInstall(item)}
-                            title="Apply directly to desktop"
-                          >
-                            {isApplying ? 'Applying…' : <><Play size={11} fill="currentColor" /> Apply</>}
-                          </button>
+                        {/* 3. ⬇ Download Offline (Only for downloadable files, NOT YouTube / Web Streams) */}
+                        {!isNoDownload && (
+                          isLocallyCached ? (
+                            <div className="hub-dock-btn hub-btn-download cached" title="Media downloaded to disk — ready for 100% offline playback">
+                              <Check size={11} />
+                              <span>Downloaded</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="hub-dock-btn hub-btn-download"
+                              disabled={isDownloading || isApplying}
+                              onClick={() => handleDownloadOffline(item)}
+                              title={isEngine ? 'Download engine for 100% offline playback' : `Download media file (${fileSizeMb}MB) for offline playback`}
+                            >
+                              {isDownloading ? (
+                                <>
+                                  <RefreshCw size={10.5} className="spin" />
+                                  <span>{downloadPercent > 0 ? `${downloadPercent}%` : 'Downloading…'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Download size={11} />
+                                  <span>Download {isEngine ? 'Offline' : `(${fileSizeMb}MB)`}</span>
+                                </>
+                              )}
+                            </button>
+                          )
                         )}
                       </div>
-
-                      {/* Admin Superpowers Footer */}
-                      {isAdmin && (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            paddingTop: 8,
-                            borderTop: '1px dashed color-mix(in srgb, var(--color-amber) 30%, var(--border-subtle))',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--color-amber)', textTransform: 'uppercase' }}>
-                            Admin
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              className="admin-action-btn"
-                              style={{
-                                background: item.featured ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)' : 'rgba(255,255,255,0.06)',
-                                color: item.featured ? 'var(--color-amber)' : 'var(--text-muted)',
-                                padding: '3px 6px',
-                                fontSize: 10,
-                              }}
-                              onClick={() => handleToggleFeature(item)}
-                              title={item.featured ? 'Remove from Featured' : 'Feature this wallpaper'}
-                            >
-                              <Star size={10} fill={item.featured ? 'currentColor' : 'none'} />
-                              <span>{item.featured ? 'Featured' : 'Feature'}</span>
-                            </button>
-
-                            <button
-                              className="admin-action-btn"
-                              style={{
-                                background: 'color-mix(in srgb, var(--color-rose) 12%, transparent)',
-                                color: 'var(--color-rose)',
-                                border: '1px solid color-mix(in srgb, var(--color-rose) 30%, transparent)',
-                                padding: '3px 6px',
-                                fontSize: 10,
-                              }}
-                              onClick={() => {
-                                setTakedownTarget(item)
-                                setTakedownReason('')
-                              }}
-                              title="Immediately remove wallpaper from community feed"
-                            >
-                              <Trash2 size={10} />
-                              <span>Take Down</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )
@@ -1284,6 +1970,199 @@ export default function CommunityPage() {
       {/* ── MANAGE & TAKEDOWNS TAB (Admin Only) ── */}
       {tab === 'manage' && isAdmin && (
         <div className="animate-fadeIn">
+          {/* ── Team & Moderators Management Card ── */}
+          <div
+            className="card"
+            style={{
+              padding: '20px 24px',
+              borderRadius: 12,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-main)',
+              marginBottom: 20,
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <div className="flex items-center gap-2">
+                <Users size={18} style={{ color: 'var(--color-brand)' }} />
+                <h2 className="font-semibold text-base" style={{ color: 'var(--text-main)' }}>
+                  Team & Community Moderators
+                </h2>
+                <span className="badge badge-brand" style={{ fontSize: 11, padding: '2px 8px' }}>
+                  {adminsList.length} active
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ height: 28, width: 28, padding: 4 }}
+                onClick={() => loadAdminsList(true)}
+                title="Refresh moderators list"
+                disabled={loadingAdmins}
+              >
+                <RefreshCw size={13} className={loadingAdmins ? 'animate-spin' : ''} />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted" style={{ marginBottom: 16, lineHeight: 1.5 }}>
+              Moderators have full authority to review pending submissions, approve wallpapers into the live catalog, and take down reported items. You can grant or revoke rights at any time without editing code.
+            </p>
+
+            {/* Add Moderator Bar */}
+            <form onSubmit={handleAddModerator} className="flex gap-2" style={{ marginBottom: 16 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <UserPlus size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="email"
+                  placeholder="Enter team member's email (e.g. colleague@gmail.com)..."
+                  value={newAdminEmail}
+                  onChange={e => {
+                    setNewAdminEmail(e.target.value)
+                    if (adminError) setAdminError(null)
+                  }}
+                  disabled={addingAdmin}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px 9px 34px',
+                    borderRadius: 8,
+                    background: 'var(--bg-base)',
+                    border: adminError ? '1px solid var(--color-rose)' : '1px solid var(--border-main)',
+                    color: 'var(--text-main)',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={addingAdmin || !newAdminEmail.trim()}
+                style={{ padding: '8px 18px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <UserPlus size={13} />
+                <span>{addingAdmin ? 'Granting…' : 'Grant Moderator Rights'}</span>
+              </button>
+            </form>
+
+            {adminError && (
+              <div className="text-xs" style={{ color: 'var(--color-rose)', marginBottom: 14 }}>
+                {adminError}
+              </div>
+            )}
+
+            {/* Moderators List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {adminsList.map(admin => {
+                const isOwner = admin.role === 'owner' || admin.email?.toLowerCase() === ROOT_OWNER_EMAIL.toLowerCase()
+                const isRevoking = revokingAdminEmail === admin.email
+                return (
+                  <div
+                    key={admin.email || admin.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      background: 'color-mix(in srgb, var(--bg-base) 60%, transparent)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2.5" style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: isOwner
+                            ? 'color-mix(in srgb, var(--color-amber) 20%, transparent)'
+                            : 'color-mix(in srgb, var(--color-brand) 20%, transparent)',
+                          color: isOwner ? 'var(--color-amber)' : 'var(--color-brand)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isOwner ? <ShieldCheck size={14} /> : <Shield size={14} />}
+                      </div>
+
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-xs text-main" style={{ wordBreak: 'break-all' }}>
+                            {admin.email}
+                          </span>
+                          {isOwner ? (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: 'color-mix(in srgb, var(--color-amber) 15%, transparent)',
+                                color: 'var(--color-amber)',
+                                border: '1px solid color-mix(in srgb, var(--color-amber) 30%, transparent)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Owner / Super Admin
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                background: 'color-mix(in srgb, var(--color-brand) 15%, transparent)',
+                                color: 'var(--color-brand)',
+                                border: '1px solid color-mix(in srgb, var(--color-brand) 30%, transparent)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Moderator
+                            </span>
+                          )}
+                        </div>
+                        {admin.added_by && (
+                          <div className="text-xs text-muted" style={{ fontSize: 11, marginTop: 1 }}>
+                            Added by: {admin.added_by}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ flexShrink: 0, marginLeft: 12 }}>
+                      {isOwner ? (
+                        <span className="text-xs text-muted" style={{ fontSize: 11 }}>
+                          Permanent
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={isRevoking}
+                          onClick={() => handleRevokeModerator(admin)}
+                          style={{
+                            color: 'var(--color-rose)',
+                            fontSize: 11,
+                            padding: '4px 10px',
+                            height: 26,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Trash2 size={12} />
+                          <span>{isRevoking ? 'Revoking…' : 'Revoke'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Quick Takedown Input Banner */}
           <div
             className="card"
@@ -1527,6 +2406,26 @@ export default function CommunityPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {pendingQueue.map(sub => {
                 const isWorking = moderatingId === sub.id
+                const subPreviewData = {
+                  id: sub.id,
+                  name: sub.title,
+                  description: sub.description,
+                  author: sub.author,
+                  type: sub.type,
+                  source: sub.source,
+                  preview: sub.preview,
+                  tags: sub.tags,
+                  downloads: 0,
+                  likes: 0,
+                  hasAudio: Boolean(sub.hasAudio || sub.has_audio),
+                  fileSize: sub.fileSize || sub.file_size || 0,
+                  dimensions: sub.dimensions || '',
+                  mediaFormat: sub.mediaFormat || sub.media_format || '',
+                  duration: sub.duration || 0,
+                  stagingPath: sub.stagingPath || sub.staging_path || '',
+                  githubAssetUrl: sub.githubAssetUrl || sub.github_asset_url || '',
+                }
+
                 return (
                   <div
                     key={sub.id}
@@ -1554,18 +2453,7 @@ export default function CommunityPage() {
                         flexShrink: 0,
                         cursor: 'pointer',
                       }}
-                      onClick={() => setPreviewItem({
-                        id: sub.id,
-                        name: sub.title,
-                        description: sub.description,
-                        author: sub.author,
-                        type: sub.type,
-                        source: sub.source,
-                        preview: sub.preview,
-                        tags: sub.tags,
-                        downloads: 0,
-                        likes: 0,
-                      })}
+                      onClick={() => setPreviewItem(subPreviewData)}
                       title="Click to live preview"
                     >
                       {sub.preview ? (
@@ -1592,7 +2480,7 @@ export default function CommunityPage() {
 
                     {/* Information */}
                     <div style={{ flex: 1, minWidth: 240 }}>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-sm" style={{ color: 'var(--text-main)' }}>
                           {sub.title}
                         </h3>
@@ -1607,6 +2495,37 @@ export default function CommunityPage() {
                         >
                           {sub.type}
                         </span>
+                        {sub.hasAudio && (
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: 10,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              background: 'rgba(168,85,247,0.15)',
+                              color: 'var(--color-purple, #a855f7)',
+                              border: '1px solid rgba(168,85,247,0.3)',
+                            }}
+                          >
+                            <Music size={10} /> Has Audio
+                          </span>
+                        )}
+                        {sub.fileSize > 0 && (
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-main)' }}>
+                            {(sub.fileSize / (1024 * 1024)).toFixed(1)} MB
+                          </span>
+                        )}
+                        {sub.dimensions && (
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-main)' }}>
+                            {sub.dimensions}
+                          </span>
+                        )}
+                        {sub.duration > 0 && (
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-main)' }}>
+                            {Math.round(sub.duration)}s
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-xs text-muted" style={{ marginTop: 4 }}>
@@ -1634,18 +2553,7 @@ export default function CommunityPage() {
                       <button
                         className="btn btn-secondary"
                         style={{ padding: '7px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
-                        onClick={() => setPreviewItem({
-                          id: sub.id,
-                          name: sub.title,
-                          description: sub.description,
-                          author: sub.author,
-                          type: sub.type,
-                          source: sub.source,
-                          preview: sub.preview,
-                          tags: sub.tags,
-                          downloads: 0,
-                          likes: 0,
-                        })}
+                        onClick={() => setPreviewItem(subPreviewData)}
                       >
                         <Eye size={13} />
                         <span>Preview</span>
@@ -1681,21 +2589,83 @@ export default function CommunityPage() {
 
       {/* ── SUBMIT TAB ── */}
       {tab === 'submit' && (
-        <div className="animate-fadeIn" style={{ maxWidth: 640, margin: '0 auto' }}>
-          <div className="card" style={{ padding: '24px 28px' }}>
-            <h2 className="font-semibold text-lg" style={{ marginBottom: 4 }}>
-              Submit a Wallpaper to the Community
-            </h2>
-            <p className="text-xs text-muted" style={{ marginBottom: 20 }}>
-              Share your favorite animated loops, YouTube streams, or digital art with everyone. All community contributions are free.
-            </p>
+        <div className="animate-fadeIn" style={{ maxWidth: 1060, margin: '0 auto' }}>
+          {/* Guest notification banner if not authenticated */}
+          {!isAuthenticated && (
+            <div
+              className="card"
+              style={{
+                padding: '12px 18px',
+                marginBottom: 16,
+                borderRadius: 10,
+                background: 'color-mix(in srgb, var(--color-brand) 8%, var(--bg-card))',
+                border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <LogIn size={18} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
+                    Browsing as Guest
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    You can pick, preview, and configure your wallpaper now. You'll be prompted to sign in when you submit.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ fontSize: 12, padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => setShowAuthModal(true)}
+              >
+                <LogIn size={13} />
+                <span>Sign In</span>
+              </button>
+            </div>
+          )}
+
+          <div className="card" style={{ padding: '22px 26px', width: '100%', margin: '0 auto' }}>
+            {/* Header with Title + Hosting Badge */}
+            <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 16 }}>
+              <div>
+                <h2 className="font-semibold text-lg" style={{ marginBottom: 2 }}>
+                  Submit a Wallpaper to the Community
+                </h2>
+                <p className="text-xs text-muted">
+                  Share animated loops, 4K digital art, or streams with the AetherFlow community.
+                </p>
+              </div>
+              <div
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 20,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  background: 'color-mix(in srgb, var(--color-brand) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-brand) 28%, transparent)',
+                  color: 'var(--color-brand)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Sparkles size={11} />
+                <span>Hosted on GitHub Releases CDN · 0 MB Supabase</span>
+              </div>
+            </div>
 
             {submitResult && (
               <div
                 className={`card ${submitResult.success ? 'border-emerald' : 'border-rose'}`}
                 style={{
                   padding: '12px 16px',
-                  marginBottom: 20,
+                  marginBottom: 16,
                   fontSize: 13,
                   display: 'flex',
                   alignItems: 'center',
@@ -1709,146 +2679,489 @@ export default function CommunityPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Title */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Cyberpunk Alley Rain (1080p)"
-                  value={submitForm.title}
-                  onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: 'var(--bg-base)', border: '1px solid var(--border-main)',
-                    borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
-                  }}
-                />
-              </div>
+            {/* Streamlined Source & Type Segmented Switch */}
+            <div
+              style={{
+                display: 'flex',
+                background: 'var(--bg-base)',
+                padding: 4,
+                borderRadius: 10,
+                border: '1px solid var(--border-main)',
+                marginBottom: 18,
+                gap: 4,
+              }}
+            >
+              {[
+                { id: 'video', label: 'Video Loop', sub: 'max 150 MB', icon: Video },
+                { id: 'image', label: 'Picture / Art', sub: 'max 50 MB', icon: Image },
+                { id: 'youtube', label: 'YouTube Stream', sub: 'Direct Link', icon: MonitorPlay },
+                { id: 'stream', label: 'Web Stream URL', sub: 'Direct URL', icon: Globe },
+              ].map(t => {
+                const isSelected = submitForm.type === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`btn ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{
+                      flex: 1,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: isSelected ? 600 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                    onClick={() => {
+                      setSubmitForm(f => ({ ...f, type: t.id }))
+                      if (t.id === 'youtube' || t.id === 'stream') {
+                        setSelectedMediaFile(null)
+                        setMediaInspection(null)
+                      }
+                    }}
+                  >
+                    <t.icon size={13} />
+                    <span>{t.label}</span>
+                    <span style={{ fontSize: 10, opacity: 0.65, fontWeight: 400 }}>({t.sub})</span>
+                  </button>
+                )
+              })}
+            </div>
 
-              {/* Author Display Name */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Your Creator / Display Name
-                </label>
-                <input
-                  type="text"
-                  placeholder={authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0] || 'e.g. Neo'}
-                  value={submitForm.authorName}
-                  onChange={e => setSubmitForm(f => ({ ...f, authorName: e.target.value }))}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: 'var(--bg-base)', border: '1px solid var(--border-main)',
-                    borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
-                  }}
-                />
-              </div>
+            <form onSubmit={handleSubmit}>
+              {/* 2-Column Responsive Layout */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(320px, 1.15fr) minmax(320px, 1fr)',
+                  gap: 20,
+                  alignItems: 'start',
+                }}
+              >
+                {/* ── LEFT COLUMN: Media Asset & Live Preview ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    style={{ display: 'none' }}
+                    accept={submitForm.type === 'video' ? '.mp4,.webm,video/mp4,video/webm' : '.png,.jpg,.jpeg,.webp,image/*'}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleMediaSelection(file)
+                    }}
+                  />
 
-              {/* Type */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Wallpaper Type *
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { id: 'youtube', label: 'YouTube Video / Stream', icon: MonitorPlay },
-                    { id: 'stream', label: 'Direct Video URL (.mp4)', icon: Globe },
-                    { id: 'image', label: 'Image URL', icon: Image },
-                  ].map(t => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`btn ${submitForm.type === t.id ? 'btn-primary' : 'btn-ghost'}`}
-                      style={{ flex: 1, padding: '8px 10px', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                      onClick={() => setSubmitForm(f => ({ ...f, type: t.id }))}
-                    >
-                      <t.icon size={13} />
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                  {(submitForm.type === 'video' || submitForm.type === 'image') ? (
+                    <div>
+                      {!mediaInspection ? (
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                          onDragLeave={() => setIsDragOver(false)}
+                          onDrop={handleDropMedia}
+                          onClick={handleBrowseComputer}
+                          style={{
+                            border: `2px dashed ${isDragOver ? 'var(--color-brand)' : 'var(--border-main)'}`,
+                            background: isDragOver ? 'color-mix(in srgb, var(--color-brand) 10%, var(--bg-base))' : 'var(--bg-base)',
+                            borderRadius: 12,
+                            padding: '36px 20px',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: 230,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 46,
+                              height: 46,
+                              borderRadius: 23,
+                              background: 'color-mix(in srgb, var(--color-brand) 12%, transparent)',
+                              color: 'var(--color-brand)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: 12,
+                            }}
+                          >
+                            <FileUp size={22} />
+                          </div>
+                          <div className="font-semibold text-sm mb-1" style={{ color: 'var(--text-main)' }}>
+                            {inspectingMedia ? 'Inspecting media file…' : isDragOver ? 'Drop file here' : 'Click or Drag & Drop to Upload'}
+                          </div>
+                          <p className="text-xs text-muted" style={{ maxWidth: 280, margin: '0 auto 16px', lineHeight: 1.5 }}>
+                            {submitForm.type === 'video'
+                              ? 'Supports seamless .mp4 and .webm loops up to 150 MB. Resolution & audio detected.'
+                              : 'Supports .png, .jpg, and .webp artwork up to 50 MB.'}
+                          </p>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={inspectingMedia}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleBrowseComputer()
+                            }}
+                            style={{ fontSize: 12, padding: '7px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                          >
+                            <FolderOpen size={13} />
+                            <span>Browse Computer</span>
+                          </button>
+                        </div>
+                      ) : (
+                        /* Selected Media Preview Showcase */
+                        <div
+                          className="card"
+                          style={{
+                            padding: 14,
+                            borderRadius: 12,
+                            background: 'var(--bg-base)',
+                            border: '1px solid var(--border-accent, var(--border-main))',
+                          }}
+                        >
+                          {/* 16:9 Thumbnail Header */}
+                          <div
+                            style={{
+                              width: '100%',
+                              aspectRatio: '16/9',
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              background: '#000',
+                              position: 'relative',
+                              marginBottom: 12,
+                            }}
+                          >
+                            <img
+                              src={mediaInspection.previewDataUrl}
+                              alt="Cover"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            {/* Overlay Badges */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 8,
+                                left: 8,
+                                display: 'flex',
+                                gap: 6,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  background: 'rgba(0,0,0,0.75)',
+                                  backdropFilter: 'blur(6px)',
+                                  borderRadius: 4,
+                                  padding: '2px 6px',
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: '#fff',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {mediaInspection.format}
+                              </span>
+                              {mediaInspection.dimensions && (
+                                <span
+                                  style={{
+                                    background: 'rgba(0,0,0,0.75)',
+                                    backdropFilter: 'blur(6px)',
+                                    borderRadius: 4,
+                                    padding: '2px 6px',
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: '#fff',
+                                  }}
+                                >
+                                  {mediaInspection.dimensions}
+                                </span>
+                              )}
+                            </div>
 
-              {/* Source URL */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  {submitForm.type === 'youtube' ? 'YouTube URL or Video ID *' : 'Direct Media URL *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={submitForm.type === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://example.com/wallpaper.mp4'}
-                  value={submitForm.source}
-                  onChange={e => setSubmitForm(f => ({ ...f, source: e.target.value }))}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: 'var(--bg-base)', border: '1px solid var(--border-main)',
-                    borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
-                  }}
-                />
-              </div>
+                            {mediaInspection.type === 'video' && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 8,
+                                  right: 8,
+                                  background: 'rgba(0,0,0,0.85)',
+                                  backdropFilter: 'blur(6px)',
+                                  borderRadius: 5,
+                                  padding: '2px 8px',
+                                  fontSize: 10.5,
+                                  color: '#fff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                {mediaInspection.hasAudio ? <Volume2 size={11} color="var(--color-emerald)" /> : <VolumeX size={11} color="var(--text-muted)" />}
+                                <span>{mediaInspection.hasAudio ? 'Sound Included' : 'Muted Loop'} · {mediaInspection.duration}s</span>
+                              </div>
+                            )}
+                          </div>
 
-              {/* Description */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Tell people about this wallpaper, creator credits, mood, loop specs…"
-                  value={submitForm.description}
-                  onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
-                  style={{
-                    width: '100%', padding: '9px 12px',
-                    background: 'var(--bg-base)', border: '1px solid var(--border-main)',
-                    borderRadius: 8, color: 'var(--text-main)', fontSize: 13, resize: 'vertical',
-                  }}
-                />
-              </div>
+                          {/* File Details Bar */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-main)' }}>
+                                {mediaInspection.name || selectedMediaFile?.name || 'wallpaper'}
+                              </div>
+                              <div className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                <span>{((mediaInspection.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB</span>
+                                <span>•</span>
+                                <span style={{ color: 'var(--color-cyan)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                  <Sparkles size={10} /> GitHub Releases CDN
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ fontSize: 11, padding: '5px 10px', flexShrink: 0 }}
+                              onClick={() => {
+                                setSelectedMediaFile(null)
+                                setMediaInspection(null)
+                                if (fileInputRef.current) fileInputRef.current.value = ''
+                              }}
+                            >
+                              Change File
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-              {/* Tags */}
-              <div>
-                <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Select Relevant Tags
-                </label>
-                <div className="flex gap-1.5" style={{ flexWrap: 'wrap' }}>
-                  {TAGS.map(tag => {
-                    const isSelected = submitForm.tags.includes(tag)
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        className={`badge ${isSelected ? 'badge-brand' : ''}`}
-                        style={{ cursor: 'pointer', border: '1px solid var(--border-main)', fontSize: 11 }}
-                        onClick={() => {
-                          setSubmitForm(f => ({
-                            ...f,
-                            tags: isSelected ? f.tags.filter(t => t !== tag) : [...f.tags, tag],
-                          }))
+                      {inspectError && (
+                        <div className="text-xs" style={{ color: 'var(--color-rose)', marginTop: 8 }}>
+                          ⚠️ {inspectError}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Stream URL Input */
+                    <div>
+                      <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                        {submitForm.type === 'youtube' ? 'YouTube Stream or Video URL *' : 'Direct Video Stream URL *'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={submitForm.type === 'youtube' ? 'https://www.youtube.com/watch?v=...' : 'https://example.com/loop.mp4'}
+                        value={submitForm.source}
+                        onChange={e => setSubmitForm(f => ({ ...f, source: e.target.value }))}
+                        style={{
+                          width: '100%', padding: '10px 12px',
+                          background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                          borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
                         }}
-                      >
-                        #{tag}
-                      </button>
-                    )
-                  })}
+                      />
+                      <p className="text-xs text-muted" style={{ marginTop: 6 }}>
+                        {submitForm.type === 'youtube'
+                          ? 'Paste any live stream or video link. Cover thumbnail is automatically loaded.'
+                          : 'Enter a publicly reachable MP4/HLS direct video URL.'}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div style={{ marginTop: 8 }}>
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full"
-                  disabled={submitting}
-                  style={{ padding: '10px 16px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                >
-                  <Upload size={14} />
-                  <span>{submitting ? 'Submitting to Moderation…' : 'Submit for Review'}</span>
-                </button>
-                <div className="text-center text-subtle text-xs" style={{ marginTop: 8 }}>
-                  Submissions appear in the Community Hub once approved by moderators.
+                {/* ── RIGHT COLUMN: Metadata & Submit Action ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Title */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Cyberpunk Alley Rain (1080p)"
+                      value={submitForm.title}
+                      onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                        borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
+                      }}
+                    />
+                  </div>
+
+                  {/* Author Name */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      Your Creator / Display Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0] || 'e.g. Fextro'}
+                      value={submitForm.authorName}
+                      onChange={e => setSubmitForm(f => ({ ...f, authorName: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                        borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
+                      }}
+                    />
+                  </div>
+
+                  {/* Artist Portfolio / Social Link */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      Artist Portfolio / Social Link (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://artstation.com/fextro"
+                      value={submitForm.authorPortfolio}
+                      onChange={e => setSubmitForm(f => ({ ...f, authorPortfolio: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                        borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
+                      }}
+                    />
+                  </div>
+
+                  {/* License */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      License
+                    </label>
+                    <select
+                      value={submitForm.license}
+                      onChange={e => setSubmitForm(f => ({ ...f, license: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                        borderRadius: 8, color: 'var(--text-main)', fontSize: 13,
+                      }}
+                    >
+                      {LICENSE_OPTIONS.map(opt => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted" style={{ marginTop: 5, lineHeight: 1.4 }}>
+                      {LICENSE_OPTIONS.find(o => o.id === submitForm.license)?.desc}
+                    </p>
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      Tags
+                    </label>
+                    <div className="flex gap-1.5" style={{ flexWrap: 'wrap' }}>
+                      {TAGS.map(tag => {
+                        const isSelected = submitForm.tags.includes(tag)
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            className={`badge ${isSelected ? 'badge-brand' : ''}`}
+                            style={{ cursor: 'pointer', border: '1px solid var(--border-main)', fontSize: 11, padding: '3px 7px' }}
+                            onClick={() => {
+                              setSubmitForm(f => ({
+                                ...f,
+                                tags: isSelected ? f.tags.filter(t => t !== tag) : [...f.tags, tag],
+                              }))
+                            }}
+                          >
+                            #{tag}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
+                      Description (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Loop specs, creator credits, mood notes…"
+                      value={submitForm.description}
+                      onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '8px 12px',
+                        background: 'var(--bg-base)', border: '1px solid var(--border-main)',
+                        borderRadius: 8, color: 'var(--text-main)', fontSize: 13, resize: 'vertical',
+                      }}
+                    />
+                  </div>
+
+                  {/* Upload Progress Bar */}
+                  {submitting && uploadProgress && (
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 8,
+                        background: 'color-mix(in srgb, var(--color-brand) 10%, var(--bg-base))',
+                        border: '1px solid color-mix(in srgb, var(--color-brand) 30%, transparent)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
+                        <span style={{ color: 'var(--text-main)' }}>
+                          {uploadProgress.stage === 'uploading_github'
+                            ? `Uploading to GitHub CDN (${uploadProgress.progress}%)…`
+                            : uploadProgress.stage === 'uploading_thumb'
+                            ? 'Uploading cover preview…'
+                            : 'Submitting to review queue…'}
+                        </span>
+                        <span style={{ color: 'var(--color-brand)', fontWeight: 700 }}>{uploadProgress.progress}%</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 3, background: 'var(--bg-base)', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${uploadProgress.progress}%`,
+                            background: 'var(--color-brand)',
+                            transition: 'width 0.2s ease',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={submitting || inspectingMedia || ((submitForm.type === 'video' || submitForm.type === 'image') && !selectedMediaFile && !mediaInspection && !submitForm.source.trim())}
+                    style={{
+                      padding: '11px 20px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      borderRadius: 9,
+                      marginTop: 4,
+                    }}
+                  >
+                    {submitting ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        <span>Uploading & Submitting…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        <span>Submit for Review</span>
+                      </>
+                    )}
+                  </button>
+                  <span className="text-muted text-center" style={{ fontSize: 11 }}>
+                    All community wallpapers are free to install after moderation.
+                  </span>
                 </div>
               </div>
             </form>
@@ -1859,6 +3172,26 @@ export default function CommunityPage() {
       {/* ── MY SUBMISSIONS TAB ── */}
       {tab === 'submissions' && (
         <div className="animate-fadeIn">
+          {!isAuthenticated ? (
+            <div className="card" style={{ padding: '48px 28px', textAlign: 'center' }}>
+              <FileText size={40} style={{ margin: '0 auto 16px', opacity: 0.3, color: 'var(--color-brand)' }} />
+              <h2 className="font-semibold text-lg" style={{ marginBottom: 8 }}>
+                Sign In to View Your Submissions
+              </h2>
+              <p className="text-xs text-muted" style={{ maxWidth: 360, margin: '0 auto 20px', lineHeight: 1.6 }}>
+                Sign in to track wallpapers you've submitted to the community and see their review status.
+              </p>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: 13, padding: '10px 24px', display: 'inline-flex', alignItems: 'center', gap: 7 }}
+                onClick={() => setShowAuthModal(true)}
+              >
+                <LogIn size={14} />
+                <span>Sign In</span>
+              </button>
+            </div>
+          ) : (
+          <>
           <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
             <div>
               <h2 className="font-semibold text-lg">My Submissions</h2>
@@ -1898,6 +3231,26 @@ export default function CommunityPage() {
               {mySubmissions.map(sub => {
                 const statusMeta = STATUS_BADGES[sub.status] || STATUS_BADGES.pending
                 const StatusIcon = statusMeta.icon || Clock
+                const subPreviewData = {
+                  id: sub.id,
+                  name: sub.title,
+                  description: sub.description,
+                  author: sub.author,
+                  type: sub.type,
+                  source: sub.source,
+                  preview: sub.preview,
+                  tags: sub.tags,
+                  downloads: 0,
+                  likes: 0,
+                  hasAudio: Boolean(sub.hasAudio || sub.has_audio),
+                  fileSize: sub.fileSize || sub.file_size || 0,
+                  dimensions: sub.dimensions || '',
+                  mediaFormat: sub.mediaFormat || sub.media_format || '',
+                  duration: sub.duration || 0,
+                  stagingPath: sub.stagingPath || sub.staging_path || '',
+                  githubAssetUrl: sub.githubAssetUrl || sub.github_asset_url || '',
+                }
+
                 return (
                   <div
                     key={sub.id}
@@ -1912,7 +3265,7 @@ export default function CommunityPage() {
                     }}
                   >
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-semibold text-sm">{sub.title}</h4>
                         <span
                           style={{
@@ -1926,6 +3279,32 @@ export default function CommunityPage() {
                         >
                           {sub.type}
                         </span>
+                        {sub.hasAudio && (
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: 10,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              background: 'rgba(168,85,247,0.15)',
+                              color: 'var(--color-purple, #a855f7)',
+                              border: '1px solid rgba(168,85,247,0.3)',
+                            }}
+                          >
+                            <Music size={10} /> Has Audio
+                          </span>
+                        )}
+                        {sub.fileSize > 0 && (
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-main)' }}>
+                            {(sub.fileSize / (1024 * 1024)).toFixed(1)} MB
+                          </span>
+                        )}
+                        {sub.dimensions && (
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-main)' }}>
+                            {sub.dimensions}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-subtle" style={{ marginTop: 3 }}>
                         {sub.source}
@@ -1938,6 +3317,27 @@ export default function CommunityPage() {
                     </div>
 
                     <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: 11,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          borderRadius: 6,
+                          border: '1px solid var(--border-main)',
+                          background: 'rgba(255,255,255,0.04)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setPreviewItem(subPreviewData)}
+                        title="Live Preview"
+                      >
+                        <Eye size={12} />
+                        <span>Preview</span>
+                      </button>
+
                       <div
                         style={{
                           display: 'inline-flex',
@@ -1983,122 +3383,12 @@ export default function CommunityPage() {
               })}
             </div>
           )}
+          </>
+          )}
         </div>
       )}
 
-      {/* ── ADMIN PASSCODE UNLOCK MODAL ── */}
-      {showAdminModal && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 999999,
-            background: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-          }}
-          onClick={() => setShowAdminModal(false)}
-        >
-          <div
-            className="card"
-            style={{
-              width: '100%',
-              maxWidth: 400,
-              padding: '24px 28px',
-              borderRadius: 14,
-              boxShadow: '0 24px 60px rgba(0,0,0,0.8)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-              <div className="flex items-center gap-2.5">
-                <div
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: 'color-mix(in srgb, var(--color-amber) 15%, transparent)',
-                    color: 'var(--color-amber)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Lock size={16} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm">Moderator Unlock</h3>
-                  <div className="text-xs text-muted">AetherFlow Administrator Access</div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAdminModal(false)}
-                className="btn btn-ghost"
-                style={{ padding: 4, height: 28, width: 28 }}
-              >
-                <X size={14} />
-              </button>
-            </div>
 
-            <p className="text-xs text-muted" style={{ lineHeight: 1.5, marginBottom: 16 }}>
-              Enter the admin secret key to unlock the in-app Moderation Queue and instant takedown tools.
-            </p>
-
-            <form onSubmit={handleUnlockAdmin}>
-              <input
-                type="password"
-                autoFocus
-                placeholder="Enter admin passcode…"
-                value={passcodeInput}
-                onChange={e => {
-                  setPasscodeInput(e.target.value)
-                  setPasscodeError(false)
-                }}
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 8,
-                  background: 'var(--bg-base)',
-                  border: passcodeError ? '1px solid var(--color-rose)' : '1px solid var(--border-main)',
-                  color: 'var(--text-main)',
-                  fontSize: 13,
-                  outline: 'none',
-                  marginBottom: passcodeError ? 6 : 14,
-                }}
-              />
-
-              {passcodeError && (
-                <div className="text-xs" style={{ color: 'var(--color-rose)', marginBottom: 12 }}>
-                  Incorrect passcode. Please verify your admin credentials.
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ flex: 1, fontSize: 12 }}
-                  onClick={() => setShowAdminModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ flex: 1.5, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                >
-                  <Unlock size={13} />
-                  <span>Unlock Admin</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* ── TAKEDOWN CONFIRMATION MODAL ── */}
       {takedownTarget && createPortal(
@@ -2207,20 +3497,24 @@ export default function CommunityPage() {
           isAdmin={isAdmin}
           onClose={() => setPreviewItem(null)}
           onAddToLibrary={(item) => handleAddToLibrary(item)}
+          onDownloadOffline={(item) => handleDownloadOffline(item)}
           onApply={(item) => handleInstall(item)}
           onLike={(id) => handleLike(id)}
           onTakedown={(item) => {
             setTakedownTarget(item)
             setTakedownReason('')
           }}
-          isLiked={likedIds.has(previewItem.id)}
-          likeCount={likeCounts[previewItem.id] ?? previewItem.likes ?? 0}
+          isLiked={isItemLikedByUser(previewItem)}
+          likeCount={getWallpaperMetrics(previewItem, likeCounts, downloadCounts, isItemLikedByUser(previewItem)).likes}
           liking={likingId === previewItem.id}
-          downloadCount={Math.max(previewItem.downloads || 0, downloadCounts[previewItem.id] ?? 0)}
+          downloadCount={getWallpaperMetrics(previewItem, likeCounts, downloadCounts, isItemLikedByUser(previewItem)).downloads}
           isInstalled={(installed || []).some(i => i?.id === `community-${previewItem.id}` || i?.communityMeta?.originalId === previewItem.id)}
+          isLocallyCached={(installed || []).some(i => (i?.id === `community-${previewItem.id}` || i?.communityMeta?.originalId === previewItem.id) && (i?.storageStatus === 'cached' || i?.storageStatus === 'downloaded' || i?.localPath))}
           isCurrentlyApplied={isWallpaperRunning && (currentDesktopWallpaper?.id === `community-${previewItem.id}` || activeWallpaper?.id === `community-${previewItem.id}`)}
           isApplying={applyingId === previewItem.id}
           isAddingLib={addingLibraryId === previewItem.id}
+          isDownloading={downloadingIds.has(previewItem.id)}
+          downloadPercent={downloadProgress[previewItem.id] || 0}
         />
       )}
     </div>
@@ -2390,10 +3684,11 @@ function CleanYouTubePreview({ source, title }) {
 }
 
 /**
- * Clean Video Preview with decoder destruction on unmount
+ * Clean Video Preview with decoder destruction on unmount and live audio toggle
  */
 function CleanVideoPreview({ source }) {
   const videoRef = useRef(null)
+  const [isMuted, setIsMuted] = useState(true)
 
   useEffect(() => {
     const video = videoRef.current
@@ -2408,6 +3703,13 @@ function CleanVideoPreview({ source }) {
     }
   }, [source])
 
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted
+      setIsMuted(!isMuted)
+    }
+  }
+
   return (
     <div
       style={{
@@ -2418,6 +3720,7 @@ function CleanVideoPreview({ source }) {
         borderRadius: 8,
         overflow: 'hidden',
         position: 'relative',
+        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
       }}
     >
       <video
@@ -2425,10 +3728,38 @@ function CleanVideoPreview({ source }) {
         src={source}
         autoPlay
         loop
-        muted
+        muted={isMuted}
         playsInline
         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
       />
+      {/* Audio toggle button overlay */}
+      <button
+        type="button"
+        onClick={toggleMute}
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          zIndex: 10,
+          background: 'rgba(0, 0, 0, 0.72)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          borderRadius: 6,
+          padding: '6px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: '#ffffff',
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        title={isMuted ? 'Click to enable preview sound' : 'Mute preview sound'}
+      >
+        {isMuted ? <VolumeX size={14} color="var(--color-rose, #f43f5e)" /> : <Volume2 size={14} color="var(--color-emerald, #10b981)" />}
+        <span>{isMuted ? 'Sound Muted' : 'Sound Playing'}</span>
+      </button>
     </div>
   )
 }
@@ -2468,6 +3799,7 @@ function CommunityPreviewModal({
   isAdmin,
   onClose,
   onAddToLibrary,
+  onDownloadOffline,
   onApply,
   onLike,
   onTakedown,
@@ -2476,9 +3808,12 @@ function CommunityPreviewModal({
   liking,
   downloadCount,
   isInstalled,
+  isLocallyCached,
   isCurrentlyApplied,
   isApplying,
   isAddingLib,
+  isDownloading,
+  downloadPercent,
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -2491,6 +3826,9 @@ function CommunityPreviewModal({
   if (!item) return null
 
   const badge = TYPE_BADGES[item.type] || {}
+  const isEngine = item.type === 'engine' || Boolean(item.engine)
+  const isStream = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
+  const isNoDownload = isStream
 
   return createPortal(
     <div
@@ -2565,8 +3903,56 @@ function CommunityPreviewModal({
               >
                 {item.name}
               </div>
-              <div className="text-xs text-muted" style={{ fontSize: 12, marginTop: 2 }}>
-                by <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
+              <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 2 }}>
+                <span className="text-xs text-muted" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  by
+                  {item.authorPortfolio ? (
+                    <button
+                      type="button"
+                      onClick={() => openExternalUrl(item.authorPortfolio)}
+                      title={`Visit ${item.author}'s portfolio (${item.authorPortfolio})`}
+                      style={{
+                        background: 'none', border: 'none', padding: 0,
+                        color: 'var(--color-brand)', fontWeight: 600, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                        textDecoration: 'underline', textUnderlineOffset: 2,
+                        fontSize: 'inherit'
+                      }}
+                    >
+                      {item.author || 'Anonymous'} <ExternalLink size={11} />
+                    </button>
+                  ) : (
+                    <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author || 'Anonymous'}</span>
+                  )}
+                </span>
+                {item.license && (
+                  <span
+                    className="badge"
+                    title={LICENSE_OPTIONS.find(o => o.id === item.license)?.desc || item.license}
+                    style={{
+                      fontSize: 10, padding: '1px 6px',
+                      background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)',
+                      border: '1px solid var(--border-subtle)', fontWeight: 600
+                    }}
+                  >
+                    {LICENSE_OPTIONS.find(o => o.id === item.license)?.badge || item.license}
+                  </span>
+                )}
+                {item.hasAudio && (
+                  <span className="badge badge-emerald" style={{ fontSize: 10, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <Volume2 size={10} /> Has Audio
+                  </span>
+                )}
+                {item.fileSize > 0 && (
+                  <span className="badge" style={{ fontSize: 10, padding: '1px 6px' }}>
+                    {(item.fileSize / (1024 * 1024)).toFixed(1)} MB
+                  </span>
+                )}
+                {item.dimensions && (
+                  <span className="badge" style={{ fontSize: 10, padding: '1px 6px' }}>
+                    {item.dimensions}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -2612,9 +3998,13 @@ function CommunityPreviewModal({
 
         {/* Live Media Preview (Zero-Leak) */}
         <div style={{ padding: '16px 20px 10px', flex: 1, overflowY: 'auto' }}>
-          {item.type === 'youtube' ? (
+          {item.type === 'engine' ? (
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: 10, overflow: 'hidden', background: '#05070e' }}>
+              <WallpaperPlayer engineId={item.engine || item.source.replace('engine:', '')} preview={true} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }} />
+            </div>
+          ) : item.type === 'youtube' ? (
             <CleanYouTubePreview source={item.source} title={item.name} />
-          ) : item.type === 'stream' && (item.source.endsWith('.mp4') || item.source.endsWith('.webm')) ? (
+          ) : (item.type === 'video' || (item.type === 'stream' && (/\.(mp4|webm|mkv|mov)($|\?)/i.test(item.source || '') || item.mediaFormat?.includes('video')))) ? (
             <CleanVideoPreview source={item.source} />
           ) : (
             <CleanImagePreview source={item.preview || item.source} title={item.name} />
@@ -2687,7 +4077,7 @@ function CommunityPreviewModal({
             </div>
           </div>
 
-          {/* Right Buttons: Add to Library & Apply & Take Down */}
+          {/* Right Buttons: Add to Cloud (0MB) & Download Offline & Apply & Take Down */}
           <div className="flex items-center gap-2">
             {isAdmin && onTakedown && (
               <button
@@ -2705,27 +4095,82 @@ function CommunityPreviewModal({
               </button>
             )}
 
-            {/* 1. Library Status / Add Button */}
+            {/* 1. Add to Library */}
             {isInstalled ? (
               <span
                 className="badge badge-emerald"
                 style={{ padding: '6px 11px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                title="Saved to Library"
               >
                 <Check size={13} /> In Library
               </span>
             ) : (
               <button
+                type="button"
                 className="btn btn-secondary"
                 style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
                 disabled={isAddingLib || isApplying}
                 onClick={() => onAddToLibrary(item)}
+                title="Save to Library"
               >
-                <FolderPlus size={13} />
-                <span>{isAddingLib ? 'Adding…' : '+ Add to Library'}</span>
+                {isAddingLib ? (
+                  <>
+                    <RefreshCw size={13} className="spin" />
+                    <span>Saving…</span>
+                  </>
+                ) : (
+                  <>
+                    <FolderPlus size={13} />
+                    <span>+ Add to Library</span>
+                  </>
+                )}
               </button>
             )}
 
-            {/* 2. Desktop Active / Apply Button */}
+            {/* 2. Download Offline (Only for downloadable files, NOT YouTube / Web Streams) */}
+            {!isNoDownload && (
+              (isLocallyCached || (isEngine && isInstalled)) ? (
+                <span
+                  className="badge"
+                  style={{
+                    padding: '6px 11px',
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    background: 'rgba(16, 185, 129, 0.16)',
+                    color: 'var(--color-emerald)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                  }}
+                  title="Media downloaded to disk — ready for 100% offline playback"
+                >
+                  <Check size={13} /> Offline Ready
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                  disabled={isDownloading || isApplying}
+                  onClick={() => onDownloadOffline && onDownloadOffline(item)}
+                  title="Download media to disk for offline playback"
+                >
+                  {isDownloading ? (
+                    <>
+                      <RefreshCw size={13} className="spin" />
+                      <span>{downloadPercent > 0 ? `${downloadPercent}%` : 'Downloading…'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={13} />
+                      <span>Download Offline</span>
+                    </>
+                  )}
+                </button>
+              )
+            )}
+
+            {/* 3. Apply to Desktop */}
             {isCurrentlyApplied ? (
               <span
                 className="btn btn-success"
@@ -2735,12 +4180,23 @@ function CommunityPreviewModal({
               </span>
             ) : (
               <button
+                type="button"
                 className="btn btn-primary"
                 style={{ padding: '6px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
                 disabled={isApplying || isAddingLib}
                 onClick={() => onApply(item)}
               >
-                {isApplying ? 'Applying…' : <><Play size={12} /> Apply to Desktop</>}
+                {isApplying ? (
+                  <>
+                    <RefreshCw size={12} className="spin" />
+                    <span>Applying…</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={12} fill="currentColor" />
+                    <span>Apply to Desktop</span>
+                  </>
+                )}
               </button>
             )}
           </div>

@@ -12,7 +12,7 @@ use tauri::{
 use windows_sys::Win32::Foundation::{HWND, LPARAM, RECT, POINT};
 #[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, FindWindowExW, SendMessageTimeoutW, SetParent, SMTO_NORMAL, GetShellWindow,
+    EnumWindows, FindWindowW, FindWindowExW, SendMessageW, SendMessageTimeoutW, SetParent, SMTO_NORMAL, GetShellWindow,
     SetWindowPos, HWND_BOTTOM, SWP_SHOWWINDOW, ShowWindow, DestroyWindow, IsWindow, IsWindowVisible, GetParent,
     GetWindowLongW, SetWindowLongW, GWL_STYLE, GWL_EXSTYLE, WS_CHILD, WS_POPUP,
     WS_VISIBLE, WS_THICKFRAME, WS_CAPTION, WS_BORDER,
@@ -41,6 +41,9 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 mod thumbnail_extractor;
+#[cfg(windows)]
+mod context_menu;
+mod hotkeys;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -301,7 +304,26 @@ static PERFORMANCE_SETTINGS: Mutex<PerformanceSettings> = Mutex::new(Performance
 });
 
 static IS_SYSTEM_PAUSED: Mutex<bool> = Mutex::new(false);
+static CURRENT_PAUSED_MONITORS: std::sync::LazyLock<Mutex<std::collections::HashSet<String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
 static MONITOR_SYNC_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn is_monitor_currently_paused(label: &str) -> bool {
+    if let Ok(guard) = CURRENT_PAUSED_MONITORS.lock() {
+        if guard.contains(label) || guard.contains("*") {
+            return true;
+        }
+        let safe_lbl = label.trim_start_matches("wallpaper_").trim_start_matches('_');
+        for p in guard.iter() {
+            let safe_p = p.trim_start_matches("wallpaper_").trim_start_matches('_');
+            if safe_p.eq_ignore_ascii_case(safe_lbl) || p == "*" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ActiveWallpaperState {
@@ -1538,6 +1560,13 @@ pub fn start_system_state_monitor(app: AppHandle) {
                 }
             }
 
+            // User manual pause: if manually paused, force all wallpapers to pause
+            if USER_MANUALLY_PAUSED.load(std::sync::atomic::Ordering::Relaxed) {
+                for label in &wallpaper_labels {
+                    target_paused_monitors.insert(label.clone());
+                }
+            }
+
             let any_monitor_physically_covered = !physically_covered_monitors.is_empty();
 
             // Identify which display is the active audio emitter
@@ -1692,6 +1721,9 @@ pub fn start_system_state_monitor(app: AppHandle) {
             if let Ok(mut p_guard) = IS_SYSTEM_PAUSED.lock() {
                 *p_guard = is_any_paused;
             }
+            if let Ok(mut cpm_guard) = CURRENT_PAUSED_MONITORS.lock() {
+                *cpm_guard = target_paused_monitors.clone();
+            }
             paused_monitors = target_paused_monitors;
 
             // 4. Playlist Auto-Rotation Background Trigger
@@ -1704,6 +1736,25 @@ pub fn start_system_state_monitor(app: AppHandle) {
                             if !timer.enabled || timer.interval_secs == 0 {
                                 continue;
                             }
+
+                            // Do NOT rotate wallpaper while this monitor (or all monitors) are paused by maximized/fullscreen windows or battery
+                            let is_scope_paused = if timer.monitor_scope == "*" {
+                                if multi_monitor_pause_mode == "all-displays" {
+                                    !paused_monitors.is_empty()
+                                } else {
+                                    paused_monitors.len() >= wallpaper_labels.len() && !wallpaper_labels.is_empty()
+                                }
+                            } else {
+                                paused_monitors.contains(&timer.monitor_scope)
+                                    || paused_monitors.contains(&format!("wallpaper_{}", timer.monitor_scope.trim_start_matches("wallpaper_").trim_start_matches('_')))
+                            };
+
+                            if is_scope_paused {
+                                // Skip rotation while occluded/paused so we don't rotate wallpapers behind maximized/fullscreen windows.
+                                // The timer remains eligible and will trigger rotation as soon as the desktop is uncovered!
+                                continue;
+                            }
+
                             let key = format!("{}:{}", timer.monitor_scope, timer.playlist_id);
                             let should_fire = match last_ticks.get(&key) {
                                 Some(last) => now.duration_since(*last).as_secs() >= timer.interval_secs,
@@ -2687,12 +2738,16 @@ async fn apply_wallpaper(
 ) {
     let target = monitor_label.unwrap_or_else(|| "*".to_string());
 
-    let resolved_engine_id = if engine_id == "video-player" || engine_id == "image-player" {
+    let resolved_engine_id = if engine_id == "video-player" || engine_id == "image-player" || engine_id == "web-stream" {
+        engine_id.clone()
+    } else if !engine_id.is_empty() && engine_id != "wallpaper" && engine_id != "custom" {
         engine_id.clone()
     } else if config.get("videoPath").and_then(|v| v.as_str()).is_some() {
         "video-player".to_string()
     } else if config.get("imagePath").and_then(|v| v.as_str()).is_some() {
         "image-player".to_string()
+    } else if config.get("streamUrl").and_then(|v| v.as_str()).is_some() {
+        "web-stream".to_string()
     } else {
         engine_id.clone()
     };
@@ -2839,6 +2894,7 @@ async fn apply_wallpaper(
                 #[cfg(windows)]
                 {
                     let label_clone = label.clone();
+                    let is_currently_paused = is_monitor_currently_paused(&label_clone);
                     let vpath_clone = vpath.clone();
                     let mon_x = pos.x;
                     let mon_y = pos.y;
@@ -2852,7 +2908,7 @@ async fn apply_wallpaper(
                     tauri::async_runtime::spawn_blocking(move || {
                         log_lifecycle(
                             "STAGED_MPV_SPAWN_START",
-                            &format!("ticket={} monitor='{}'", my_ticket, label_clone),
+                            &format!("ticket={} monitor='{}' paused={}", my_ticket, label_clone, is_currently_paused),
                         );
 
                         let mut proc = match mpv::spawn_mpv_wallpaper(
@@ -2863,11 +2919,12 @@ async fn apply_wallpaper(
                             mon_w,
                             mon_h,
                             Some(screen_volume),
-                            Some(screen_muted),
+                            Some(screen_muted || is_currently_paused),
                             Some(speed_val),
                             Some(brightness_val),
                             Some(opacity_val),
                             Some(my_ticket),
+                            Some(is_currently_paused),
                         ) {
                             Ok(p) => p,
                             Err(err) => {
@@ -2962,7 +3019,12 @@ async fn apply_wallpaper(
                         mpv::dump_window_diagnostics("MAIN_AFTER_TARGET_ALPHA_RESTORE", hwnd);
 
                         let _ = proc.set_volume(screen_volume);
-                        let _ = proc.set_mute(screen_muted);
+                        if is_currently_paused {
+                            let _ = proc.set_pause(true);
+                            let _ = proc.set_mute(true);
+                        } else {
+                            let _ = proc.set_mute(screen_muted);
+                        }
 
                         // Swap into MPV_PLAYERS and terminate the retired MPV instance
                         let mut old_player_to_retire = None;
@@ -2977,6 +3039,9 @@ async fn apply_wallpaper(
                             );
                             old_proc.terminate();
                         }
+
+                        // Reconcile occlusion state immediately for the newly swapped player
+                        MONITOR_SYNC_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
 
                         // Stop canvas webview rendering loop (0% CPU) without hiding its window
                         if let Some(win) = app_handle.get_webview_window(&label_clone) {
@@ -3099,13 +3164,15 @@ async fn apply_wallpaper(
                     }
                 };
                 let screen_volume = global_volume;
+                let is_currently_paused = is_monitor_currently_paused(&label);
 
                 let mut win_config = config.clone();
                 if let Some(obj) = win_config.as_object_mut() {
                     obj.insert("isPrimary".to_string(), serde_json::json!(is_target_audio));
                     obj.insert("isSecondary".to_string(), serde_json::json!(is_secondary));
-                    obj.insert("muted".to_string(), serde_json::json!(screen_muted));
+                    obj.insert("muted".to_string(), serde_json::json!(screen_muted || is_currently_paused));
                     obj.insert("volume".to_string(), serde_json::json!(screen_volume));
+                    obj.insert("isPaused".to_string(), serde_json::json!(is_currently_paused));
                 }
 
                 let payload = serde_json::json!({
@@ -3115,6 +3182,10 @@ async fn apply_wallpaper(
                 });
                 let _ = win.emit_to(label.as_str(), "aether:set-engine", payload.clone());
                 let _ = win.emit_to(label.as_str(), "aura:set-engine", payload.clone());
+                if is_currently_paused {
+                    let _ = win.emit_to(label.as_str(), "aether:pause", serde_json::json!({ "target": label.clone() }));
+                    let _ = win.emit_to(label.as_str(), "aura:pause", serde_json::json!({ "target": label.clone() }));
+                }
                 let _ = win.emit_to(label.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": brightness, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-brightness", serde_json::json!({ "brightness": brightness, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": opacity, "target": label.clone() }));
@@ -3461,6 +3532,257 @@ static WATCH_FOLDER_PATH: Mutex<Option<String>> = Mutex::new(None);
 static WATCH_FOLDER_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SEEN_WATCH_FILES: std::sync::LazyLock<Mutex<std::collections::HashSet<String>>> =
     std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
+
+#[tauri::command]
+async fn upload_release_asset(
+    _app: AppHandle,
+    token: String,
+    repo: String,
+    tag: String,
+    file_path: Option<String>,
+    file_bytes: Option<Vec<u8>>,
+    asset_name: String,
+    content_type: String,
+) -> Result<serde_json::Value, String> {
+    let parts: Vec<&str> = repo.split('/').collect();
+    if parts.len() != 2 {
+        return Err("Invalid repo format, expected owner/repo".to_string());
+    }
+    let owner = parts[0];
+    let repo_name = parts[1];
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(900))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // 1. Get release info to locate release ID
+    let release_url = format!("https://api.github.com/repos/{}/{}/releases/tags/{}", owner, repo_name, tag);
+    let release_res = client
+        .get(&release_url)
+        .header("Authorization", format!("token {}", token))
+        .header("User-Agent", "AetherFlow")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to query release tag {}: {}", tag, e))?;
+
+    if !release_res.status().is_success() {
+        let status = release_res.status();
+        let err_text = release_res.text().await.unwrap_or_default();
+        return Err(format!("Release query failed with HTTP {}: {}", status, err_text));
+    }
+
+    let release_json: serde_json::Value = release_res
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse release JSON: {}", e))?;
+
+    let release_id = release_json["id"]
+        .as_u64()
+        .ok_or_else(|| "Missing release ID in GitHub response".to_string())?;
+
+    // 2. Read file data from disk or direct bytes
+    let data: Vec<u8> = if let Some(ref path) = file_path {
+        std::fs::read(path)
+            .map_err(|e| format!("Failed to read file at {}: {}", path, e))?
+    } else if let Some(bytes) = file_bytes {
+        bytes
+    } else {
+        return Err("Neither file_path nor file_bytes was provided".to_string());
+    };
+
+    let total_bytes = data.len();
+
+    // 3. Sanitized asset name (alphanumeric, dot, underscore, dash)
+    let safe_name: String = asset_name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+
+    let upload_url = format!(
+        "https://uploads.github.com/repos/{}/{}/releases/{}/assets?name={}",
+        owner, repo_name, release_id, safe_name
+    );
+
+    let upload_res = client
+        .post(&upload_url)
+        .header("Authorization", format!("token {}", token))
+        .header("Content-Type", &content_type)
+        .header("User-Agent", "AetherFlow")
+        .header("Accept", "application/vnd.github.v3+json")
+        .body(data)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to upload asset to GitHub: {}", e))?;
+
+    let status = upload_res.status();
+    let resp_text = upload_res.text().await.unwrap_or_default();
+
+    if status.is_success() {
+        let resp_json: serde_json::Value = serde_json::from_str(&resp_text).unwrap_or_else(|_| {
+            serde_json::json!({
+                "name": safe_name,
+                "browser_download_url": format!("https://github.com/{}/{}/releases/download/{}/{}", owner, repo_name, tag, safe_name),
+                "size": total_bytes
+            })
+        });
+
+        let default_download = format!("https://github.com/{}/{}/releases/download/{}/{}", owner, repo_name, tag, safe_name);
+        let download_url = resp_json["browser_download_url"]
+            .as_str()
+            .unwrap_or(&default_download)
+            .to_string();
+
+        let asset_id = resp_json["id"].as_u64().unwrap_or(0);
+
+        Ok(serde_json::json!({
+            "assetName": safe_name,
+            "downloadUrl": download_url,
+            "size": resp_json["size"].as_u64().unwrap_or(total_bytes as u64),
+            "releaseId": release_id,
+            "assetId": asset_id,
+        }))
+    } else {
+        Err(format!("GitHub upload failed with HTTP {}: {}", status, resp_text))
+    }
+}
+
+#[tauri::command]
+async fn delete_release_asset(
+    token: String,
+    repo: String,
+    asset_id: u64,
+) -> Result<bool, String> {
+    let parts: Vec<&str> = repo.split('/').collect();
+    if parts.len() != 2 {
+        return Err("Invalid repo format".to_string());
+    }
+    let owner = parts[0];
+    let repo_name = parts[1];
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let del_url = format!("https://api.github.com/repos/{}/{}/releases/assets/{}", owner, repo_name, asset_id);
+    let del_res = client
+        .delete(&del_url)
+        .header("Authorization", format!("token {}", token))
+        .header("User-Agent", "AetherFlow")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to delete asset: {}", e))?;
+
+    Ok(del_res.status().is_success())
+}
+
+#[tauri::command]
+async fn cache_community_wallpaper(
+    app: AppHandle,
+    url: String,
+    wallpaper_id: String,
+    ext: String,
+) -> Result<serde_json::Value, String> {
+    use std::io::Write;
+
+    let clean_id = wallpaper_id.replace(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-', "_");
+    let clean_ext = ext.trim_start_matches('.').to_lowercase();
+    let file_name = format!("community_{}.{}", clean_id, clean_ext);
+
+    let library_dir = get_wallpaper_library_dir(&app);
+    if !library_dir.exists() {
+        let _ = std::fs::create_dir_all(&library_dir);
+    }
+    let target_path = library_dir.join(&file_name);
+
+    if target_path.exists() {
+        if let Ok(meta) = std::fs::metadata(&target_path) {
+            if meta.len() > 0 {
+                return Ok(serde_json::json!({
+                    "localPath": target_path.to_string_lossy().to_string(),
+                    "fileSize": meta.len(),
+                    "cached": true
+                }));
+            }
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(900))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let mut res = client
+        .get(&url)
+        .header("User-Agent", "AetherFlow")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to media CDN: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!("Download failed with HTTP {}", res.status()));
+    }
+
+    let total_size = res.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+
+    let temp_path = library_dir.join(format!("temp_comm_{}.part", clean_id));
+    let mut file = std::fs::File::create(&temp_path)
+        .map_err(|e| format!("Failed to create local destination file: {}", e))?;
+
+    let mut last_emit = std::time::Instant::now();
+
+    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Download error: {}", e))? {
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write to local disk: {}", e))?;
+        downloaded += chunk.len() as u64;
+
+        if last_emit.elapsed() >= std::time::Duration::from_millis(250) || (total_size > 0 && downloaded >= total_size) {
+            last_emit = std::time::Instant::now();
+            let percent = if total_size > 0 {
+                ((downloaded as f64 / total_size as f64) * 100.0).min(100.0) as u32
+            } else {
+                0
+            };
+            let _ = app.emit("aether:community-download-progress", serde_json::json!({
+                "wallpaperId": wallpaper_id,
+                "progress": percent,
+                "downloaded": downloaded,
+                "total": total_size,
+            }));
+        }
+    }
+
+    file.flush().map_err(|e| format!("Failed to flush file: {}", e))?;
+    drop(file);
+
+    if target_path.exists() {
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    std::fs::rename(&temp_path, &target_path)
+        .map_err(|e| format!("Failed to finalize downloaded file: {}", e))?;
+
+    Ok(serde_json::json!({
+        "localPath": target_path.to_string_lossy().to_string(),
+        "fileSize": downloaded,
+        "cached": false
+    }))
+}
+
+#[tauri::command]
+fn remove_local_community_wallpaper(app: AppHandle, local_path: String) -> Result<bool, String> {
+    let p = std::path::Path::new(&local_path);
+    let library_dir = get_wallpaper_library_dir(&app);
+    if p.exists() && p.starts_with(&library_dir) {
+        std::fs::remove_file(p).map_err(|e| format!("Failed to delete local file: {}", e))?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
 
 #[tauri::command]
 fn get_file_metadata(path: String) -> Result<FileMeta, String> {
@@ -4032,7 +4354,7 @@ fn dismiss_screensaver(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_screensaver_active_wallpaper() -> Result<serde_json::Value, String> {
+fn get_screensaver_active_wallpaper(app: AppHandle) -> Result<serde_json::Value, String> {
     let settings = {
         if let Ok(guard) = SCREENSAVER_SETTINGS.lock() {
             guard.clone()
@@ -4046,7 +4368,7 @@ fn get_screensaver_active_wallpaper() -> Result<serde_json::Value, String> {
         "blackout" => {
             ("blackout".to_string(), serde_json::json!({}))
         }
-        "specific" => {
+        "custom" | "specific" => {
             if let Some(eng) = settings.specific_engine {
                 (eng, settings.specific_config.unwrap_or_else(|| serde_json::json!({})))
             } else {
@@ -4054,9 +4376,38 @@ fn get_screensaver_active_wallpaper() -> Result<serde_json::Value, String> {
             }
         }
         "random" => {
+            let path = get_custom_wallpapers_file(&app);
+            let mut candidates: Vec<(String, serde_json::Value)> = Vec::new();
+            if path.exists() {
+                if let Ok(data) = std::fs::read_to_string(&path) {
+                    if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(&data) {
+                        for item in items {
+                            if let Some(engine) = item.get("engine").and_then(|v| v.as_str()) {
+                                let cfg = item.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
+                                candidates.push((engine.to_string(), cfg));
+                            } else if let Some(cfg) = item.get("config") {
+                                if cfg.get("videoPath").is_some() {
+                                    candidates.push(("video-player".to_string(), cfg.clone()));
+                                } else if cfg.get("imagePath").is_some() {
+                                    candidates.push(("image-player".to_string(), cfg.clone()));
+                                } else if cfg.get("streamUrl").is_some() {
+                                    candidates.push(("web-stream".to_string(), cfg.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             let builtins = ["matrix-rain", "cyber-particles", "synthwave-grid", "deep-space", "aurora", "tokyo-rain"];
-            let idx = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as usize) % builtins.len();
-            (builtins[idx].to_string(), serde_json::json!({}))
+            for b in builtins {
+                candidates.push((b.to_string(), serde_json::json!({})));
+            }
+            if !candidates.is_empty() {
+                let idx = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as usize) % candidates.len();
+                candidates[idx].clone()
+            } else {
+                ("aurora".to_string(), serde_json::json!({}))
+            }
         }
         _ => {
             // "current" or default: retrieve active desktop wallpaper
@@ -5557,6 +5908,188 @@ fn get_diagnostics(app: AppHandle) -> serde_json::Value {
     })
 }
 
+pub static USER_MANUALLY_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn do_toggle_wallpaper_pause(app: AppHandle) {
+    let was_paused = USER_MANUALLY_PAUSED.load(std::sync::atomic::Ordering::Relaxed);
+    let next_paused = !was_paused;
+    USER_MANUALLY_PAUSED.store(next_paused, std::sync::atomic::Ordering::Relaxed);
+    MONITOR_SYNC_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    if next_paused {
+        set_mpv_pause(None, true);
+        let windows = app.webview_windows();
+        for (label, win) in windows {
+            if label.starts_with("wallpaper_") {
+                let _ = win.emit_to(label.clone(), "aether:pause", serde_json::json!({ "target": "*" }));
+                let _ = win.emit_to(label.clone(), "aura:pause", serde_json::json!({ "target": "*" }));
+            }
+        }
+    }
+    let _ = app.emit("aether:shortcut:toggle-pause", serde_json::json!({ "isPaused": next_paused }));
+}
+
+#[tauri::command]
+fn toggle_wallpaper_pause(app: AppHandle) {
+    do_toggle_wallpaper_pause(app);
+}
+
+pub static IS_GLOBAL_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn do_toggle_wallpaper_mute(app: AppHandle) {
+    let was_muted = IS_GLOBAL_MUTED.load(std::sync::atomic::Ordering::Relaxed);
+    let next_muted = !was_muted;
+    IS_GLOBAL_MUTED.store(next_muted, std::sync::atomic::Ordering::Relaxed);
+    set_mpv_mute(app.clone(), None, next_muted);
+    let _ = app.emit("aether:shortcut:toggle-mute", serde_json::json!({ "muted": next_muted }));
+}
+
+#[tauri::command]
+fn toggle_wallpaper_mute(app: AppHandle) {
+    do_toggle_wallpaper_mute(app);
+}
+
+#[cfg(windows)]
+fn find_shelldll_defview() -> HWND {
+    unsafe {
+        let shell_class: Vec<u16> = "SHELLDLL_DefView\0".encode_utf16().collect();
+        let progman_class: Vec<u16> = "Progman\0".encode_utf16().collect();
+        let progman = FindWindowW(progman_class.as_ptr(), std::ptr::null());
+        if !progman.is_null() {
+            let s = FindWindowExW(progman, std::ptr::null_mut(), shell_class.as_ptr(), std::ptr::null());
+            if !s.is_null() {
+                return s;
+            }
+        }
+        let mut state = DesktopWindows { shell: std::ptr::null_mut(), workerw: std::ptr::null_mut() };
+        EnumWindows(Some(enum_window), &mut state as *mut DesktopWindows as LPARAM);
+        state.shell
+    }
+}
+
+pub fn do_set_desktop_icons_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let shell = find_shelldll_defview();
+        if !shell.is_null() {
+            unsafe {
+                // Ensure SHELLDLL_DefView itself is ALWAYS visible so desktop right-clicks continue to work!
+                ShowWindow(shell, 5); // SW_SHOW
+
+                let list_class: Vec<u16> = "SysListView32\0".encode_utf16().collect();
+                let list_view = FindWindowExW(shell, std::ptr::null_mut(), list_class.as_ptr(), std::ptr::null());
+                if !list_view.is_null() {
+                    ShowWindow(list_view, if visible { 5 } else { 0 });
+                } else {
+                    SendMessageW(shell, 0x0111, 0x7402, 0);
+                }
+            }
+            let _ = app.emit("aether:shortcut:toggle-icons", serde_json::json!({ "hideDesktopIcons": !visible }));
+            return Ok(());
+        }
+    }
+    Err("Could not locate desktop shell window".into())
+}
+
+#[tauri::command]
+fn set_desktop_icons_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    do_set_desktop_icons_visible(app, visible)
+}
+
+pub fn do_toggle_desktop_icons(app: AppHandle) -> Result<bool, String> {
+    #[cfg(windows)]
+    {
+        let shell = find_shelldll_defview();
+        if !shell.is_null() {
+            unsafe {
+                // Ensure SHELLDLL_DefView itself is ALWAYS visible so desktop right-clicks continue to work!
+                ShowWindow(shell, 5); // SW_SHOW
+
+                let list_class: Vec<u16> = "SysListView32\0".encode_utf16().collect();
+                let list_view = FindWindowExW(shell, std::ptr::null_mut(), list_class.as_ptr(), std::ptr::null());
+                let next_state = if !list_view.is_null() {
+                    let is_vis = IsWindowVisible(list_view) != 0;
+                    let next = !is_vis;
+                    ShowWindow(list_view, if next { 5 } else { 0 });
+                    next
+                } else {
+                    SendMessageW(shell, 0x0111, 0x7402, 0);
+                    true
+                };
+                let _ = app.emit("aether:shortcut:toggle-icons", serde_json::json!({ "hideDesktopIcons": !next_state }));
+                return Ok(next_state);
+            }
+        }
+    }
+    Err("Could not locate desktop shell window".into())
+}
+
+#[tauri::command]
+fn toggle_desktop_icons(app: AppHandle) -> Result<bool, String> {
+    do_toggle_desktop_icons(app)
+}
+
+#[tauri::command]
+fn set_desktop_context_menu(enabled: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if enabled {
+            let exe = std::env::current_exe()
+                .map_err(|e| format!("Failed to resolve exe path: {}", e))?
+                .to_string_lossy()
+                .to_string();
+            context_menu::register_desktop_context_menu(&exe)
+        } else {
+            context_menu::unregister_desktop_context_menu()
+        }
+    }
+    #[cfg(not(windows))]
+    Ok(())
+}
+
+#[tauri::command]
+fn get_desktop_context_menu_status() -> bool {
+    #[cfg(windows)]
+    {
+        context_menu::is_desktop_context_menu_registered()
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+#[tauri::command]
+fn set_file_context_menu(enabled: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if enabled {
+            let exe = std::env::current_exe()
+                .map_err(|e| format!("Failed to resolve exe path: {}", e))?
+                .to_string_lossy()
+                .to_string();
+            context_menu::register_file_context_menu(&exe)
+        } else {
+            context_menu::unregister_file_context_menu()
+        }
+    }
+    #[cfg(not(windows))]
+    Ok(())
+}
+
+#[tauri::command]
+fn get_file_context_menu_status() -> bool {
+    #[cfg(windows)]
+    {
+        context_menu::is_file_context_menu_registered()
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+#[tauri::command]
+fn update_registered_hotkeys(app: AppHandle, bindings: std::collections::HashMap<String, String>) -> Result<(), String> {
+    hotkeys::update_registered_hotkeys(&app, bindings)
+}
+
 #[cfg(windows)]
 fn ensure_canonical_start_menu_shortcut() {
     std::thread::spawn(|| {
@@ -5706,23 +6239,71 @@ fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
         ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        hotkeys::handle_hotkey_press(app, shortcut);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            log_msg("[SINGLE INSTANCE] Second instance signal received, restoring main window");
-            // Second instance: show existing control panel
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.unminimize();
-                let _ = win.show();
-                let _ = win.set_focus();
-            }
-            #[cfg(windows)]
-            if let Some(main_h) = get_main_hwnd() {
-                unsafe {
-                    ShowWindow(main_h, 9); // SW_RESTORE
-                    SetForegroundWindow(main_h);
+            let is_background_action = argv.iter().any(|arg| {
+                arg == "--next"
+                    || arg == "--prev"
+                    || arg == "--toggle-pause"
+                    || arg == "--toggle-mute"
+                    || arg == "--toggle-icons"
+                    || arg == "--sync-on"
+                    || arg == "--sync-off"
+                    || arg == "--audio-target"
+                    || arg == "--screensaver"
+                    || arg == "--diagnostics"
+                    || arg == "--apply-video"
+                    || arg == "--apply-file"
+            });
+
+            if !is_background_action || argv.iter().any(|arg| arg == "--open") {
+                log_msg("[SINGLE INSTANCE] Second instance signal received, restoring main window");
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.unminimize();
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+                #[cfg(windows)]
+                if let Some(main_h) = get_main_hwnd() {
+                    unsafe {
+                        ShowWindow(main_h, 9); // SW_RESTORE
+                        SetForegroundWindow(main_h);
+                    }
                 }
             }
 
-            if argv.iter().any(|arg| arg == "--sync-on") {
+            if argv.iter().any(|arg| arg == "--next") {
+                log_msg("[CLI IPC] Action: --next");
+                let _ = app.emit("aether:shortcut:next", ());
+            } else if argv.iter().any(|arg| arg == "--prev") {
+                log_msg("[CLI IPC] Action: --prev");
+                let _ = app.emit("aether:shortcut:prev", ());
+            } else if argv.iter().any(|arg| arg == "--toggle-pause") {
+                log_msg("[CLI IPC] Action: --toggle-pause");
+                toggle_wallpaper_pause(app.clone());
+            } else if argv.iter().any(|arg| arg == "--toggle-mute") {
+                log_msg("[CLI IPC] Action: --toggle-mute");
+                toggle_wallpaper_mute(app.clone());
+            } else if argv.iter().any(|arg| arg == "--toggle-icons") {
+                log_msg("[CLI IPC] Action: --toggle-icons");
+                let _ = toggle_desktop_icons(app.clone());
+            } else if argv.iter().any(|arg| arg == "--screensaver") {
+                log_msg("[CLI IPC] Action: --screensaver");
+                let _ = trigger_screensaver(app.clone(), Some(true));
+            } else if let Some(pos) = argv.iter().position(|arg| arg == "--apply-file") {
+                if let Some(path) = argv.get(pos + 1) {
+                    log_msg(&format!("[CLI IPC] Action: --apply-file for: {}", path));
+                    let _ = app.emit("aether:cli:apply-file", serde_json::json!({ "filePath": path }));
+                }
+            } else if argv.iter().any(|arg| arg == "--sync-on") {
                 if let Ok(mut guard) = PERFORMANCE_SETTINGS.lock() {
                     guard.wallpaper_sync_on_resume = true;
                     log_msg("[CLI IPC] Enabled wallpaper_sync_on_resume via --sync-on");
@@ -5884,13 +6465,37 @@ fn main() {
             get_watch_folder_settings,
             scan_watch_folder,
             sync_playlist_timers,
+            toggle_wallpaper_pause,
+            toggle_wallpaper_mute,
+            set_desktop_icons_visible,
+            toggle_desktop_icons,
+            set_desktop_context_menu,
+            get_desktop_context_menu_status,
+            set_file_context_menu,
+            get_file_context_menu_status,
+            update_registered_hotkeys,
+            upload_release_asset,
+            delete_release_asset,
+            cache_community_wallpaper,
+            remove_local_community_wallpaper,
         ])
         .setup(|app| {
             #[cfg(windows)]
             {
+                let shell = find_shelldll_defview();
+                if !shell.is_null() {
+                    unsafe {
+                        ShowWindow(shell, 5); // SW_SHOW: Ensure SHELLDLL_DefView is always visible for desktop clicks
+                    }
+                }
                 mpv::kill_all_mpv_processes();
                 let _ = mpv::ensure_mpv_job();
                 let _ = sync_all_custom_video_thumbnails(app.handle().clone());
+                if let Ok(exe_path) = std::env::current_exe() {
+                    let exe_str = exe_path.to_string_lossy().to_string();
+                    let _ = context_menu::register_desktop_context_menu(&exe_str);
+                    let _ = context_menu::register_file_context_menu(&exe_str);
+                }
             }
 
             let is_minimized = is_minimized_boot();
@@ -6077,21 +6682,88 @@ fn main() {
             });
 
             // ── System tray ───────────────────────────────────────────────────
-            let open_item        = MenuItem::with_id(app, "open",        "Open AetherFlow",        true, None::<&str>)?;
-            let screensaver_item = MenuItem::with_id(app, "screensaver", "Preview Screensaver",   true, None::<&str>)?;
-            let pause_item       = MenuItem::with_id(app, "pause",       "Pause Wallpaper",       true, None::<&str>)?;
-            let resume_item      = MenuItem::with_id(app, "resume",      "Resume Wallpaper",      true, None::<&str>)?;
-            let stop_item        = MenuItem::with_id(app, "stop",        "Stop Wallpaper",        true, None::<&str>)?;
-            let sep              = tauri::menu::PredefinedMenuItem::separator(app)?;
-            let quit_item        = MenuItem::with_id(app, "quit",        "Quit AetherFlow",       true, None::<&str>)?;
+            let open_item        = MenuItem::with_id(app, "open",         "Open AetherFlow",        true, None::<&str>)?;
+            let sep1             = tauri::menu::PredefinedMenuItem::separator(app)?;
+
+            let next_item        = MenuItem::with_id(app, "next",         "Next Wallpaper",         true, None::<&str>)?;
+            let prev_item        = MenuItem::with_id(app, "prev",         "Previous Wallpaper",     true, None::<&str>)?;
+            let pause_item       = MenuItem::with_id(app, "toggle_pause", "Pause / Resume",         true, None::<&str>)?;
+            let mute_item        = MenuItem::with_id(app, "toggle_mute",  "Mute / Unmute Audio",    true, None::<&str>)?;
+            let stop_item        = MenuItem::with_id(app, "stop",         "Stop Wallpaper",         true, None::<&str>)?;
+            let sep2             = tauri::menu::PredefinedMenuItem::separator(app)?;
+
+            // Quick Adjustment Submenus (Volume, Brightness, Playback Speed, Opacity)
+            let v100 = MenuItem::with_id(app, "vol_100", "100%", true, None::<&str>)?;
+            let v80  = MenuItem::with_id(app, "vol_80",  "80%",  true, None::<&str>)?;
+            let v60  = MenuItem::with_id(app, "vol_60",  "60%",  true, None::<&str>)?;
+            let v40  = MenuItem::with_id(app, "vol_40",  "40%",  true, None::<&str>)?;
+            let v20  = MenuItem::with_id(app, "vol_20",  "20%",  true, None::<&str>)?;
+            let v0   = MenuItem::with_id(app, "vol_0",   "Mute (0%)", true, None::<&str>)?;
+            let volume_sub = tauri::menu::Submenu::with_items(app, "Volume", true, &[
+                &v100, &v80, &v60, &v40, &v20, &v0
+            ])?;
+
+            let br100 = MenuItem::with_id(app, "br_100", "100% (Default)", true, None::<&str>)?;
+            let br85  = MenuItem::with_id(app, "br_85",  "85%",           true, None::<&str>)?;
+            let br70  = MenuItem::with_id(app, "br_70",  "70%",           true, None::<&str>)?;
+            let br50  = MenuItem::with_id(app, "br_50",  "50%",           true, None::<&str>)?;
+            let br30  = MenuItem::with_id(app, "br_30",  "30% (Dim)",     true, None::<&str>)?;
+            let brightness_sub = tauri::menu::Submenu::with_items(app, "Brightness", true, &[
+                &br100, &br85, &br70, &br50, &br30
+            ])?;
+
+            let spd200 = MenuItem::with_id(app, "spd_200", "2.0x (Hyper)", true, None::<&str>)?;
+            let spd150 = MenuItem::with_id(app, "spd_150", "1.5x (Fast)",  true, None::<&str>)?;
+            let spd125 = MenuItem::with_id(app, "spd_125", "1.25x",        true, None::<&str>)?;
+            let spd100 = MenuItem::with_id(app, "spd_100", "1.0x (Normal)",true, None::<&str>)?;
+            let spd75  = MenuItem::with_id(app, "spd_75",  "0.75x",        true, None::<&str>)?;
+            let spd50  = MenuItem::with_id(app, "spd_50",  "0.5x (Slow)",  true, None::<&str>)?;
+            let speed_sub = tauri::menu::Submenu::with_items(app, "Playback Speed", true, &[
+                &spd200, &spd150, &spd125, &spd100, &spd75, &spd50
+            ])?;
+
+            let op100 = MenuItem::with_id(app, "op_100", "100% (Solid)",       true, None::<&str>)?;
+            let op85  = MenuItem::with_id(app, "op_85",  "85%",                true, None::<&str>)?;
+            let op70  = MenuItem::with_id(app, "op_70",  "70%",                true, None::<&str>)?;
+            let op50  = MenuItem::with_id(app, "op_50",  "50% (Translucent)",  true, None::<&str>)?;
+            let op30  = MenuItem::with_id(app, "op_30",  "30% (Ghost)",        true, None::<&str>)?;
+            let opacity_sub = tauri::menu::Submenu::with_items(app, "Opacity", true, &[
+                &op100, &op85, &op70, &op50, &op30
+            ])?;
+            let sep_controls = tauri::menu::PredefinedMenuItem::separator(app)?;
+
+            let icons_item       = MenuItem::with_id(app, "toggle_icons", "Toggle Desktop Icons",   true, None::<&str>)?;
+            let tb_translucent   = MenuItem::with_id(app, "tb_translucent", "Translucent",          true, None::<&str>)?;
+            let tb_blur          = MenuItem::with_id(app, "tb_blur",        "Blur",                 true, None::<&str>)?;
+            let tb_acrylic       = MenuItem::with_id(app, "tb_acrylic",     "Acrylic",              true, None::<&str>)?;
+            let tb_clear         = MenuItem::with_id(app, "tb_clear",       "Clear (Transparent)",  true, None::<&str>)?;
+            let tb_default       = MenuItem::with_id(app, "tb_default",     "Default Windows",      true, None::<&str>)?;
+            let taskbar_sub      = tauri::menu::Submenu::with_items(app, "Taskbar Style", true, &[
+                &tb_translucent, &tb_blur, &tb_acrylic, &tb_clear, &tb_default
+            ])?;
+
+            let screensaver_item = MenuItem::with_id(app, "screensaver",  "Preview Screensaver",    true, None::<&str>)?;
+            let sep3             = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let quit_item        = MenuItem::with_id(app, "quit",         "Quit AetherFlow",        true, None::<&str>)?;
 
             let menu = Menu::with_items(app, &[
                 &open_item,
-                &screensaver_item,
+                &sep1,
+                &next_item,
+                &prev_item,
                 &pause_item,
-                &resume_item,
+                &mute_item,
                 &stop_item,
-                &sep,
+                &sep2,
+                &volume_sub,
+                &brightness_sub,
+                &speed_sub,
+                &opacity_sub,
+                &sep_controls,
+                &icons_item,
+                &taskbar_sub,
+                &screensaver_item,
+                &sep3,
                 &quit_item,
             ])?;
 
@@ -6115,28 +6787,92 @@ fn main() {
                                 }
                             }
                         }
+                        "next" => {
+                            let _ = app.emit("aether:shortcut:next", ());
+                        }
+                        "prev" => {
+                            let _ = app.emit("aether:shortcut:prev", ());
+                        }
+                        "toggle_pause" => {
+                            toggle_wallpaper_pause(app.clone());
+                        }
+                        "toggle_mute" => {
+                            toggle_wallpaper_mute(app.clone());
+                        }
+                        "vol_100" | "vol_80" | "vol_60" | "vol_40" | "vol_20" | "vol_0" => {
+                            let (vol, muted) = match event.id().as_ref() {
+                                "vol_100" => (100.0, false),
+                                "vol_80"  => (80.0, false),
+                                "vol_60"  => (60.0, false),
+                                "vol_40"  => (40.0, false),
+                                "vol_20"  => (20.0, false),
+                                "vol_0"   => (0.0, true),
+                                _         => (50.0, false),
+                            };
+                            set_mpv_mute(app.clone(), None, muted);
+                            set_mpv_volume(None, vol);
+                            update_wallpaper_config(app.clone(), serde_json::json!({ "volume": vol, "muted": muted }), None);
+                            let _ = app.emit("aether:tray:set-volume", serde_json::json!({ "volume": vol, "muted": muted }));
+                        }
+                        "br_100" | "br_85" | "br_70" | "br_50" | "br_30" => {
+                            let val = match event.id().as_ref() {
+                                "br_100" => 1.0,
+                                "br_85"  => 0.85,
+                                "br_70"  => 0.70,
+                                "br_50"  => 0.50,
+                                "br_30"  => 0.30,
+                                _        => 1.0,
+                            };
+                            set_wallpaper_brightness(app.clone(), val);
+                            update_wallpaper_config(app.clone(), serde_json::json!({ "brightness": val }), None);
+                            let _ = app.emit("aether:tray:set-brightness", serde_json::json!({ "brightness": val }));
+                        }
+                        "spd_200" | "spd_150" | "spd_125" | "spd_100" | "spd_75" | "spd_50" => {
+                            let val = match event.id().as_ref() {
+                                "spd_200" => 2.0,
+                                "spd_150" => 1.5,
+                                "spd_125" => 1.25,
+                                "spd_100" => 1.0,
+                                "spd_75"  => 0.75,
+                                "spd_50"  => 0.5,
+                                _         => 1.0,
+                            };
+                            update_wallpaper_config(app.clone(), serde_json::json!({ "speedMultiplier": val, "speed": val }), None);
+                            let _ = app.emit("aether:tray:set-speed", serde_json::json!({ "speed": val }));
+                        }
+                        "op_100" | "op_85" | "op_70" | "op_50" | "op_30" => {
+                            let val = match event.id().as_ref() {
+                                "op_100" => 1.0,
+                                "op_85"  => 0.85,
+                                "op_70"  => 0.70,
+                                "op_50"  => 0.50,
+                                "op_30"  => 0.30,
+                                _        => 1.0,
+                            };
+                            set_wallpaper_opacity(app.clone(), val);
+                            update_wallpaper_config(app.clone(), serde_json::json!({ "opacity": val }), None);
+                            let _ = app.emit("aether:tray:set-opacity", serde_json::json!({ "opacity": val }));
+                        }
+                        "toggle_icons" => {
+                            let _ = toggle_desktop_icons(app.clone());
+                        }
+                        "tb_translucent" => {
+                            let _ = taskbar::apply_taskbar_style("translucent", false);
+                        }
+                        "tb_blur" => {
+                            let _ = taskbar::apply_taskbar_style("blur", false);
+                        }
+                        "tb_acrylic" => {
+                            let _ = taskbar::apply_taskbar_style("acrylic", false);
+                        }
+                        "tb_clear" => {
+                            let _ = taskbar::apply_taskbar_style("clear", false);
+                        }
+                        "tb_default" => {
+                            let _ = taskbar::apply_taskbar_style("default", false);
+                        }
                         "screensaver" => {
                             let _ = trigger_screensaver(app.clone(), Some(true));
-                        }
-                        "pause" => {
-                            set_mpv_pause(None, true);
-                            let windows = app.webview_windows();
-                            for (label, win) in windows {
-                                if label.starts_with("wallpaper_") {
-                                    let _ = win.emit_to(label.clone(), "aether:pause", serde_json::json!({}));
-                                    let _ = win.emit_to(label.clone(), "aura:pause", serde_json::json!({}));
-                                }
-                            }
-                        }
-                        "resume" => {
-                            set_mpv_pause(None, false);
-                            let windows = app.webview_windows();
-                            for (label, win) in windows {
-                                if label.starts_with("wallpaper_") {
-                                    let _ = win.emit_to(label.clone(), "aether:resume", serde_json::json!({}));
-                                    let _ = win.emit_to(label.clone(), "aura:resume", serde_json::json!({}));
-                                }
-                            }
                         }
                         "stop" => {
                             stop_wallpaper(app.clone(), None);

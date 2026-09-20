@@ -105,7 +105,7 @@ export function createWebStream(canvas, options = {}) {
   let currentVolume = options.volume !== undefined ? Number(options.volume) : 50
   let currentSpeed = Number(options.speedMultiplier ?? options.speed ?? 1)
   let isRunning = false
-  let isPausedByUser = false
+  let isPausedByUser = Boolean(options.paused || options.isPaused)
   let playStartTime = 0
   let audioUnlocked = false
 
@@ -386,7 +386,11 @@ export function createWebStream(canvas, options = {}) {
                 } catch {}
               }
 
-              try { e.target.playVideo() } catch {}
+              if (isPausedByUser) {
+                try { e.target.pauseVideo() } catch {}
+              } else {
+                try { e.target.playVideo() } catch {}
+              }
               if (currentSpeed !== 1 && e.target.setPlaybackRate) {
                 try { e.target.setPlaybackRate(currentSpeed) } catch {}
               }
@@ -632,8 +636,9 @@ export function createWebStream(canvas, options = {}) {
       try { player?.setPlaybackRate(currentSpeed) } catch {}
     }
 
-    if (newOpts.paused !== undefined) {
-      if (newOpts.paused) pause()
+    if (newOpts.paused !== undefined || newOpts.isPaused !== undefined) {
+      const p = Boolean(newOpts.paused ?? newOpts.isPaused)
+      if (p) pause()
       else resume()
     }
 

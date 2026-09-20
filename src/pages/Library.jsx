@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Trash2, Play, Image as ImageIcon, Plus, Video, Monitor, Check,
   Pin, PinOff, Pencil, Search, X, Globe, Heart, ChevronDown,
   LayoutGrid, List, Sparkles, Terminal, Waves, Compass, Flame,
-  CloudRain, Activity, Code, ExternalLink, MoreHorizontal, Eye, FolderPlus
+  CloudRain, Activity, Code, ExternalLink, MoreHorizontal, Eye, FolderPlus,
+  HardDrive, Cloud, DownloadCloud
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
@@ -14,6 +15,7 @@ import WallpaperCard from '../components/WallpaperCard/index.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
 import { BatchImportModal } from '../components/Modals/BatchImportModal.jsx'
 import { scanDirectoryMedia } from '../lib/storageManager.js'
+import { downloadCommunityWallpaper } from '../lib/community.js'
 import {
   applyWallpaperToDesktop,
   stopDesktopWallpaper,
@@ -30,8 +32,12 @@ export function getWallpaperTypeInfo(wallpaper) {
   const engineId = wallpaper.engine || wallpaper.id
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
   const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
-  const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
+  const isEngine = wallpaper.type === 'engine' || wallpaper.mediaType === 'canvas' || (Boolean(wallpaper.engine) && wallpaper.engine !== 'video-player' && wallpaper.engine !== 'image-player' && wallpaper.engine !== 'web-stream') || (Array.isArray(wallpaper.tags) && wallpaper.tags.includes('procedural'))
+  const isVideo = !isImage && !isStream && !isEngine && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
 
+  if (isEngine) {
+    return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas', icon: Sparkles }
+  }
   if (isStream) {
     const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
     const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)
@@ -55,7 +61,7 @@ export function getWallpaperTypeInfo(wallpaper) {
  * Dedicated Library Preview Modal — opens on card click or "Preview" button.
  * Enforces immediate and complete teardown of decoders/media buffers on close.
  */
-function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
+function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive, onDownloadOffline, onFreeSpace }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -82,6 +88,18 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
   const isVideo = typeInfo.type === 'video'
   const isImage = typeInfo.type === 'image'
   const isCanvas = typeInfo.type === 'canvas'
+
+  const isCommunity = Boolean(
+    wallpaper.id?.startsWith('community-') ||
+    wallpaper.communityMeta ||
+    wallpaper.remoteUrl ||
+    (wallpaper.tags && wallpaper.tags.includes('community'))
+  )
+  const isLocal = Boolean(
+    wallpaper.localPath && !wallpaper.localPath.startsWith('http')
+  ) || (!isCommunity && !wallpaper.config?.streamUrl) || isCanvas || wallpaper.storageStatus === 'downloaded'
+  const authorPortfolio = wallpaper.authorPortfolio || wallpaper.communityMeta?.authorPortfolio || wallpaper.author_portfolio || ''
+  const license = wallpaper.license || wallpaper.communityMeta?.license || ''
 
   const videoPath =
     wallpaper.config?.videoPath ||
@@ -164,16 +182,61 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
               <typeInfo.icon size={12} />
               <span>{typeInfo.label.toUpperCase()}</span>
             </span>
+            {isCommunity && (
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: isLocal ? 'rgba(16, 185, 129, 0.22)' : 'rgba(56, 189, 248, 0.22)',
+                  color: isLocal ? 'var(--color-emerald)' : 'var(--color-cyan)',
+                  border: `1px solid ${isLocal ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                {isLocal ? <HardDrive size={12} /> : <Cloud size={12} />}
+                <span>{isLocal ? 'LOCAL (OFFLINE)' : 'CLOUD (STREAM)'}</span>
+              </span>
+            )}
             <div style={{ minWidth: 0 }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-main)' }} className="truncate">
                 {wallpaper.name}
               </h3>
-              <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-muted)' }}>
-                {wallpaper.communityMeta?.author
-                  ? `by ${wallpaper.communityMeta.author}`
-                  : wallpaper.isCustom
-                  ? 'Custom Media'
-                  : 'Built-in Canvas Engine'}
+              <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>by</span>
+                {authorPortfolio ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openExternalUrl(authorPortfolio)
+                    }}
+                    title={`Open portfolio (${authorPortfolio})`}
+                    style={{
+                      background: 'none', border: 'none', padding: 0,
+                      color: 'var(--color-brand)', fontWeight: 600, cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      textDecoration: 'underline', textUnderlineOffset: 2,
+                      fontSize: 'inherit'
+                    }}
+                  >
+                    {wallpaper.communityMeta?.author || wallpaper.author || 'Anonymous'} <ExternalLink size={11} />
+                  </button>
+                ) : (
+                  <span>{wallpaper.communityMeta?.author || (wallpaper.isCustom ? 'Custom Media' : 'Built-in Canvas Engine')}</span>
+                )}
+                {license && (
+                  <span
+                    className="library-tag-chip"
+                    style={{ background: 'rgba(255,255,255,0.08)', fontSize: 9.5, padding: '1px 5px' }}
+                    title={license}
+                  >
+                    {license.replace(/ 4\.0| 1\.0/g, '')}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -251,6 +314,25 @@ function LibraryPreviewModal({ wallpaper, onClose, onApply, isLive }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {isCommunity && !isLocal && onDownloadOffline && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => onDownloadOffline(wallpaper)}
+                style={{ height: 34, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <DownloadCloud size={13} /> Download Offline
+              </button>
+            )}
+            {isCommunity && isLocal && onFreeSpace && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => onFreeSpace(wallpaper.id)}
+                style={{ height: 34, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                title="Free up local disk space while keeping wallpaper in Library"
+              >
+                <Cloud size={13} /> Free Space
+              </button>
+            )}
             <button className="btn btn-ghost" onClick={onClose} style={{ height: 34, fontSize: 12 }}>
               Close
             </button>
@@ -304,11 +386,16 @@ export default function LibraryPage() {
   const setActiveWallpaper      = useStore(s => s.setActiveWallpaper)
   const thumbnailMode           = useStore(s => s.thumbnailMode) || 'hover'
   const setThumbnailMode        = useStore(s => s.setThumbnailMode)
+  const updateInstalledStorage  = useStore(s => s.updateInstalledStorage)
+  const removeLocalCommunityCopy = useStore(s => s.removeLocalCommunityCopy)
 
   const [monitors, setMonitors] = useState([])
   const [selectedMonitorLabel, setSelectedMonitorLabel] = useState(null)
   const [applyingId, setApplyingId] = useState(null)
   const [hoveredId, setHoveredId]   = useState(null)
+  const [downloadingId, setDownloadingId] = useState(null)
+  const [downloadProgress, setDownloadProgress] = useState({})
+  const [storageNotice, setStorageNotice] = useState(null)
 
   // Filters, Search, Sort & View Modes
   const [filterCategory, setFilterCategory] = useState('all') // 'all' | 'liked' | 'pinned' | 'builtin' | 'custom' | 'stream'
@@ -539,6 +626,51 @@ export default function LibraryPage() {
     }
   }
 
+  const handleDownloadOffline = async (item) => {
+    if (!item) return
+    const typeInfo = getWallpaperTypeInfo(item)
+    if (typeInfo.type === 'canvas') {
+      updateInstalledStorage(item.id, {
+        localPath: 'builtin:canvas',
+        storageStatus: 'downloaded',
+        fileSize: 0,
+      })
+      setStorageNotice({ type: 'success', message: `"${item.name}" saved for 100% offline playback!` })
+      setTimeout(() => setStorageNotice(null), 4000)
+      return
+    }
+    setDownloadingId(item.id)
+    try {
+      setStorageNotice({ type: 'info', message: `Downloading "${item.name}" for offline use…` })
+      const res = await downloadCommunityWallpaper(item, (p) => {
+        setDownloadProgress(prev => ({ ...prev, [item.id]: p.progress }))
+      })
+      if (res?.localPath) {
+        updateInstalledStorage(item.id, {
+          localPath: res.localPath,
+          storageStatus: 'cached',
+          fileSize: res.fileSize,
+        })
+        setStorageNotice({ type: 'success', message: `Cached "${item.name}" locally (${(res.fileSize / (1024 * 1024)).toFixed(1)} MB). Ready offline!` })
+      }
+    } catch (err) {
+      setStorageNotice({ type: 'error', message: `Download failed: ${err.message || err}` })
+    } finally {
+      setDownloadingId(null)
+      setTimeout(() => setStorageNotice(null), 4000)
+    }
+  }
+
+  const handleFreeSpace = async (itemId) => {
+    const target = (installed || []).find(i => i.id === itemId)
+    const name = target?.name || 'wallpaper'
+    const success = await removeLocalCommunityCopy(itemId)
+    if (success) {
+      setStorageNotice({ type: 'success', message: `Freed local disk space for "${name}". Kept in Library as cloud stream.` })
+      setTimeout(() => setStorageNotice(null), 4000)
+    }
+  }
+
   function getActiveStatus(item) {
     if (!isWallpaperRunning || !item) return null
     if (screenArrangement === 'per-screen') {
@@ -553,10 +685,19 @@ export default function LibraryPage() {
     return currentDesktopWallpaper?.id === item.id ? ['all'] : null
   }
 
+  // Liked lookup helper that handles original IDs, community- prefixes, and builtins
+  const isWallpaperLiked = useCallback((w) => {
+    if (!w) return false
+    const likedSet = new Set(likedWallpaperIds || [])
+    const altId = w.id?.startsWith('community-') ? w.id.replace(/^community-/, '') : `community-${w.id}`
+    const origId = w.communityMeta?.originalId
+    return likedSet.has(w.id) || likedSet.has(altId) || (Boolean(origId) && likedSet.has(origId))
+  }, [likedWallpaperIds])
+
   // Combine All Wallpapers (Built-in + Custom)
   const allWallpapers = useMemo(() => {
     const names = customNames || {}
-    const builtins = WALLPAPER_LIST.map(w => ({
+    const builtins = WALLPAPER_LIST.map((w, idx) => ({
       id: w.id,
       name: names[w.id] || w.name,
       engine: w.id,
@@ -564,15 +705,17 @@ export default function LibraryPage() {
       config: w.defaultConfig || {},
       isCustom: false,
       builtin: true,
+      installedAt: 1000 - idx,
     }))
 
     const customs = (installed || [])
-      .filter(i => i && i.type === 'wallpaper')
-      .map(i => ({
+      .filter(i => i && (i.type === 'wallpaper' || i.type === 'engine' || i.isCustom || Boolean(i.engine)))
+      .map((i, idx) => ({
         ...i,
         name: names[i.id] || i.name,
-        engine: i.engine || 'video-player',
+        engine: i.engine || (i.mediaType === 'canvas' ? i.source?.replace('engine:', '') : 'video-player'),
         isCustom: true,
+        installedAt: i.installedAt || (Date.now() - idx * 1000),
       }))
 
     return [...customs, ...builtins]
@@ -581,19 +724,19 @@ export default function LibraryPage() {
   // Filtered & Sorted Wallpapers
   const filteredWallpapers = useMemo(() => {
     const pinnedSet = new Set(homeWallpaperIds || [])
-    const likedSet = new Set(likedWallpaperIds || [])
 
     let list = allWallpapers.filter(w => {
       const isPinned = pinnedSet.has(w.id)
-      const isLiked = likedSet.has(w.id)
+      const isLiked = isWallpaperLiked(w)
       const typeInfo = getWallpaperTypeInfo(w)
 
       // Category Pill Filters
       if (filterCategory === 'liked' && !isLiked) return false
       if (filterCategory === 'pinned' && !isPinned) return false
       if (filterCategory === 'builtin' && w.isCustom) return false
-      if (filterCategory === 'custom' && (!w.isCustom || w.config?.streamUrl)) return false
+      if (filterCategory === 'custom' && (!w.isCustom || w.config?.streamUrl || typeInfo.type === 'canvas')) return false
       if (filterCategory === 'stream' && !w.config?.streamUrl) return false
+      if (filterCategory === 'procedural' && typeInfo.type !== 'canvas') return false
 
       // Type Filter Dropdown
       if (typeFilter !== 'all') {
@@ -615,20 +758,56 @@ export default function LibraryPage() {
     })
 
     // Sort order
-    if (sortBy === 'name-asc') {
+    if (sortBy === 'recent') {
+      list.sort((a, b) => {
+        const aTime = a.installedAt || (a.isCustom ? 1 : 0)
+        const bTime = b.installedAt || (b.isCustom ? 1 : 0)
+        return bTime - aTime
+      })
+    } else if (sortBy === 'name-asc') {
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     } else if (sortBy === 'name-desc') {
       list.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
     } else if (sortBy === 'liked') {
       list.sort((a, b) => {
-        const aLiked = likedSet.has(a.id) ? 1 : 0
-        const bLiked = likedSet.has(b.id) ? 1 : 0
+        const aLiked = isWallpaperLiked(a) ? 1 : 0
+        const bLiked = isWallpaperLiked(b) ? 1 : 0
         return bLiked - aLiked
       })
     }
 
     return list
-  }, [allWallpapers, filterCategory, typeFilter, sortBy, searchQuery, homeWallpaperIds, likedWallpaperIds])
+  }, [allWallpapers, filterCategory, typeFilter, sortBy, searchQuery, homeWallpaperIds, isWallpaperLiked])
+
+  const storageTelemetry = useMemo(() => {
+    let localCount = 0
+    let localBytes = 0
+    let cloudCount = 0
+
+    for (const item of installed || []) {
+      if (item.type !== 'wallpaper') continue
+      const isCommunity = Boolean(item.communityMeta || item.source === 'community')
+      if (!isCommunity) continue
+
+      if (item.storageStatus === 'cached' || item.localPath) {
+        localCount++
+        localBytes += (item.fileSize || 30 * 1024 * 1024)
+      } else {
+        cloudCount++
+      }
+    }
+
+    const localMb = (localBytes / (1024 * 1024)).toFixed(1)
+    const savedGb = ((cloudCount * 35) / 1024).toFixed(2)
+
+    return {
+      hasCommunityItems: (localCount + cloudCount) > 0,
+      localCount,
+      localMb,
+      cloudCount,
+      savedGb,
+    }
+  }, [installed])
 
   // Split out first item for the featured asymmetric hero card if in grid mode and >= 1 item
   const featuredItem = (viewMode === 'grid' && filteredWallpapers.length > 0) ? filteredWallpapers[0] : null
@@ -702,6 +881,66 @@ export default function LibraryPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Storage Action Notification Banner ───────────────────────────────── */}
+      {storageNotice && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: '9px 16px',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 12.5,
+            fontWeight: 500,
+            background: storageNotice.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+            border: `1px solid ${storageNotice.type === 'error' ? 'rgba(239, 68, 68, 0.35)' : 'rgba(16, 185, 129, 0.35)'}`,
+            color: storageNotice.type === 'error' ? 'var(--color-rose)' : 'var(--color-emerald)',
+          }}
+        >
+          <span>{storageNotice.message}</span>
+          <button className="btn-icon" onClick={() => setStorageNotice(null)} style={{ padding: 2 }}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* ── Storage Telemetry Header ─────────────────────────────────────────── */}
+      {storageTelemetry.hasCommunityItems && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: '10px 16px',
+            borderRadius: 9,
+            background: 'rgba(var(--rgb-card), 0.65)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            fontSize: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-emerald)' }}>
+              <HardDrive size={14} />
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Local Storage:</span>
+              <span>{storageTelemetry.localMb} MB ({storageTelemetry.localCount} item{storageTelemetry.localCount === 1 ? '' : 's'})</span>
+            </div>
+            <span style={{ color: 'var(--border-subtle)' }}>•</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-cyan)' }}>
+              <Cloud size={14} />
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Cloud Stream:</span>
+              <span>{storageTelemetry.cloudCount} item{storageTelemetry.cloudCount === 1 ? '' : 's'} (~{storageTelemetry.savedGb} GB drive space saved)</span>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Manage offline availability per item or change default behavior in Settings
+          </span>
+        </div>
+      )}
 
       {/* ── Multi-Monitor Target Screen Bar ───────────────────────────────────── */}
       {screenArrangement === 'per-screen' && monitors.length > 1 && (
@@ -816,10 +1055,11 @@ export default function LibraryPage() {
         <div className="library-pills-row">
           {[
             { id: 'all', label: 'All', count: allWallpapers.length },
-            { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
+            { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => isWallpaperLiked(w)).length, icon: Heart },
             { id: 'pinned', label: 'Pinned', count: homeWallpaperIds.length, icon: Pin },
+            { id: 'procedural', label: 'Procedural', count: allWallpapers.filter(w => getWallpaperTypeInfo(w).type === 'canvas').length, icon: Sparkles },
             { id: 'builtin', label: 'Built-in', count: WALLPAPER_LIST.length },
-            { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
+            { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl && getWallpaperTypeInfo(w).type !== 'canvas').length },
             { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length },
           ].map(cat => {
             const isActive = filterCategory === cat.id
@@ -878,7 +1118,7 @@ export default function LibraryPage() {
               wallpaper={featuredItem}
               isFeatured={true}
               isLive={Boolean(getActiveStatus(featuredItem))}
-              isLiked={(likedWallpaperIds || []).includes(featuredItem.id)}
+              isLiked={isWallpaperLiked(featuredItem)}
               isPinned={homeWallpaperIds.includes(featuredItem.id)}
               isApplying={applyingId === featuredItem.id}
               thumbnailMode={thumbnailMode}
@@ -891,6 +1131,8 @@ export default function LibraryPage() {
                 if (Boolean(getActiveStatus(featuredItem))) handleStop()
                 uninstallItem(id)
               }}
+              onDownloadOffline={handleDownloadOffline}
+              onFreeSpace={handleFreeSpace}
             />
           )}
 
@@ -903,7 +1145,7 @@ export default function LibraryPage() {
                 wallpaper={item}
                 isFeatured={false}
                 isLive={isLive}
-                isLiked={(likedWallpaperIds || []).includes(item.id)}
+                isLiked={isWallpaperLiked(item)}
                 isPinned={homeWallpaperIds.includes(item.id)}
                 isApplying={applyingId === item.id}
                 thumbnailMode={thumbnailMode}
@@ -916,6 +1158,8 @@ export default function LibraryPage() {
                   if (isLive) handleStop()
                   uninstallItem(id)
                 }}
+                onDownloadOffline={handleDownloadOffline}
+                onFreeSpace={handleFreeSpace}
               />
             )
           })}
@@ -928,8 +1172,10 @@ export default function LibraryPage() {
             const isLive = Boolean(activeStatus)
             const isApplying = applyingId === item.id
             const isPinned = homeWallpaperIds.includes(item.id)
-            const isLiked = (likedWallpaperIds || []).includes(item.id)
+            const isLiked = isWallpaperLiked(item)
             const typeInfo = getWallpaperTypeInfo(item)
+            const isCommunity = Boolean(item.communityMeta || item.source === 'community')
+            const isLocal = !isCommunity || item.storageStatus === 'cached' || item.storageStatus === 'downloaded' || Boolean(item.localPath) || typeInfo.type === 'canvas'
 
             return (
               <div
@@ -964,7 +1210,7 @@ export default function LibraryPage() {
 
                 {/* Info */}
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-main)' }} className="truncate">
                       {item.name}
                     </h4>
@@ -981,6 +1227,25 @@ export default function LibraryPage() {
                     >
                       {typeInfo.label.toUpperCase()}
                     </span>
+                    {isCommunity && (
+                      <span
+                        style={{
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          background: isLocal ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                          color: isLocal ? 'var(--color-emerald)' : 'var(--color-cyan)',
+                          border: `1px solid ${isLocal ? 'rgba(16, 185, 129, 0.35)' : 'rgba(56, 189, 248, 0.35)'}`,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        {isLocal ? <HardDrive size={10} /> : <Cloud size={10} />}
+                        <span>{isLocal ? 'LOCAL' : 'CLOUD'}</span>
+                      </span>
+                    )}
                     {isLive && (
                       <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-emerald)' }}>
                         ● LIVE
@@ -994,6 +1259,27 @@ export default function LibraryPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
+                  {isCommunity && !isLocal && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => handleDownloadOffline(item)}
+                      disabled={downloadingId === item.id}
+                      title="Download wallpaper to keep offline"
+                      style={{ height: 30, fontSize: 11.5, padding: '0 8px', color: 'var(--color-cyan)' }}
+                    >
+                      <DownloadCloud size={12} /> {downloadingId === item.id ? `${downloadProgress[item.id] || 0}%` : 'Download'}
+                    </button>
+                  )}
+                  {isCommunity && isLocal && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => handleFreeSpace(item.id)}
+                      title="Free up local disk space (keeps in Library as stream)"
+                      style={{ height: 30, fontSize: 11.5, padding: '0 8px' }}
+                    >
+                      <Cloud size={12} /> Free Space
+                    </button>
+                  )}
                   <button
                     className="btn-icon"
                     title={isLiked ? 'Unlike' : 'Like'}
@@ -1056,6 +1342,8 @@ export default function LibraryPage() {
           onClose={() => setPreviewingWallpaper(null)}
           onApply={handleApply}
           isLive={Boolean(getActiveStatus(previewingWallpaper))}
+          onDownloadOffline={handleDownloadOffline}
+          onFreeSpace={handleFreeSpace}
         />
       )}
 

@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows" alt="Platform" />
   <img src="https://img.shields.io/badge/Backend-Tauri%202%20%2B%20Rust-orange?style=for-the-badge&logo=rust" alt="Tauri 2 + Rust" />
   <img src="https://img.shields.io/badge/Frontend-React%2019%20%2B%20Canvas%202D-61dafb?style=for-the-badge&logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License MIT" />
+  <img src="https://img.shields.io/badge/License-Freeware-00f0ff?style=for-the-badge" alt="License Freeware" />
 </p>
 
 ---
@@ -190,22 +190,18 @@ AetherFlow/
 
 ---
 
-## 🤝 Contributing
+## 💬 Support & Issues
 
-Contributions, issues, and feature requests are welcome!
-Feel free to check the [issues page](https://github.com/yashpreeto7/aetherflow/issues).
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Have feedback, bug reports, or feature requests?
+Feel free to open a ticket on the [issues tracker](https://github.com/yashpreeto7/aetherflow/issues) or join the community discussion.
 
 ---
 
-## 📄 License
+## 📄 License & Terms
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+AetherFlow is distributed as **Proprietary Freeware**. It is 100% free of charge for personal, non-commercial use on Windows.
+
+All rights reserved. Reverse engineering, decompilation, resale, and unauthorized redistribution of modified binaries are strictly prohibited. See [`LICENSE.md`](LICENSE.md) for full End User License Agreement terms.
 
 ---
 

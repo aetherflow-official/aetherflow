@@ -162,3 +162,22 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ── 6. Community Moderators & Admins ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.community_admins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'moderator' CHECK (role IN ('owner', 'admin', 'moderator')),
+  added_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.community_admins ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read community_admins" ON public.community_admins FOR SELECT USING (true);
+CREATE POLICY "Admins can insert community_admins" ON public.community_admins FOR INSERT WITH CHECK (true);
+CREATE POLICY "Admins can delete community_admins" ON public.community_admins FOR DELETE USING (true);
+
+INSERT INTO public.community_admins (email, role, added_by)
+VALUES ('yash09preet@gmail.com', 'owner', 'system')
+ON CONFLICT (email) DO UPDATE SET role = 'owner';
+

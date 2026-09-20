@@ -128,8 +128,9 @@ export const useStore = create(
       // ── Screensaver Settings (Lively v2.1 Enhancements) ───────────────────
       screensaverEnabled: false,
       screensaverTimeoutMins: 5,
-      screensaverMode: 'current', // 'current' | 'random' | 'specific' | 'blackout'
+      screensaverMode: 'current', // 'current' | 'custom' | 'random' | 'specific' | 'blackout'
       screensaverSpecificEngine: null,
+      screensaverCustomWallpaper: null,
       screensaverFadeInSecs: 1.0,
       screensaverLockOnResume: false,
       screensaverGracePeriodSecs: 5,
@@ -143,6 +144,17 @@ export const useStore = create(
       setScreensaverTimeoutMins: (v) => set({ screensaverTimeoutMins: v }),
       setScreensaverMode: (v) => set({ screensaverMode: v }),
       setScreensaverSpecificEngine: (v) => set({ screensaverSpecificEngine: v }),
+      setScreensaverCustomWallpaper: (wp) => {
+        if (!wp) {
+          set({ screensaverCustomWallpaper: null })
+          return
+        }
+        const cleaned = { ...wp }
+        if (typeof cleaned.thumbnail === 'string' && cleaned.thumbnail.startsWith('data:image/') && cleaned.thumbnail.length > 2000) {
+          delete cleaned.thumbnail
+        }
+        set({ screensaverCustomWallpaper: cleaned })
+      },
       setScreensaverFadeInSecs: (v) => set({ screensaverFadeInSecs: v }),
       setScreensaverLockOnResume: (v) => set({ screensaverLockOnResume: v }),
       toggleScreensaverLockOnResume: () => set((s) => ({ screensaverLockOnResume: !s.screensaverLockOnResume })),
@@ -341,7 +353,11 @@ export const useStore = create(
 
       installItem: (item) =>
         set((s) => {
-          const installed = [...s.installed.filter(i => i.id !== item.id), item]
+          const installedItem = {
+            ...item,
+            installedAt: item.installedAt || Date.now(),
+          }
+          const installed = [installedItem, ...(s.installed || []).filter(i => i.id !== item.id)]
           persistCustomWallpapersToDisk(installed)
           return { installed }
         }),
@@ -403,6 +419,70 @@ export const useStore = create(
           watchFolderPath: path,
           watchFolderEnabled: Boolean(enabled),
         })
+      },
+
+      // ── Community Wallpaper Storage Mode ──────────────────────────────────
+      // 'stream_and_cache' (Default): Instant stream playback, background cache for offline
+      // 'stream_only': Zero disk space used, always stream from CDN
+      // 'always_download': Download full file before playback
+      communityStorageMode: 'stream_and_cache',
+      setCommunityStorageMode: (mode) => set({ communityStorageMode: mode }),
+
+      updateInstalledStorage: (id, { localPath, storageStatus, fileSize }) =>
+        set((s) => {
+          const installed = (s.installed || []).map(item => {
+            if (item.id === id || item.communityMeta?.originalId === id) {
+              const isVideo = item.engine === 'video-player' || item.config?.videoPath
+              const isImage = item.engine === 'image-player' || item.config?.imagePath
+              return {
+                ...item,
+                localPath: localPath !== undefined ? localPath : item.localPath,
+                storageStatus: storageStatus || item.storageStatus,
+                remoteUrl: item.remoteUrl || item.source || item.communityMeta?.source || item.config?.videoPath || item.config?.imagePath,
+                fileSize: fileSize !== undefined ? fileSize : item.fileSize,
+                config: {
+                  ...item.config,
+                  ...(localPath ? (isVideo ? { videoPath: localPath } : isImage ? { imagePath: localPath } : {}) : {}),
+                }
+              }
+            }
+            return item
+          })
+          persistCustomWallpapersToDisk(installed)
+          return { installed }
+        }),
+
+      removeLocalCommunityCopy: async (id) => {
+        const state = get()
+        const item = (state.installed || []).find(i => i.id === id || i.communityMeta?.originalId === id)
+        if (!item) return false
+        const localPath = item.localPath || item.config?.videoPath || item.config?.imagePath
+        if (localPath && !localPath.startsWith('http')) {
+          const { deleteLocalCommunityWallpaper } = await import('../lib/community.js')
+          await deleteLocalCommunityWallpaper(localPath)
+        }
+        const remoteSource = item.remoteUrl || item.communityMeta?.source || item.source
+        const isVideo = item.engine === 'video-player'
+        const isImage = item.engine === 'image-player'
+        set((s) => {
+          const installed = (s.installed || []).map(i => {
+            if (i.id === item.id) {
+              return {
+                ...i,
+                localPath: null,
+                storageStatus: 'cloud',
+                config: {
+                  ...i.config,
+                  ...(isVideo ? { videoPath: remoteSource } : isImage ? { imagePath: remoteSource } : {})
+                }
+              }
+            }
+            return i
+          })
+          persistCustomWallpapersToDisk(installed)
+          return { installed }
+        })
+        return true
       },
 
       // ── Playlists & Auto-Rotation ────────────────────────────────────────
@@ -571,8 +651,13 @@ export const useStore = create(
       // ── Liked Wallpapers (Local Favorites) ──────────────────────────────
       likedWallpaperIds: [],
       toggleLikeWallpaper: (id) => set((s) => {
+        if (!id) return s
         const list = s.likedWallpaperIds || []
-        const next = list.includes(id) ? list.filter(x => x !== id) : [...list, id]
+        const altId = id.startsWith('community-') ? id.replace(/^community-/, '') : `community-${id}`
+        const isCurrentlyLiked = list.includes(id) || list.includes(altId)
+        const next = isCurrentlyLiked
+          ? list.filter(x => x !== id && x !== altId)
+          : [...list, id, altId]
         return { likedWallpaperIds: next }
       }),
 
@@ -762,6 +847,127 @@ export const useStore = create(
       }),
       setShowAuthModal: (v) => set({ showAuthModal: v }),
 
+      // ── Hotkeys & Shell Integration ───────────────────────────────────────
+      hotkeys: {
+        enabled: true,
+        bindings: {
+          nextWallpaper: 'Ctrl+Alt+N',
+          prevWallpaper: 'Ctrl+Alt+P',
+          togglePause: 'Ctrl+Alt+W',
+          toggleMute: 'Ctrl+Shift+M',
+          toggleIcons: 'Ctrl+Alt+D',
+          screensaver: 'Ctrl+Alt+S',
+          openApp: 'Ctrl+Alt+A',
+        },
+      },
+      desktopContextMenu: true,
+      fileContextMenu: true,
+      hideDesktopIcons: false,
+
+      setHideDesktopIcons: (val) => {
+        const nextVal = Boolean(val)
+        set({ hideDesktopIcons: nextVal })
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          invoke('set_desktop_icons_visible', { visible: !nextVal }).catch(() => {})
+        }).catch(() => {})
+      },
+
+      toggleHideDesktopIcons: () => {
+        const cur = get().hideDesktopIcons || false
+        const nextVal = !cur
+        set({ hideDesktopIcons: nextVal })
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          invoke('set_desktop_icons_visible', { visible: !nextVal }).catch(() => {})
+        }).catch(() => {})
+      },
+
+      setHotkeyBinding: (action, combo) => set((s) => {
+        const nextHotkeys = {
+          ...s.hotkeys,
+          bindings: {
+            ...(s.hotkeys?.bindings || {}),
+            [action]: combo,
+          },
+        }
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          invoke('update_registered_hotkeys', { bindings: nextHotkeys.bindings }).catch(() => {})
+        }).catch(() => {})
+        return { hotkeys: nextHotkeys }
+      }),
+
+      setHotkeysEnabled: (enabled) => set((s) => {
+        const nextHotkeys = {
+          ...(s.hotkeys || {}),
+          enabled: Boolean(enabled),
+        }
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          if (nextHotkeys.enabled) {
+            invoke('update_registered_hotkeys', { bindings: nextHotkeys.bindings || {} }).catch(() => {})
+          } else {
+            invoke('update_registered_hotkeys', { bindings: {} }).catch(() => {})
+          }
+        }).catch(() => {})
+        return { hotkeys: nextHotkeys }
+      }),
+
+      resetHotkeysToDefault: () => set((s) => {
+        const defaultBindings = {
+          nextWallpaper: 'Ctrl+Alt+N',
+          prevWallpaper: 'Ctrl+Alt+P',
+          togglePause: 'Ctrl+Alt+W',
+          toggleMute: 'Ctrl+Alt+M',
+          toggleIcons: 'Ctrl+Alt+D',
+          screensaver: 'Ctrl+Alt+S',
+          openApp: 'Ctrl+Alt+A',
+        }
+        const nextHotkeys = {
+          ...(s.hotkeys || {}),
+          enabled: true,
+          bindings: defaultBindings,
+        }
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          invoke('update_registered_hotkeys', { bindings: defaultBindings }).catch(() => {})
+        }).catch(() => {})
+        return { hotkeys: nextHotkeys }
+      }),
+
+      setDesktopContextMenu: async (enabled) => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('set_desktop_context_menu', { enabled: Boolean(enabled) })
+          set({ desktopContextMenu: Boolean(enabled) })
+        } catch (e) {
+          console.warn('[Store] set_desktop_context_menu error:', e)
+        }
+      },
+
+      setFileContextMenu: async (enabled) => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          await invoke('set_file_context_menu', { enabled: Boolean(enabled) })
+          set({ fileContextMenu: Boolean(enabled) })
+        } catch (e) {
+          console.warn('[Store] set_file_context_menu error:', e)
+        }
+      },
+
+      syncContextMenuState: async () => {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core')
+          const s = get()
+          const dtWanted = s.desktopContextMenu ?? true
+          const fcWanted = s.fileContextMenu ?? true
+
+          await invoke('set_desktop_context_menu', { enabled: dtWanted })
+          await invoke('set_file_context_menu', { enabled: fcWanted })
+
+          set({
+            desktopContextMenu: dtWanted,
+            fileContextMenu: fcWanted,
+          })
+        } catch {}
+      },
+
       // ── Glassmorphism Controls ─────────────────────────────────────────────
       cardOpacity: 0.92,
       cardBlur: 12,
@@ -857,6 +1063,7 @@ export const useStore = create(
         screensaverTimeoutMins: s.screensaverTimeoutMins,
         screensaverMode: s.screensaverMode,
         screensaverSpecificEngine: s.screensaverSpecificEngine,
+        screensaverCustomWallpaper: s.screensaverCustomWallpaper,
         screensaverFadeInSecs: s.screensaverFadeInSecs,
         screensaverLockOnResume: s.screensaverLockOnResume,
         screensaverGracePeriodSecs: s.screensaverGracePeriodSecs,
@@ -880,7 +1087,13 @@ export const useStore = create(
         storageMode: s.storageMode,
         watchFolderPath: s.watchFolderPath,
         watchFolderEnabled: s.watchFolderEnabled,
+        hotkeys: s.hotkeys,
+        desktopContextMenu: s.desktopContextMenu,
+        fileContextMenu: s.fileContextMenu,
+        hideDesktopIcons: s.hideDesktopIcons,
+        communityStorageMode: s.communityStorageMode || 'stream_and_cache',
       }),
     }
+
   )
 )

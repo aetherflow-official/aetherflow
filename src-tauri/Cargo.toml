@@ -2,8 +2,8 @@
 name = "aetherflow"
 version = "1.0.7"
 description = "AetherFlow — High-Performance Windows Desktop Engine & Live Visuals Platform"
-authors = ["AetherFlow"]
-license = "MIT"
+authors = ["Yashpreet"]
+license = "Proprietary"
 repository = "https://github.com/aetherflow/aetherflow"
 edition = "2021"
 default-run = "aetherflow"
@@ -23,11 +23,13 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-http = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri-plugin-global-shortcut = "2"
 
 [profile.release]
 # Shrink binary size
@@ -52,5 +54,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_Shell",
     "Win32_Media_Audio",
     "Win32_System_Com",
-    "Win32_System_StationsAndDesktops"
+    "Win32_System_StationsAndDesktops",
+    "Win32_System_Registry"
 ] }
+

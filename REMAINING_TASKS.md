@@ -341,5 +341,52 @@ Mark these off as you complete them:
   - [x] 20.3: Native Background Watch Folder: Rust monitor loop scans watch folder every 4.5s, detects newly added files, emits `aether:watch-folder-new-items`, and auto-ingests into library.
   - [x] 20.4: Playlist Auto-Rotation Engine: multi-playlist Zustand state with non-repeating shuffle cycle pools and sequential modes; Rust background timer thread evaluates `PLAYLIST_TIMERS` every 750ms and emits rotation triggers with screensaver inhibition.
   - [x] 20.5: Dedicated Playlist Studio & Settings UI: added `/playlists` route and sidebar navigation item; built Master-Detail Playlist Studio (`Playlists.jsx`) with live active toggles, target monitor scope assignment, interval presets (1m-24h), and interactive wallpaper picker; added "Storage & Watch Folder" section in `Settings.jsx`.
+- [x] TASK 21: Community Hub Auth & Admin Security Overhaul:
+  - [x] 21.1: Gated `submitWallpaper()` and Submit tab behind authentication; unauthenticated users see clean sign-in callout.
+  - [x] 21.2: Gated `getUserSubmissions()` and My Submissions tab behind authentication; removed anonymous localStorage fallback merging.
+  - [x] 21.3: Completely eradicated hardcoded plaintext admin passcodes (`aether-admin`, `aetherflow-admin`, `admin123`) and `verifyAdminPasscode()`.
+  - [x] 21.4: Removed admin passcode modal, input form, and "Moderator Access" button from UI.
+  - [x] 21.5: Implemented automatic email-based admin resolution (`VITE_ADMIN_EMAILS` / user metadata) and added internal `requireAdmin()` gate on all moderation actions.
+  - [x] 21.6: Removed `communityAdminUnlocked` state, setter, and partialize persistence from `useStore.js`.
+- [x] TASK 22: System Tray Upgrades, Collision-Free Customizable Global Hotkeys & Desktop / File Explorer Context Menus:
+  - [x] 22.1: Collision-Free Built-in Hotkeys: Engineered built-in defaults strictly avoiding PowerToys and Windows 11 system hotkeys using `Ctrl+Alt+[Letter]` (Next: `Ctrl+Alt+N`, Prev: `Ctrl+Alt+P`, Pause: `Ctrl+Alt+W`, Mute: `Ctrl+Alt+M`, Icons: `Ctrl+Alt+D`, Screensaver: `Ctrl+Alt+S`, Open: `Ctrl+Alt+A`).
+  - [x] 22.2: Fully Customizable Key Recorder: Built interactive `ShortcutRecorder` UI in `Settings.jsx` supporting live key capture, Escape to cancel, dynamic unbind/rebind via `tauri-plugin-global-shortcut`, and one-click "Reset Defaults".
+  - [x] 22.3: Native System Tray Upgrades: Added Open, Next, Prev, Pause/Resume, Mute/Unmute, Stop, Toggle Desktop Icons, Taskbar Style Submenu (Translucent, Blur, Acrylic, Clear, Default), Screensaver, and Quit.
+- [x] TASK 24: Direct Media Uploads to GitHub Releases CDN, CORS Resolution & Streamlined Submit UI:
+  - [x] 24.1: Direct Media Threshold Expansion: Supported up to 150 MB video loops and 50 MB picture artwork directly on GitHub Releases CDN (`wallpapers-v1`), storing zero media bytes in Supabase Storage.
+  - [x] 24.2: Native Rust CORS Elimination: Implemented native Rust `upload_release_asset` and `delete_release_asset` in `main.rs` using `reqwest` streaming directly from disk, bypassing browser XHR CORS preflight limitations on `uploads.github.com`.
+  - [x] 24.3: Streamlined Submit UI: Overhauled Submit Wallpaper tab into a balanced 2-column layout with media type selector (`Video Loop`, `Picture / Art`, `YouTube Stream`, `Web Stream URL`), drag-and-drop file staging, live format/resolution/duration/audio metadata chips, and non-blocking guest notice.
+
+- [x] TASK 25: Hybrid Community Wallpaper Storage Architecture & Artist Licensing:
+  - [x] 25.1: Global Storage Behavior Preference: Implemented global `communityStorageMode` setting in `Settings.jsx` under "Storage & Watch Folder" with three modes:
+    - `Stream & Cache` (Default Option C): First click streams immediately from CDN (zero wait, instant gratification), caches silently in background to `%APPDATA%\com.aetherflow.app\wallpapers\community_<id>.<ext>` so loops & subsequent Windows boots are 100% offline-safe.
+    - `Stream Only` (Option B): Always streams directly from CDN without consuming local disk space.
+    - `Always Download` (Option A): Pre-downloads complete binary to disk before starting playback.
+  - [x] 25.2: Native Rust Caching & Free Space Pipeline: Implemented `cache_community_wallpaper` (streaming chunks, progress reporting via `aether:community-download-progress`, atomic `.part` rename) and `remove_local_community_wallpaper` in `src-tauri/src/main.rs`.
+  - [x] 25.3: Library Per-Item Overrides & Storage Telemetry: Added Storage Telemetry Header in `Library.jsx` (`Local Storage: X MB · Cloud Stream: Y items (~Z GB drive space saved)`), `LOCAL` / `CLOUD` badges on wallpaper cards (grid & list), context menu actions (`Download Offline`, `Free Up Space`), and granular item management without deleting cloud entries.
+  - [x] 25.4: Artist Attribution & Licensing Integration: Added `Artist Portfolio / Social Link (Optional)` and `License` dropdown (defaulting to `CC BY-NC-ND 4.0 (Recommended for Artists)`) to the Submit form; displayed clickable `By Author ↗` (opens in system browser via Tauri `open_url`) and `[CC BY-NC-ND]` badge on Catalog Cards, Preview Modals, and Library Cards.
+
+- [x] TASK 26: Community Most Popular/Liked Filters & Sorting, Decouple Community Apply from Library, and Expanded System Tray Quick Controls:
+  - [x] 26.1: Zero Fake Likes & Real Metrics Calculation (`src/lib/curatedCatalog.js`, `src/lib/community.js`):
+    - Reset all 45+ wallpapers in `curatedCatalog.js` to `likes: 0, downloads: 0` (zero mock engagement).
+    - Removed the synthetic hash generator from `community.js` that was producing fake counts like 345 on like.
+    - `getWallpaperMetrics()` now returns real counts: unliked starts at `0 likes`, liking immediately displays `1 like`, unliking reverts to `0 likes`.
+    - Upgraded `searchCatalog()` with normalized ID prefix lookups, user-like boosting, multi-level tie-breaking, and filter modes (`filterMode === 'popular'` and `filterMode === 'liked'`).
+  - [x] 26.2: Community UI Filter Integration (`src/pages/Community.jsx`):
+    - Added `🔥 Most Popular` and `❤️ Most Liked` to the Curation filter dropdown with 1-click active filter chip dismissals.
+    - Elevated `Most Popular` and `Most Liked` in the Sort selector dropdown.
+    - Added dedicated empty state for `❤️ Most Liked` when no wallpapers have been favorited yet.
+  - [x] 26.3: Decouple Community Apply from Library (`src/pages/Community.jsx`):
+    - Removed `installItem(item)` and `pinToHome(item.id)` from `handleInstall()`. Applying now directly streams and activates on the desktop without adding to `useStore.installed`.
+    - Removed auto-library addition from `handleLike()`. Adding to Library remains strictly explicit via `+ Library` or `Download Offline`.
+  - [x] 26.4: Win32 System Tray Quick Controls (`src-tauri/src/main.rs`, `src/App.jsx`):
+    - Added native Win32 submenus for **Volume** (100%, 80%, 60%, 40%, 20%, Mute), **Brightness** (100%, 85%, 70%, 50%, 30%), **Playback Speed** (2.0x, 1.5x, 1.25x, 1.0x, 0.75x, 0.5x), and **Opacity** (100%, 85%, 70%, 50%, 30%).
+    - Bound native Win32 menu events to MPV and WebViews, emitting `aether:tray:set-*` events for real-time bidirectional synchronization with Zustand store state and in-app HUD sliders.
+  - [x] 26.5: Standalone Binary Deployment:
+    - Built frontend (`npm run build` in 509ms) and compiled release binary (`cargo build --release` in 2m 18s).
+    - Deployed `AetherFlow.exe` (7.83 MB) and verified running process under PID 24272.
+
+
+
 
 

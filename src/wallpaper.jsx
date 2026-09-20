@@ -24,6 +24,7 @@ function WallpaperCanvas() {
   const engineRef   = useRef(null)
   const activeIdRef = useRef(null)
   const bootSeqRef  = useRef(0)
+  const isPausedRef = useRef(false)
 
   const isScreensaver = typeof window !== 'undefined' && window.location.search.includes('mode=screensaver')
   const fadeInSecs = parseFloat(
@@ -198,9 +199,23 @@ function WallpaperCanvas() {
       silenceAllMedia()
 
       if (!canvasRef.current) return
-      const engine = factory(canvasRef.current, config)
+      const shouldStartPaused = Boolean(config?.isPaused) || isPausedRef.current
+      if (config?.isPaused) {
+        isPausedRef.current = true
+      }
+      const engine = factory(canvasRef.current, {
+        ...config,
+        paused: shouldStartPaused,
+      })
       engineRef.current = engine
       engine.start()
+      if (shouldStartPaused) {
+        try { engine.pause?.() } catch (e) {}
+        try { engine.updateOptions?.({ paused: true }) } catch (e) {}
+        document.querySelectorAll('video, audio').forEach(el => {
+          try { el.pause() } catch (e) {}
+        })
+      }
     } catch (err) {
       console.error('[AetherFlow Wallpaper] Failed to load engine:', engineId, err)
     }
@@ -290,6 +305,7 @@ function WallpaperCanvas() {
         })
 
         await registerEvent('pause', () => {
+          isPausedRef.current = true
           try { engineRef.current?.pause?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: true }) } catch (e) {}
           document.querySelectorAll('video, audio').forEach(el => {
@@ -298,6 +314,7 @@ function WallpaperCanvas() {
         })
 
         await registerEvent('resume', () => {
+          isPausedRef.current = false
           try { engineRef.current?.resume?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: false }) } catch (e) {}
           document.querySelectorAll('video').forEach(el => {

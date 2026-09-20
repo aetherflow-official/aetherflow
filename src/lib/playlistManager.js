@@ -154,6 +154,110 @@ export async function rotateNext(monitorScope = '*', playlistId = null, forced =
 }
 
 /**
+ * Picks the previous wallpaper ID from a playlist
+ */
+export function getPrevWallpaperId(playlist) {
+  if (!playlist || !Array.isArray(playlist.wallpaperIds) || playlist.wallpaperIds.length === 0) {
+    return null
+  }
+
+  const ids = playlist.wallpaperIds
+  if (ids.length === 1) return ids[0]
+
+  const history = useStore.getState().playlistHistory?.[playlist.id] || []
+  const lastPlayedId = history[history.length - 1]
+  let prevIndex = 0
+  if (lastPlayedId) {
+    const idx = ids.indexOf(lastPlayedId)
+    if (idx >= 0) {
+      prevIndex = (idx - 1 + ids.length) % ids.length
+    }
+  }
+  const selectedId = ids[prevIndex]
+
+  useStore.setState(s => ({
+    playlistHistory: {
+      ...(s.playlistHistory || {}),
+      [playlist.id]: [selectedId]
+    }
+  }))
+
+  return selectedId
+}
+
+/**
+ * Reverses rotation for a monitor or global scope
+ */
+export async function rotatePrev(monitorScope = '*', playlistId = null, forced = false) {
+  const state = useStore.getState()
+  const activePlaylists = state.activePlaylists || {}
+  const targetPlaylistId = playlistId
+    || activePlaylists[monitorScope]
+    || (monitorScope === '*' ? activePlaylists['*'] : null)
+
+  if (!targetPlaylistId) {
+    return false
+  }
+
+  const playlist = (state.playlists || []).find(p => p.id === targetPlaylistId)
+  if (!playlist) return false
+
+  if (!forced && !playlist.enabled) {
+    return false
+  }
+
+  const prevId = getPrevWallpaperId(playlist)
+  if (!prevId) return false
+
+  const prevWallpaper = findWallpaperById(prevId)
+  if (!prevWallpaper) {
+    return false
+  }
+
+  const resolvedScope = (monitorScope && monitorScope !== '*')
+    ? monitorScope
+    : (playlist.targetMonitor && playlist.targetMonitor !== '*' ? playlist.targetMonitor : '*')
+
+  const targetMonitor = resolvedScope === '*' ? null : resolvedScope
+
+  console.log(`[PlaylistManager] Reversing to "${prevWallpaper.name}" on scope "${resolvedScope}" (Playlist: ${playlist.name})`)
+  await applyWallpaperToDesktop(prevWallpaper, { targetMonitor })
+
+  useStore.setState(s => ({
+    playlists: (s.playlists || []).map(p => {
+      if (p.id === playlist.id) {
+        return { ...p, lastRotatedAt: Date.now() }
+      }
+      return p
+    })
+  }))
+
+  return true
+}
+
+/**
+ * Step forward or backward through installed wallpapers when no playlist is active
+ */
+export async function cycleLibraryWallpaper(direction = 1) {
+  const state = useStore.getState()
+  const installed = state.installed || []
+  if (installed.length === 0) return false
+
+  const currentId = state.currentDesktopWallpaper?.id || state.activeWallpaper?.id
+  const currentIndex = installed.findIndex(w => w.id === currentId)
+  let nextIndex = 0
+  if (currentIndex >= 0) {
+    nextIndex = (currentIndex + direction + installed.length) % installed.length
+  }
+  const target = installed[nextIndex]
+  if (target) {
+    await applyWallpaperToDesktop(target)
+    return true
+  }
+  return false
+}
+
+/**
  * Synchronize playlist timers to the Rust backend
  */
 export async function syncPlaylistTimersToRust() {

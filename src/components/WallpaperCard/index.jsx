@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import {
   Heart, MoreHorizontal, Play, Check, Eye, Pin, Pencil, Trash2,
-  Video, Image as ImageIcon, Globe, Sparkles
+  Video, Image as ImageIcon, Globe, Sparkles, HardDrive, Cloud, DownloadCloud, ExternalLink
 } from 'lucide-react'
 import WallpaperThumbnail from '../WallpaperThumbnail/index.jsx'
+import { openExternalUrl } from '../../lib/wallpaperActions.js'
 
 export function getCardTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
@@ -57,6 +58,8 @@ export default function WallpaperCard({
   onTogglePin,
   onRename,
   onDelete,
+  onDownloadOffline,
+  onFreeSpace,
 }) {
   const [isHovered, setIsHovered] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -65,6 +68,18 @@ export default function WallpaperCard({
 
   const typeInfo = getCardTypeInfo(wallpaper)
   const TypeIcon = typeInfo.icon
+  const isCommunity = Boolean(
+    wallpaper.id?.startsWith('community-') ||
+    wallpaper.communityMeta ||
+    wallpaper.remoteUrl ||
+    (wallpaper.tags && wallpaper.tags.includes('community'))
+  )
+  const isLocal = Boolean(
+    wallpaper.localPath && !wallpaper.localPath.startsWith('http')
+  ) || (!isCommunity && !wallpaper.config?.streamUrl)
+  const authorPortfolio = wallpaper.authorPortfolio || wallpaper.communityMeta?.authorPortfolio || wallpaper.author_portfolio || ''
+  const license = wallpaper.license || wallpaper.communityMeta?.license || ''
+
   const creatorText = wallpaper.author
     ? `by ${wallpaper.author}`
     : wallpaper.communityMeta?.author
@@ -106,12 +121,26 @@ export default function WallpaperCard({
         />
       </div>
 
-      {/* ── 2. Top-Left: Media Type Indicator (Small, Restrained) ───────────── */}
-      <div className="wp-overlay-badge-tl">
+      {/* ── 2. Top-Left: Media Type Indicator & Storage Badge ───────────── */}
+      <div className="wp-overlay-badge-tl" style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
         <div className="wp-type-indicator">
           <TypeIcon size={10} style={{ color: typeInfo.color }} />
           <span>{typeInfo.label.toUpperCase()}</span>
         </div>
+        {isCommunity && (
+          <div
+            className="wp-type-indicator"
+            style={{
+              background: isLocal ? 'rgba(16, 185, 129, 0.22)' : 'rgba(56, 189, 248, 0.22)',
+              color: isLocal ? 'var(--color-emerald)' : 'var(--color-cyan)',
+              border: `1px solid ${isLocal ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
+            }}
+            title={isLocal ? 'Stored locally on disk (offline ready)' : 'Cloud stream (saves local disk space)'}
+          >
+            {isLocal ? <HardDrive size={10} /> : <Cloud size={10} />}
+            <span>{isLocal ? 'LOCAL' : 'CLOUD'}</span>
+          </div>
+        )}
       </div>
 
       {/* ── 3. Top-Right: Heart, Pin indicator & Context Menu ───────────────── */}
@@ -138,7 +167,7 @@ export default function WallpaperCard({
           </button>
         )}
 
-        {(onTogglePin || onRename || onDelete) && (
+        {(onTogglePin || onRename || onDelete || (isCommunity && (onDownloadOffline || onFreeSpace))) && (
           <div style={{ position: 'relative' }}>
             <button
               className="wp-glass-icon-btn"
@@ -154,6 +183,29 @@ export default function WallpaperCard({
                 style={{ top: 'calc(100% + 6px)', right: 0 }}
                 onClick={(e) => e.stopPropagation()}
               >
+                {isCommunity && !isLocal && onDownloadOffline && (
+                  <button
+                    className="library-context-item"
+                    onClick={() => {
+                      onDownloadOffline(wallpaper)
+                      setIsMenuOpen(false)
+                    }}
+                  >
+                    <DownloadCloud size={12} /> Download Offline
+                  </button>
+                )}
+                {isCommunity && isLocal && onFreeSpace && (
+                  <button
+                    className="library-context-item"
+                    onClick={() => {
+                      onFreeSpace(wallpaper.id)
+                      setIsMenuOpen(false)
+                    }}
+                    title="Remove local file from disk while keeping in Library"
+                  >
+                    <Cloud size={12} /> Free Up Space
+                  </button>
+                )}
                 {onTogglePin && (
                   <button
                     className="library-context-item"
@@ -201,8 +253,36 @@ export default function WallpaperCard({
               {wallpaper.name}
             </h3>
 
-            <div className="wp-overlay-creator">
-              {creatorText}
+            <div className="wp-overlay-creator" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {authorPortfolio ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openExternalUrl(authorPortfolio)
+                  }}
+                  title={`Open portfolio (${authorPortfolio})`}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    color: 'var(--color-brand)', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    fontSize: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2
+                  }}
+                >
+                  {creatorText} <ExternalLink size={10} />
+                </button>
+              ) : (
+                <span>{creatorText}</span>
+              )}
+              {license && (
+                <span
+                  className="wp-overlay-tag-chip"
+                  style={{ background: 'rgba(255,255,255,0.08)', fontSize: 9.5, padding: '1px 5px' }}
+                  title={license}
+                >
+                  {license.replace(/ 4\.0| 1\.0/g, '')}
+                </span>
+              )}
             </div>
 
             {wallpaper.tags && wallpaper.tags.length > 0 && (

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Power, DownloadCloud, CheckCircle2, AlertCircle, ExternalLink,
   User, LogIn, LogOut, Shield, Globe, FolderOpen, RefreshCw,
-  Monitor, Palette, Volume2, ArrowRight, Sparkles
+  Monitor, Palette, Volume2, ArrowRight, Sparkles, RotateCcw, Keyboard
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { checkForUpdate, openReleaseUrl, APP_VERSION } from '../lib/updater.js'
@@ -17,12 +17,109 @@ import {
   AetherSegmented
 } from '../components/Settings/SettingsUI.jsx'
 
+function ShortcutRecorder({ actionKey, label, desc, currentCombo, disabled, onSave }) {
+  const [isRecording, setIsRecording] = useState(false)
+
+  useEffect(() => {
+    if (!isRecording) return
+
+    function handleKeyDown(e) {
+      e.preventDefault()
+      e.stopPropagation()
+
+      if (e.key === 'Escape') {
+        setIsRecording(false)
+        return
+      }
+
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+        return
+      }
+
+      const parts = []
+      if (e.ctrlKey) parts.push('Ctrl')
+      if (e.altKey) parts.push('Alt')
+      if (e.shiftKey) parts.push('Shift')
+      if (e.metaKey) parts.push('Super')
+
+      let key = e.key.toUpperCase()
+      if (key === ' ') key = 'Space'
+      if (key === 'ARROWUP') key = 'Up'
+      if (key === 'ARROWDOWN') key = 'Down'
+      if (key === 'ARROWLEFT') key = 'Left'
+      if (key === 'ARROWRIGHT') key = 'Right'
+
+      if (parts.length === 0 && !key.startsWith('F')) {
+        return
+      }
+
+      parts.push(key)
+      const combo = parts.join('+')
+      onSave(actionKey, combo)
+      setIsRecording(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isRecording, actionKey, onSave])
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '10px 14px',
+      borderRadius: 8,
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid var(--border-subtle, rgba(255,255,255,0.06))',
+      marginBottom: 6,
+      opacity: disabled ? 0.5 : 1,
+      pointerEvents: disabled ? 'none' : 'auto',
+    }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-main)' }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{desc}</div>
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsRecording(!isRecording)}
+        style={{
+          padding: '5px 12px',
+          borderRadius: 6,
+          fontSize: 12,
+          fontFamily: 'monospace',
+          fontWeight: 600,
+          background: isRecording ? 'var(--color-brand)' : 'var(--bg-surface, rgba(255,255,255,0.06))',
+          color: isRecording ? '#fff' : 'var(--text-main)',
+          border: isRecording ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s ease',
+          minWidth: 100,
+          textAlign: 'center',
+          boxShadow: isRecording ? '0 0 12px var(--color-brand)' : 'none',
+        }}
+      >
+        {isRecording ? 'Press keys...' : currentCombo || 'None'}
+      </button>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const autoStart = useStore(s => s.autoStart) || false
   const hideDesktopIcons = useStore(s => s.hideDesktopIcons) || false
   const toggleHideDesktopIcons = useStore(s => s.toggleHideDesktopIcons)
   const youtubeBackend = useStore(s => s.youtubeBackend) || 'mpv'
   const setYoutubeBackend = useStore(s => s.setYoutubeBackend)
+  const hotkeys = useStore(s => s.hotkeys) || { enabled: true, bindings: {} }
+  const setHotkeyBinding = useStore(s => s.setHotkeyBinding)
+  const setHotkeysEnabled = useStore(s => s.setHotkeysEnabled)
+  const resetHotkeysToDefault = useStore(s => s.resetHotkeysToDefault)
+  const desktopContextMenu = useStore(s => s.desktopContextMenu) || false
+  const fileContextMenu = useStore(s => s.fileContextMenu) || false
+  const setDesktopContextMenu = useStore(s => s.setDesktopContextMenu)
+  const setFileContextMenu = useStore(s => s.setFileContextMenu)
   const authUser = useStore(s => s.authUser)
   const isAuthenticated = useStore(s => s.isAuthenticated)
   const setShowAuthModal = useStore(s => s.setShowAuthModal)
@@ -37,6 +134,8 @@ export default function SettingsPage() {
   const setStorageThresholdMb = useStore(s => s.setStorageThresholdMb)
   const storageMode = useStore(s => s.storageMode) || 'hybrid'
   const setStorageMode = useStore(s => s.setStorageMode)
+  const communityStorageMode = useStore(s => s.communityStorageMode) || 'stream_and_cache'
+  const setCommunityStorageMode = useStore(s => s.setCommunityStorageMode)
   const watchFolderPath = useStore(s => s.watchFolderPath)
   const watchFolderEnabled = useStore(s => s.watchFolderEnabled) || false
   const setWatchFolder = useStore(s => s.setWatchFolder)
@@ -294,13 +393,7 @@ export default function SettingsPage() {
         >
           <AetherToggle
             checked={hideDesktopIcons}
-            onChange={() => {
-              const nextVal = !hideDesktopIcons
-              toggleHideDesktopIcons()
-              import('@tauri-apps/api/core').then(({ invoke }) => {
-                invoke('set_desktop_icons_visible', { visible: !nextVal }).catch(() => {})
-              }).catch(() => {})
-            }}
+            onChange={() => toggleHideDesktopIcons()}
           />
         </SettingRow>
 
@@ -315,6 +408,26 @@ export default function SettingsPage() {
             ]}
             value={youtubeBackend}
             onChange={val => setYoutubeBackend(val)}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Windows Desktop Context Menu"
+          desc="Add AetherFlow cascading menu (Next, Pause/Resume, Mute, Desktop Icons) to Windows desktop right-click"
+        >
+          <AetherToggle
+            checked={desktopContextMenu}
+            onChange={() => setDesktopContextMenu(!desktopContextMenu)}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="File Explorer 'Set as Wallpaper' Menu"
+          desc="Add right-click option on .mp4, .webm, and image files to instantly set them as AetherFlow desktop wallpapers"
+        >
+          <AetherToggle
+            checked={fileContextMenu}
+            onChange={() => setFileContextMenu(!fileContextMenu)}
           />
         </SettingRow>
 
@@ -347,13 +460,91 @@ export default function SettingsPage() {
         )}
       </SettingSection>
 
+      {/* Section: Global Keyboard Shortcuts */}
+      <SettingSection
+        title="Global Keyboard Shortcuts"
+        badge={hotkeys.enabled ? "Active" : "Disabled"}
+      >
+        <SettingRow
+          label="Enable Global Shortcuts"
+          desc="Control live wallpapers, mute audio, and skip tracks system-wide even while working in other apps or playing games"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{
+                fontSize: 12,
+                padding: '5px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface)'
+              }}
+              onClick={resetHotkeysToDefault}
+              title="Restore standard conflict-free Ctrl+Alt shortcuts"
+            >
+              <RotateCcw size={13} /> Reset Defaults
+            </button>
+            <AetherToggle
+              checked={hotkeys.enabled}
+              onChange={() => setHotkeysEnabled(!hotkeys.enabled)}
+            />
+          </div>
+        </SettingRow>
+
+        <div style={{ marginTop: 12 }}>
+          {[
+            { key: 'nextWallpaper', label: 'Next Wallpaper', desc: 'Advances to next wallpaper in active playlist or library' },
+            { key: 'prevWallpaper', label: 'Previous Wallpaper', desc: 'Reverses to previous wallpaper in active playlist or library' },
+            { key: 'togglePause', label: 'Pause / Resume Wallpaper', desc: 'Freezes or unfreezes active desktop animation and media' },
+            { key: 'toggleMute', label: 'Mute / Unmute Audio', desc: 'Silences or restores live wallpaper background audio' },
+            { key: 'toggleIcons', label: 'Toggle Desktop Icons', desc: 'Hides or reveals Windows desktop icons for a clean look' },
+            { key: 'screensaver', label: 'Trigger Screensaver', desc: 'Immediately preview or launch live screensaver mode' },
+            { key: 'openApp', label: 'Open / Focus AetherFlow', desc: 'Brings the AetherFlow control panel window to the front' },
+          ].map((item) => (
+            <ShortcutRecorder
+              key={item.key}
+              actionKey={item.key}
+              label={item.label}
+              desc={item.desc}
+              currentCombo={hotkeys.bindings?.[item.key]}
+              disabled={!hotkeys.enabled}
+              onSave={setHotkeyBinding}
+            />
+          ))}
+        </div>
+      </SettingSection>
+
       {/* Section: Storage & Watch Folder */}
       <SettingSection
         title="Storage & Watch Folder"
-        badge={storageMode === 'hybrid' ? 'Smart Hybrid' : storageMode === 'always-copy' ? 'Full Copy' : 'In-Place'}
+        badge={communityStorageMode === 'stream_and_cache' ? 'Stream & Cache' : communityStorageMode === 'stream_only' ? 'Stream Only' : 'Always Download'}
       >
         <SettingRow
-          label="Media Ingestion Strategy"
+          label="Community Wallpaper Storage"
+          desc={
+            communityStorageMode === 'stream_and_cache'
+              ? 'Stream & Cache (Default): Instant zero-wait playback from CDN while caching silently in the background for offline loops and Windows boots.'
+              : communityStorageMode === 'stream_only'
+              ? 'Stream Only: Zero disk space used. Always streams live from CDN. Ideal for small SSDs.'
+              : 'Always Download: Pre-downloads the full wallpaper file to disk before playback begins. Ideal for spotty connections.'
+          }
+        >
+          <AetherSegmented
+            options={[
+              { value: 'stream_and_cache', label: 'Stream & Cache' },
+              { value: 'stream_only', label: 'Stream Only' },
+              { value: 'always_download', label: 'Always Download' },
+            ]}
+            value={communityStorageMode}
+            onChange={val => setCommunityStorageMode(val)}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Local Media Ingestion Strategy"
           desc="Control whether imported wallpapers are copied to AppData or referenced in-place on disk"
         >
           <AetherSegmented

@@ -3,15 +3,21 @@
 <!-- If you are an AI agent, read this file FIRST before doing anything. -->
 
 ## Last Updated
-2026-09-18 18:05 IST — Eliminated Main Window Restore & Focus Stealing on Wallpaper Change:
-1. **Silent Background Transitions**:
-   - Diagnosed root cause of window popping up over fullscreen videos, games, and active applications during playlist auto-rotation and wallpaper change: `apply_wallpaper` in `src-tauri/src/main.rs` contained diagnostic code calling `ShowWindow(main_h, SW_RESTORE)`, `SetForegroundWindow(main_h)`, `main_win.unminimize()`, `main_win.show()`, and `main_win.set_focus()`.
-   - Removed all restoration, unminimize, and foreground focus calls.
-   - All wallpaper transitions (manual apply, playlist timer tick, and monitor scope changes) now execute 100% silently in the background beneath desktop icons (`WorkerW`).
-2. **Build & Release**:
-   - `npm run build`: completed in 736ms with 0 errors.
-   - `cargo build --release`: compiled in 2m 24s.
-   - Replaced root `AetherFlow.exe` with the fresh release build and relaunched (PID 20992).
+2026-09-20 17:05 IST — Zero Fake Likes / Zero Fake Downloads, Community Real Engagement Metrics & Expanded System Tray Controls:
+1. **Eradicated All Hardcoded / Synthetic Likes & Downloads (`src/lib/curatedCatalog.js`, `src/lib/community.js`, `src/pages/Community.jsx`)**:
+   - Reset all 45+ wallpapers in `curatedCatalog.js` to `likes: 0, downloads: 0`.
+   - Completely deleted the synthetic pseudo-random hash fallback (`(pos % 600) + featBonus + typeBonus`) in `community.js` that produced numbers like `345` when liking a wallpaper.
+   - `getWallpaperMetrics()` and `searchCatalog()` now strictly return real engagement numbers: unliked starts at `0 likes`, liking immediately displays `1 like`, unliking reverts to `0 likes`.
+   - Updated "Most Popular" and "Most Liked" filters and sorting to operate cleanly on real user likes, community likes, and curated `featured` badges.
+   - Enhanced empty state in `Community.jsx` with clear guidance when viewing the `❤️ Most Liked` filter with zero likes.
+2. **Decoupled Community Apply from Library (`src/pages/Community.jsx`)**:
+   - Removed `installItem(item)` and `pinToHome(item.id)` from `handleInstall()`. Applying now streams/plays directly on the Windows desktop (`applyWallpaperToDesktop(item)`) without polluting the user's Library (`useStore.installed`).
+   - Removed auto-library addition from `handleLike()`. Adding to Library remains strictly explicit via `+ Library` or `Download Offline`.
+3. **Expanded Win32 System Tray Quick Controls (`src-tauri/src/main.rs`, `src/App.jsx`)**:
+   - Added native Win32 submenus for **Volume** (100%, 80%, 60%, 40%, 20%, Mute), **Brightness** (100%, 85%, 70%, 50%, 30%), **Playback Speed** (2.0x, 1.5x, 1.25x, 1.0x, 0.75x, 0.5x), and **Opacity** (100%, 85%, 70%, 50%, 30%).
+   - Bound runtime adjustments for MPV and WebViews, emitting `aether:tray:set-*` events that synchronize Zustand store state and in-app HUD sliders in real time.
+4. **Recompiled & Deployed Release Binary**:
+   - Built production standalone executable `AetherFlow.exe` (7.83 MB) and launched running process under PID 24272.
 
 ---
 
@@ -36,7 +42,7 @@ A **standalone Windows desktop application** that:
 | `npm run build` | ✅ Passes in ~540ms |
 | `npm run dev` | ✅ Runs at http://localhost:1420/ |
 | `npm run tauri:dev` | ✅ Passes (Rust installed & verified) |
-| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (7.65MB, v1.0.7) running with native desktop WorkerW integration |
+| Windows .exe / standalone | ✅ Built: `AetherFlow.exe` (7.75MB, v1.0.7) running with native desktop WorkerW integration |
 
 ---
 
@@ -66,10 +72,13 @@ src/engines/deep-space.js           Parallax stars, nebula, shooting stars
 src/engines/aurora.js               Borealis curtains over starfield
 src/engines/tokyo-rain.js           Procedural neon city + rain
 src/engines/audio-spectrum.js       Mic-reactive CAVA-style bars
+src/engines/quantum-flux.js         Canvas 2D cybernetic hex matrix engine with interactive pulse waves & sparks
 src/engines/fps-meter.js            Canvas 2D telemetry HUD with live rolling FPS counter & graph
 src/engines/image-player.js         Canvas 2D picture wallpaper engine (PNG/JPG/WebP)
 src/engines/web-stream.js           YouTube & Live Web Stream engine (iframes & thumbnails)
+src/engines/communityEngines.js     30 Community Procedural Canvas 2D engines (Space, Cyber, Anime, Nature, Math, Retro)
 src/engines/index.js                Lazy-loaded engine registry + theme list
+src/lib/curatedCatalog.js          Curated catalog with 66 verified wallpapers (30 procedural engines, 6 video loops, 5 streams, built-in)
 src/store/useStore.js               Zustand persisted global state (playlists, storage, watch folder)
 src/styles/themes.css               6 Sovereign theme CSS token sets
 src/styles/index.css                Global CSS utilities
@@ -78,12 +87,14 @@ src/components/WallpaperCard/       Unified wallpaper card surface
 src/components/StatusBar/           Waybar-style FPS + status bar
 src/components/Modals/              AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal, BatchImportModal
 src/lib/supabase.js                 Offline-safe Supabase marketplace API
+src/lib/community.js                Community moderation & submission service
 src/lib/updater.js                  GitHub Releases Auto-Updater module
 src/lib/wallpaperActions.js         Desktop wallpaper applicator & stream handlers
 src/lib/storageManager.js           Hybrid storage (<50MB copy, >=50MB reference) & folder scanner
 src/lib/playlistManager.js          Auto-rotation engine & watch folder ingestion listener
 src/pages/Home.jsx                  Wallpaper grid, controls, stream modal, theme switcher
 src/pages/Playlists.jsx             Master-Detail Playlist Studio with intervals, order, and monitors
+src/pages/Community.jsx             Community Hub, catalog, submission & moderation UI
 src/pages/Marketplace.jsx           Search, tags, publish form
 src/pages/Library.jsx               Installed items, batch import, add stream, activate/uninstall
 src/pages/Settings.jsx              Storage & watch folder, taskbar, updates, FPS, audio, system
@@ -229,8 +240,21 @@ npm run tauri:dev
 | 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Built-in Canvas Engine Playlist Integration & Release Deployment: Added resolution of built-in canvas engines in playlistManager.js and Playlists.jsx candidates; verified npm run build (540ms); compiled production standalone binary via cargo build --release (2m 39s); deployed updated 7.65MB AetherFlow.exe to root; launched running process (PID 16500) with native multi-monitor WorkerW desktop pinning. |
 | 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Resolved Playlist Monitor Scope Persistence & Race Condition: Bound targetMonitor directly to each playlist object; enforced mutual exclusion in activatePlaylist/deactivatePlaylist to prevent multiple playlists colliding on All Displays or the same screen; added immediate desktop wallpaper rotation on start/scope change; deployed updated AetherFlow.exe (7.65MB, PID 16812). |
 | 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Eliminated Window Popup / Focus Stealing on Wallpaper Change: Removed SW_RESTORE, SetForegroundWindow, and main_win.unminimize()/show()/set_focus() from apply_wallpaper in main.rs; verified silent background wallpaper rotation during fullscreen video & gaming; built release binary and deployed fresh AetherFlow.exe (PID 20992). |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Community Hub Auth & Admin Security Overhaul: eradicated plaintext passcodes, removed moderator unlock modal, added auto email-based admin detection and internal requireAdmin() server guard, gated Submit and My Submissions tabs behind authentication, cleaned useStore state, verified clean build (1.08s) and browser flow. |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Community Admins Migration & Dynamic In-App Moderator Management: created `supabase/admins_migration.sql` for `public.community_admins` table; added Team & Community Moderators management card in Manage tab with Add Moderator form and 1-click Revoke button; updated `src/lib/community.js` with dynamic cache and root owner protection (`yash09preet@gmail.com`); compiled and deployed updated `AetherFlow.exe` (7.65MB, PID 26992). |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | Playlist Occlusion Pause Preservation & Background Rotation Fix: suppressed playlist timer rotation while monitor is occluded/paused by maximized or fullscreen windows; added `CURRENT_PAUSED_MONITORS` tracking; added `paused: Option<bool>` to `spawn_mpv_wallpaper` with `--pause=yes`/`--mute=yes`; aligned `wallpaper.jsx` and `web-stream.js` with `isPausedRef`; recompiled and deployed updated `AetherFlow.exe` (7.65MB, PID 31456). |
+| 2026-09-18 | Antigravity (Gemini 3.8 Flash) | System Tray Upgrades, Collision-Free Customizable Global Hotkeys & Shell Context Menus: Built zero-PowerToys collision global hotkeys with `Ctrl+Alt+[Key]`, customizable via interactive `ShortcutRecorder` UI and persistent via `tauri-plugin-global-shortcut`; expanded System Tray with Next/Prev/Pause/Mute/Stop/Desktop Icons/Taskbar styles; implemented zero-UAC Windows Desktop Background & File Explorer context menus; compiled release binary and deployed fresh `AetherFlow.exe` (7.39MB, PID 26704). |
+| 2026-09-19 | Antigravity (Gemini 3.8 Flash) | Resolved Hotkey Wallpaper Pause/Resume Inversion, Fullscreen Monitor Occlusion Preservation, Desktop Icons Sync, and Windows 11 Context Menu: added atomic `USER_MANUALLY_PAUSED` flag and preserved physical fullscreen/maximized monitor occlusion checks upon unpausing; synchronized desktop icons hide toggle across Settings, System Tray, Hotkeys, and CLI; fixed Windows 11 context menu formatting (`(Default)` & `MUIVerb`, `SubCommands=""`, `DesktopBackground` & `Directory\Background`); recompiled release binary and deployed updated `AetherFlow.exe` (PID 26440). |
+| 2026-09-19 | Antigravity (Gemini 3.8 Flash) | Custom Screensaver Wallpaper Selection & Enhanced Random Engine/Media Playback: Added custom wallpaper mode to screensaver studio with live HUD stage simulator; built rich wallpaper card, search filter, and category modal picker; added native local media file import; updated Rust get_screensaver_active_wallpaper for custom video/picture/stream engines and disk-backed random pool; verified via Playwright, cargo check (4.01s), and npm run build (487ms); deployed release AetherFlow.exe. |
+| 2026-09-19 | Antigravity (Gemini 3.8 Flash) | Hybrid Community Wallpaper Storage Architecture (Option C Stream & Cache Default) & Artist Attribution/Licensing: Built native Rust cache_community_wallpaper with background .part download and promote-to-local pipeline; added remove_local_community_wallpaper; added global storage preference in Settings (Stream & Cache, Stream Only, Always Download); added Storage Telemetry Header in Library, LOCAL/CLOUD badges on cards, per-item Download Offline / Free Space actions; added Artist Portfolio Link (By Author ↗ via Tauri open_url) and License dropdown/badge ([CC BY-NC-ND]) in Submit form and cards; compiled release binary. |
+| 2026-09-19 | Antigravity (DeepMind) | Completed Concept 7 "The Translucent Floating Hub" Community Card Redesign: Converted catalog cards to 16:9 continuous artwork surfaces with left-side vertical spec pills (resolution, FPS, audio, size), center circular frosted glass play button, bottom-left title & creator link lockup, and bottom-right floating glass hub separating Apply, Add to Cloud (0MB), and Download Offline ({size}). Updated preview modal parity and set 420px grid minmax for spacious aesthetic. Verified npm run build (663ms), cargo check (4.17s), and visual screenshot. |
+| 2026-09-20 | Antigravity (Google DeepMind) | Community Toolbar De-clutter, Procedural Offline Download & Library Liked Filter Overhaul: Streamlined 4 cluttered rows into 2 clean rows (Search, Format select, Curation select, Sort select, View switcher; Row 2: Category pills); enabled offline download for procedural wallpapers on cards and in preview modal with green Downloaded/Offline Ready badges; synchronized likedIds with Zustand store and built isWallpaperLiked helper matching community IDs and original IDs; included procedural engines in Library allWallpapers and fixed Recently Added sorting; verified via browser subagent. |
+| 2026-09-20 | Antigravity (Gemini 3.8 Flash) | Zero Fake Likes, Decouple Apply from Library, & Expanded System Tray Controls: Reset all 45 curated catalog items to 0 likes/downloads; deleted synthetic hash fallback in community.js (eradicating numbers like 345 on like); unliked starts at 0, liking shows 1; decoupled Community Apply from Library (installItem/pinToHome removed from handleInstall & handleLike); added native Win32 submenus for Volume, Brightness, Playback Speed, and Opacity in System Tray with bidirectional Zustand/HUD synchronization; recompiled and deployed release binary AetherFlow.exe (7.83 MB, PID 24272). |
 ---
+
 *This file is maintained by AI agents. Always update the Session Log and Build Status after completing tasks.*
+
+
 
 
 

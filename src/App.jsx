@@ -51,6 +51,7 @@ export default function App() {
   const screensaverTimeoutMins = useStore(s => s.screensaverTimeoutMins)
   const screensaverMode = useStore(s => s.screensaverMode)
   const screensaverSpecificEngine = useStore(s => s.screensaverSpecificEngine)
+  const screensaverCustomWallpaper = useStore(s => s.screensaverCustomWallpaper)
   const screensaverFadeInSecs = useStore(s => s.screensaverFadeInSecs)
   const screensaverLockOnResume = useStore(s => s.screensaverLockOnResume)
   const screensaverGracePeriodSecs = useStore(s => s.screensaverGracePeriodSecs)
@@ -253,13 +254,24 @@ export default function App() {
     async function syncScreensaver() {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
+        let specificEngine = null
+        let specificConfig = null
+
+        if (screensaverMode === 'custom' && screensaverCustomWallpaper) {
+          specificEngine = screensaverCustomWallpaper.engine || (screensaverCustomWallpaper.config?.videoPath ? 'video-player' : (screensaverCustomWallpaper.config?.imagePath ? 'image-player' : (screensaverCustomWallpaper.config?.streamUrl ? 'web-stream' : (screensaverCustomWallpaper.id || 'aurora'))))
+          specificConfig = screensaverCustomWallpaper.config || {}
+        } else if (screensaverMode === 'specific') {
+          specificEngine = screensaverSpecificEngine || 'matrix-rain'
+          specificConfig = {}
+        }
+
         await invoke('sync_screensaver_settings', {
           settings: {
             enabled: !!screensaverEnabled,
             idle_timeout_mins: Number(screensaverTimeoutMins) || 5,
             mode: screensaverMode || 'current',
-            specific_engine: screensaverSpecificEngine || null,
-            specific_config: null,
+            specific_engine: specificEngine,
+            specific_config: specificConfig,
             fade_in_secs: Number(screensaverFadeInSecs) || 1.0,
             lock_on_resume: !!screensaverLockOnResume,
             grace_period_secs: Number(screensaverGracePeriodSecs) || 5,
@@ -277,6 +289,7 @@ export default function App() {
     screensaverTimeoutMins,
     screensaverMode,
     screensaverSpecificEngine,
+    screensaverCustomWallpaper,
     screensaverFadeInSecs,
     screensaverLockOnResume,
     screensaverGracePeriodSecs,
@@ -341,6 +354,191 @@ export default function App() {
     return () => {
       if (timer) clearTimeout(timer)
     }
+  }, [])
+
+  // ── Global Hotkeys, System Tray & Shell Context Menu Listeners ─────────────
+  React.useEffect(() => {
+    let unlistens = []
+
+    async function setupListeners() {
+      // 1. Next Wallpaper
+      const u1 = await safeListen('aether:shortcut:next', async () => {
+        try {
+          const { rotateNext, cycleLibraryWallpaper } = await import('./lib/playlistManager.js')
+          const activePlaylists = useStore.getState().activePlaylists || {}
+          if (Object.keys(activePlaylists).length > 0) {
+            await rotateNext(undefined, undefined, true)
+          } else {
+            await cycleLibraryWallpaper(1)
+          }
+        } catch (e) {
+          console.warn('[Shortcut] next failed:', e)
+        }
+      })
+      if (u1) unlistens.push(u1)
+
+      // 2. Previous Wallpaper
+      const u2 = await safeListen('aether:shortcut:prev', async () => {
+        try {
+          const { rotatePrev, cycleLibraryWallpaper } = await import('./lib/playlistManager.js')
+          const activePlaylists = useStore.getState().activePlaylists || {}
+          if (Object.keys(activePlaylists).length > 0) {
+            await rotatePrev(undefined, undefined, true)
+          } else {
+            await cycleLibraryWallpaper(-1)
+          }
+        } catch (e) {
+          console.warn('[Shortcut] prev failed:', e)
+        }
+      })
+      if (u2) unlistens.push(u2)
+
+      // 3. Toggle Mute
+      const u3 = await safeListen('aether:shortcut:toggle-mute', (event) => {
+        const payloadMuted = event?.payload?.muted
+        if (typeof payloadMuted === 'boolean') {
+          useStore.setState({ audioMuted: payloadMuted })
+        } else {
+          const cur = useStore.getState().audioMuted
+          useStore.setState({ audioMuted: !cur })
+        }
+      })
+      if (u3) unlistens.push(u3)
+
+      // 4. Toggle Desktop Icons
+      const u4 = await safeListen('aether:shortcut:toggle-icons', (event) => {
+        const payloadHide = event?.payload?.hideDesktopIcons
+        if (typeof payloadHide === 'boolean') {
+          useStore.setState({ hideDesktopIcons: payloadHide })
+        } else {
+          const cur = useStore.getState().hideDesktopIcons || false
+          useStore.setState({ hideDesktopIcons: !cur })
+        }
+      })
+      if (u4) unlistens.push(u4)
+
+      // 4b. Toggle Pause
+      const u4b = await safeListen('aether:shortcut:toggle-pause', (event) => {
+        const isPaused = event?.payload?.isPaused
+        console.log('[Shortcut] Wallpaper pause toggled:', isPaused)
+      })
+      if (u4b) unlistens.push(u4b)
+
+      // 4c. Tray Quick Adjustments: Volume, Brightness, Playback Speed, Opacity
+      const uVol = await safeListen('aether:tray:set-volume', (event) => {
+        const vol = event?.payload?.volume
+        const muted = event?.payload?.muted
+        if (typeof vol === 'number') {
+          useStore.setState({ audioVolume: vol })
+          const activeWp = useStore.getState().activeWallpaper
+          if (activeWp) {
+            useStore.getState().setWallpaperAudio(activeWp.id, { volume: vol, muted: Boolean(muted) })
+          }
+        }
+        if (typeof muted === 'boolean') {
+          useStore.setState({ audioMuted: muted })
+        }
+      })
+      if (uVol) unlistens.push(uVol)
+
+      const uBr = await safeListen('aether:tray:set-brightness', (event) => {
+        const br = event?.payload?.brightness
+        if (typeof br === 'number') {
+          useStore.getState().setWallpaperBrightness(br)
+        }
+      })
+      if (uBr) unlistens.push(uBr)
+
+      const uSpd = await safeListen('aether:tray:set-speed', (event) => {
+        const spd = event?.payload?.speed
+        if (typeof spd === 'number') {
+          useStore.getState().setWallpaperSpeed(spd)
+        }
+      })
+      if (uSpd) unlistens.push(uSpd)
+
+      const uOp = await safeListen('aether:tray:set-opacity', (event) => {
+        const op = event?.payload?.opacity
+        if (typeof op === 'number') {
+          useStore.getState().setWallpaperOpacity(op)
+        }
+      })
+      if (uOp) unlistens.push(uOp)
+
+      // 5. File Explorer Context Menu: Set as AetherFlow Wallpaper
+      const u5 = await safeListen('aether:cli:apply-file', async (event) => {
+        const filePath = event?.payload?.filePath
+        if (!filePath) return
+        try {
+          const ext = filePath.split('.').pop()?.toLowerCase()
+          const isVideo = ['mp4', 'webm', 'mkv', 'mov', 'avi'].includes(ext)
+          const name = filePath.split(/[/\\]/).pop().replace(/\.[^/.]+$/, '')
+          const id = `custom-${Date.now()}`
+          const item = {
+            id,
+            name,
+            engine: isVideo ? 'video-player' : 'image-player',
+            config: isVideo ? { videoPath: filePath, speedMultiplier: 1 } : { imagePath: filePath, scaleMode: 'cover' },
+            tags: [isVideo ? 'video' : 'picture', 'custom'],
+            isCustom: true,
+            createdAt: Date.now(),
+          }
+
+          const currentInstalled = useStore.getState().installed || []
+          useStore.setState({ installed: [item, ...currentInstalled.filter(x => x.id !== id)] })
+          await applyWallpaperToDesktop(item)
+          console.log('[Shell Context Menu] Successfully applied wallpaper from file:', filePath)
+        } catch (e) {
+          console.error('[Shell Context Menu] Failed to apply file:', e)
+        }
+      })
+      if (u5) unlistens.push(u5)
+    }
+
+    setupListeners()
+
+    // Sync registered hotkeys and context menus with backend on startup
+    if (isTauri()) {
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        const state = useStore.getState()
+        if (state.hotkeys?.enabled && state.hotkeys?.bindings) {
+          invoke('update_registered_hotkeys', { bindings: state.hotkeys.bindings }).catch(() => {})
+        }
+        state.syncContextMenuState?.()
+      }).catch(() => {})
+    }
+
+    return () => {
+      unlistens.forEach(fn => {
+        if (typeof fn === 'function') fn()
+      })
+    }
+  }, [])
+
+  // ── In-App Keyboard Shortcuts (Focus Search, Nav, Modal Escape) ────────────
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if user is currently typing in a text field
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) {
+        if (e.key === 'Escape') {
+          e.target.blur()
+        }
+        return
+      }
+
+      // '/' or 'Ctrl+F' -> Focus Search Bar
+      if (e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'f')) {
+        e.preventDefault()
+        const searchInput = document.querySelector('input[placeholder*="Search" i], input[type="search"]')
+        if (searchInput) {
+          searchInput.focus()
+          searchInput.select()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   return (

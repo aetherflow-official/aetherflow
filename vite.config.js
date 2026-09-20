@@ -85,6 +85,18 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    proxy: {
+      '/gh-uploads': {
+        target: 'https://uploads.github.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/gh-uploads/, ''),
+      },
+      '/gh-api': {
+        target: 'https://api.github.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/gh-api/, ''),
+      },
+    },
     watch: {
       // Watch for changes on Tauri side too
       ignored: ['**/src-tauri/**'],
