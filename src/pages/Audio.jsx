@@ -74,39 +74,34 @@ export default function AudioPage() {
     }
   }, [])
 
-  useEffect(() => {
-    let active = true
-    async function scanAudioDevices() {
-      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return
-      try {
-        const devs = await navigator.mediaDevices.enumerateDevices()
-        if (!active) return
-        const inputs = devs.filter(d => d.kind === 'audioinput')
-        const list = [
-          { deviceId: 'default', label: 'Windows Default' }
-        ]
-        inputs.forEach((d, idx) => {
-          if (d.deviceId && d.deviceId !== 'default') {
-            list.push({
-              deviceId: d.deviceId,
-              label: d.label || `Audio Device ${idx + 1}`
-            })
-          }
-        })
-        setAudioInputDevices(list)
-      } catch (e) {
-        console.warn('[AetherFlow] Could not enumerate audio devices:', e)
-      }
-    }
-    scanAudioDevices()
-    if (navigator.mediaDevices?.addEventListener) {
-      navigator.mediaDevices.addEventListener('devicechange', scanAudioDevices)
-      return () => {
-        active = false
-        navigator.mediaDevices.removeEventListener('devicechange', scanAudioDevices)
-      }
+  const scanAudioDevices = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices()
+      const inputs = devs.filter(d => d.kind === 'audioinput')
+      const list = [
+        { deviceId: 'default', label: 'Windows Default' }
+      ]
+      inputs.forEach((d, idx) => {
+        if (d.deviceId && d.deviceId !== 'default') {
+          list.push({
+            deviceId: d.deviceId,
+            label: d.label || `Audio Device ${idx + 1}`
+          })
+        }
+      })
+      setAudioInputDevices(list)
+    } catch (e) {
+      console.warn('[AetherFlow] Could not enumerate audio devices:', e)
     }
   }, [])
+
+  useEffect(() => {
+    // Only pre-scan if user previously configured a specific custom device
+    if (visualizerAudioDeviceId && visualizerAudioDeviceId !== 'default') {
+      scanAudioDevices()
+    }
+  }, [visualizerAudioDeviceId, scanAudioDevices])
 
   async function toggleAudioTest() {
     if (isTestingAudio) {
@@ -319,6 +314,8 @@ export default function AudioPage() {
         >
           <AetherSelect
             value={visualizerAudioDeviceId}
+            onFocus={scanAudioDevices}
+            onMouseDown={scanAudioDevices}
             onChange={e => handleVisualizerDeviceSelect(e.target.value)}
             options={audioInputDevices.map(dev => ({ value: dev.deviceId, label: dev.label }))}
             style={{ width: '100%', maxWidth: 360 }}

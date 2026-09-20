@@ -6257,7 +6257,8 @@ fn main() {
         std::env::set_var(
             "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
             "--autoplay-policy=no-user-gesture-required \
-             --disable-features=MediaFoundationD3D11VideoCapture,Translate,OptimizationHints,MediaRouter,HardwareMediaKeyHandling,MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls \
+             --disable-features=MediaFoundationVideoCapture,MediaFoundationD3D11VideoCapture,Translate,OptimizationHints,MediaRouter,HardwareMediaKeyHandling,MediaSessionService,GlobalMediaControls,WebAppSystemMediaControls \
+             --disable-video-capture \
              --enable-features=TrimOnMemoryPressure \
              --disk-cache-size=16777216 \
              --media-cache-size=16777216 \

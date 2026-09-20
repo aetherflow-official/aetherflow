@@ -258,30 +258,61 @@ export default function CommunityPage() {
     setTimeout(() => setActionNotice(null), 4000)
   }
 
+  const [isSearching, setIsSearching] = useState(false)
+
+  const likeCountsRef = useRef(likeCounts)
+  likeCountsRef.current = likeCounts
+  const downloadCountsRef = useRef(downloadCounts)
+  downloadCountsRef.current = downloadCounts
+  const likedIdsRef = useRef(likedIds)
+  likedIdsRef.current = likedIds
+  const installedRef = useRef(installed)
+  installedRef.current = installed
+  const resultsRef = useRef(results)
+  resultsRef.current = results
+
   // Fetch wallpapers
   const doSearch = useCallback(async (forceRefresh = false) => {
-    setLoading(true)
-    const installedSet = new Set((installed || []).map(i => i?.id || i?.communityMeta?.originalId).filter(Boolean))
-    const data = await searchCatalog({
-      query,
-      category: selectedCategory,
-      tags: selectedTags,
-      type: typeFilter,
-      filterMode,
-      sortMode,
-      likeCounts,
-      downloadCounts,
-      likedIds,
-      installedIds: installedSet,
-    })
-    setResults(data)
-    setLoading(false)
-  }, [query, selectedCategory, selectedTags, typeFilter, filterMode, sortMode, likeCounts, downloadCounts, likedIds, installed])
+    // Only show full loading spinner if we don't have results yet to prevent container collapse and scroll jumping
+    if (resultsRef.current.length === 0) {
+      setLoading(true)
+    }
+    setIsSearching(true)
+    try {
+      const installedSet = new Set((installedRef.current || []).map(i => i?.id || i?.communityMeta?.originalId).filter(Boolean))
+      const data = await searchCatalog({
+        query,
+        category: selectedCategory,
+        tags: selectedTags,
+        type: typeFilter,
+        filterMode,
+        sortMode,
+        likeCounts: likeCountsRef.current,
+        downloadCounts: downloadCountsRef.current,
+        likedIds: likedIdsRef.current,
+        installedIds: installedSet,
+        forceRefresh,
+      })
+      setResults(data)
+    } catch (err) {
+      console.error('[Community] Search error:', err)
+    } finally {
+      setLoading(false)
+      setIsSearching(false)
+    }
+  }, [query, selectedCategory, selectedTags, typeFilter, filterMode, sortMode])
 
   useEffect(() => {
     const timer = setTimeout(doSearch, 200)
     return () => clearTimeout(timer)
   }, [doSearch])
+
+  // When browsing in 'liked' filter, sync when user likes/unlikes
+  useEffect(() => {
+    if (filterMode === 'liked') {
+      doSearch()
+    }
+  }, [likedIds, filterMode])
 
   // Load community stats + like/download counts
   const loadStatsAndCounts = useCallback(() => {
@@ -1382,7 +1413,7 @@ export default function CommunityPage() {
           </div>
 
           {/* Results Display */}
-          {loading ? (
+          {(loading && results.length === 0) ? (
             <div className="flex items-center justify-center" style={{ height: 240, color: 'var(--text-muted)' }}>
               <div className="animate-spin" style={{ width: 28, height: 28, border: '2px solid var(--border-subtle)', borderTopColor: 'var(--color-brand)', borderRadius: '50%' }} />
             </div>
@@ -1421,7 +1452,7 @@ export default function CommunityPage() {
             </div>
           ) : browseView === 'compact' ? (
             /* ── COMPACT LIST VIEW ── */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: isSearching ? 0.75 : 1, transition: 'opacity 0.15s ease' }}>
               {results.map(item => {
                 const badge = TYPE_BADGES[item.type] || {}
                 const rowLiked = isItemLikedByUser(item)
@@ -1634,7 +1665,7 @@ export default function CommunityPage() {
             </div>
           ) : (
             /* ── GRID CARDS VIEW (Concept 7: The Translucent Floating Hub) ── */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 24, opacity: isSearching ? 0.75 : 1, transition: 'opacity 0.15s ease' }}>
               {results.map(item => {
                 const isLiked = isItemLikedByUser(item)
                 const { likes: currentLikes, downloads: currentDownloads } = getWallpaperMetrics(item, likeCounts, downloadCounts, isLiked)

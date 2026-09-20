@@ -92,7 +92,7 @@ export function AetherToggle({ checked, onChange, ariaLabel, disabled }) {
   )
 }
 
-export function AetherSelect({ value, onChange, options, style, disabled }) {
+export function AetherSelect({ value, onChange, options, style, disabled, ...rest }) {
   return (
     <select
       className="aether-select"
@@ -100,6 +100,7 @@ export function AetherSelect({ value, onChange, options, style, disabled }) {
       onChange={onChange}
       style={style}
       disabled={disabled}
+      {...rest}
     >
       {options.map(opt => (
         <option key={opt.value} value={opt.value}>
