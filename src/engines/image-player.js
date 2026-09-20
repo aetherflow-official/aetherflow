@@ -117,11 +117,6 @@ export function createImagePlayer(canvas, options = {}) {
     img.src = src
   }
 
-  function frame() {
-    // Keep animation loop alive per engine specification
-    animId = requestAnimationFrame(frame)
-  }
-
   function start() {
     resize()
     window.addEventListener('resize', resize)
@@ -129,11 +124,11 @@ export function createImagePlayer(canvas, options = {}) {
     if (imgPath) {
       loadImage(imgPath)
     }
-    animId = requestAnimationFrame(frame)
   }
 
   function stop() {
     if (animId) cancelAnimationFrame(animId)
+    animId = null
     window.removeEventListener('resize', resize)
     isLoaded = false
     if (img) {
@@ -148,16 +143,11 @@ export function createImagePlayer(canvas, options = {}) {
   }
 
   function pause() {
-    if (animId) {
-      cancelAnimationFrame(animId)
-      animId = null
-    }
+    // Static picture wallpaper requires no active animation loop
   }
 
   function resume() {
-    if (!animId) {
-      animId = requestAnimationFrame(frame)
-    }
+    render()
   }
 
   function updateOptions(newOpts) {
