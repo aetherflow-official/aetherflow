@@ -112,21 +112,42 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
     }
   }, [engineId, bootEngine, silenceLocalMedia])
 
-  // ── Auto-pause preview engine when window is hidden / in background ──────
+  // ── Auto-pause preview engine when window is hidden or scrolled offscreen ─
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (engineRef.current?.pause) {
-          try { engineRef.current.pause() } catch (e) {}
-        }
+    let isVisible = typeof document !== 'undefined' ? !document.hidden : true
+    let isIntersecting = true
+
+    const updatePlayState = () => {
+      if (!engineRef.current) return
+      if (isVisible && isIntersecting) {
+        try { engineRef.current.resume?.() } catch (e) {}
       } else {
-        if (engineRef.current?.resume) {
-          try { engineRef.current.resume() } catch (e) {}
-        }
+        try { engineRef.current.pause?.() } catch (e) {}
       }
     }
+
+    const handleVisibilityChange = () => {
+      isVisible = !document.hidden
+      updatePlayState()
+    }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+
+    let observer = null
+    if (typeof IntersectionObserver !== 'undefined' && canvasRef.current) {
+      observer = new IntersectionObserver((entries) => {
+        const entry = entries[0]
+        if (entry) {
+          isIntersecting = entry.isIntersecting
+          updatePlayState()
+        }
+      }, { threshold: 0.05 })
+      observer.observe(canvasRef.current)
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (observer) observer.disconnect()
+    }
   }, [])
 
   // ── Live-update config without remounting ──────────────────────────────────
