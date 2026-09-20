@@ -18,20 +18,51 @@ export default function StatusBar() {
   const [memUsage, setMemUsage] = useState(null)
   const [trimming, setTrimming] = useState(false)
 
-  // Live memory polling (every 2.5s)
+  // Live memory polling (every 6s when window is visible)
   useEffect(() => {
     let active = true
-    let timer
+    let timer = null
+
     async function fetchMem() {
+      if (typeof document !== 'undefined' && document.hidden) return
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const data = await invoke('get_detailed_memory_usage')
         if (active && data) setMemUsage(data)
       } catch {}
     }
-    fetchMem()
-    timer = setInterval(fetchMem, 2500)
-    return () => { active = false; clearInterval(timer) }
+
+    const startPolling = () => {
+      if (timer) clearInterval(timer)
+      fetchMem()
+      timer = setInterval(fetchMem, 6000)
+    }
+
+    const stopPolling = () => {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopPolling()
+      } else {
+        startPolling()
+      }
+    }
+
+    startPolling()
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', fetchMem)
+
+    return () => {
+      active = false
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', fetchMem)
+    }
   }, [])
 
   async function handleTrim(e) {
