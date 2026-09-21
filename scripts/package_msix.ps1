@@ -15,6 +15,7 @@ $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 $SDKBin = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
 $MakeAppx = Join-Path $SDKBin "makeappx.exe"
 $SignTool = Join-Path $SDKBin "signtool.exe"
+$MakePri  = Join-Path $SDKBin "makepri.exe"
 
 if (-not (Test-Path $MakeAppx)) {
     Write-Error "MakeAppx.exe not found at $MakeAppx"
@@ -143,6 +144,29 @@ $ManifestContent = @"
 "@
 
 Set-Content -Path "$LayoutDir\AppxManifest.xml" -Value $ManifestContent -Encoding UTF8
+
+if (Test-Path $MakePri) {
+    Write-Host "==> [3.5/5] Generating resources.pri (Package Resource Index) for unplated taskbar icon..." -ForegroundColor Cyan
+    $PriConfig = "$LayoutDir\priconfig.xml"
+    $PriOutput = "$LayoutDir\resources.pri"
+    & $MakePri createconfig /cf $PriConfig /dq en-US /pv 10.0.0 /o
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "MakePri createconfig failed with exit code $LASTEXITCODE"
+    }
+    & $MakePri new /pr $LayoutDir /cf $PriConfig /mn "$LayoutDir\AppxManifest.xml" /of $PriOutput /o
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "MakePri new failed with exit code $LASTEXITCODE"
+    }
+    if (Test-Path $PriConfig) {
+        Remove-Item $PriConfig -Force
+    }
+    if (-not (Test-Path $PriOutput)) {
+        Write-Error "resources.pri was not generated! Unplated taskbar icons will not function."
+    }
+    Write-Host "resources.pri successfully built and verified in package layout." -ForegroundColor Green
+} else {
+    Write-Warning "MakePri.exe not found. resources.pri could not be built."
+}
 
 Write-Host "==> [4/5] Packing MSIX Package with MakeAppx..." -ForegroundColor Cyan
 if (Test-Path $OutputMsix) {

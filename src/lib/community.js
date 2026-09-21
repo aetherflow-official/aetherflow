@@ -29,6 +29,18 @@ export function clearCatalogCache() {
   lastFetchTime = 0
 }
 
+/**
+ * Cleanly formats byte sizes into KB/MB without inventing false numbers
+ */
+export function formatBytes(bytes) {
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return ''
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`
+  }
+  const mb = bytes / (1024 * 1024)
+  return mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`
+}
+
 // ── Verified Working Stream Healing Map ───────────────────────────────────────
 export const YOUTUBE_HEAL_MAP = {
   'jfKfPfyJRdk': {
@@ -391,6 +403,12 @@ export async function fetchCatalog(forceRefresh = false) {
     featured: Boolean(sub.featured),
     isCommunitySubmission: true,
     createdAt: sub.createdAt || sub.reviewed_at || new Date().toISOString(),
+    hasAudio: Boolean(sub.hasAudio || sub.has_audio),
+    fileSize: sub.fileSize || sub.file_size || 0,
+    mediaFormat: sub.mediaFormat || sub.media_format || '',
+    duration: sub.duration || 0,
+    dimensions: sub.dimensions || '',
+    githubAssetUrl: sub.githubAssetUrl || sub.github_asset_url || '',
   }))
 
   const localSubs = getLocalSubmissions()
@@ -412,6 +430,12 @@ export async function fetchCatalog(forceRefresh = false) {
       featured: Boolean(sub.is_featured),
       isCommunitySubmission: true,
       createdAt: sub.created_at,
+      hasAudio: Boolean(sub.hasAudio || sub.has_audio),
+      fileSize: sub.fileSize || sub.file_size || 0,
+      mediaFormat: sub.mediaFormat || sub.media_format || '',
+      duration: sub.duration || 0,
+      dimensions: sub.dimensions || '',
+      githubAssetUrl: sub.githubAssetUrl || sub.github_asset_url || '',
     }))
 
   // 4. Combine and deduplicate
@@ -1304,7 +1328,9 @@ export async function submitWallpaper({
     status: 'pending',
     created_at: new Date().toISOString(),
     file_size: fileSize,
+    fileSize: fileSize,
     media_format: mediaFormat,
+    mediaFormat: mediaFormat,
     has_audio: hasAudio,
     duration,
     dimensions,
@@ -1567,6 +1593,8 @@ export async function approveSubmission(submissionId, submissionObj = null) {
     name: meta.title || meta.name || 'Community Wallpaper',
     description: meta.description || '',
     author: meta.author || meta.author_name || 'Community Creator',
+    authorPortfolio: meta.authorPortfolio || meta.author_portfolio || '',
+    license: meta.license || 'CC BY-NC-ND 4.0',
     type: meta.type || 'youtube',
     source: meta.githubAssetUrl || meta.source || '',
     preview,
@@ -2005,7 +2033,16 @@ export async function downloadCommunityWallpaper(wallpaper, onProgress = null) {
     unlisten = await safeListen('aether:community-download-progress', (event) => {
       const payload = event?.payload
       if (payload && (payload.wallpaperId === wallpaper.id || payload.wallpaperId === String(wallpaper.id))) {
-        onProgress(payload)
+        const percent = typeof payload.percent === 'number'
+          ? payload.percent
+          : (typeof payload.progress === 'number' ? payload.progress : 0)
+        onProgress({
+          ...payload,
+          percent,
+          progress: percent,
+          downloaded: payload.downloaded || 0,
+          total: payload.total || 0,
+        })
       }
     })
   }

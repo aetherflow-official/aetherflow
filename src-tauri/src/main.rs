@@ -3790,6 +3790,7 @@ async fn cache_community_wallpaper(
             let _ = app.emit("aether:community-download-progress", serde_json::json!({
                 "wallpaperId": wallpaper_id,
                 "progress": percent,
+                "percent": percent,
                 "downloaded": downloaded,
                 "total": total_size,
             }));
@@ -3805,6 +3806,15 @@ async fn cache_community_wallpaper(
 
     std::fs::rename(&temp_path, &target_path)
         .map_err(|e| format!("Failed to finalize downloaded file: {}", e))?;
+
+    let final_total = if total_size > 0 { total_size } else { downloaded };
+    let _ = app.emit("aether:community-download-progress", serde_json::json!({
+        "wallpaperId": wallpaper_id,
+        "progress": 100,
+        "percent": 100,
+        "downloaded": downloaded,
+        "total": final_total,
+    }));
 
     Ok(serde_json::json!({
         "localPath": target_path.to_string_lossy().to_string(),
@@ -6563,6 +6573,10 @@ fn main() {
                     log_msg("AetherFlow: Main window created successfully.");
                     println!("AetherFlow: Main window created successfully.");
                     
+                    // Explicitly apply default window icon to main window
+                    if let Some(icon) = app.default_window_icon() {
+                        let _ = w.set_icon(icon.clone());
+                    }
                     #[cfg(windows)]
                     if let Ok(raw_h) = w.hwnd() {
                         let raw_hwnd = raw_h.0 as HWND;

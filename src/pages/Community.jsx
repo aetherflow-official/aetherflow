@@ -6,7 +6,7 @@ import {
   Award, Eye, X, FolderPlus, Shield, ShieldCheck, ShieldAlert, Trash2,
   Star, AlertTriangle, RefreshCw, Filter, Sparkles,
   LayoutGrid, List, SlidersHorizontal, ShieldX, Volume2, VolumeX, UserPlus,
-  Video, FileUp, Music, FolderOpen, ExternalLink,
+  Video, FileUp, Music, FolderOpen, ExternalLink, Plus,
   Cloud, HardDrive, DownloadCloud
 } from 'lucide-react'
 import {
@@ -35,6 +35,7 @@ import {
   LICENSE_OPTIONS,
   downloadCommunityWallpaper,
   getWallpaperMetrics,
+  formatBytes,
 } from '../lib/community.js'
 import { useStore } from '../store/useStore.js'
 import { applyWallpaperToDesktop, isTauri, openExternalUrl } from '../lib/wallpaperActions.js'
@@ -157,6 +158,7 @@ export default function CommunityPage() {
     title: '', description: '', type: 'video', source: '', tags: [], authorName: '',
     authorPortfolio: '', license: 'CC BY-NC-ND 4.0',
   })
+  const [customTagInput, setCustomTagInput] = useState('')
   const [selectedMediaFile, setSelectedMediaFile] = useState(null)
   const [mediaInspection, setMediaInspection] = useState(null)
   const [inspectingMedia, setInspectingMedia] = useState(false)
@@ -164,16 +166,40 @@ export default function CommunityPage() {
   const [uploadProgress, setUploadProgress] = useState(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef(null)
+  const isBrowsingRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState(null)
+
+  const handleAddCustomTag = (raw) => {
+    const val = (typeof raw === 'string' ? raw : customTagInput).trim().replace(/^#+/, '')
+    if (!val) return
+    const tagsToAdd = val.split(/[,\s]+/).map(t => t.trim().replace(/^#+/, '').toLowerCase()).filter(Boolean)
+    if (tagsToAdd.length === 0) return
+    setSubmitForm(f => {
+      const existing = f.tags || []
+      const merged = [...existing]
+      for (const t of tagsToAdd) {
+        if (!merged.includes(t)) merged.push(t)
+      }
+      return { ...f, tags: merged }
+    })
+    setCustomTagInput('')
+  }
+
+  const handleRemoveCustomTag = (tagToRemove) => {
+    setSubmitForm(f => ({
+      ...f,
+      tags: (f.tags || []).filter(t => t !== tagToRemove)
+    }))
+  }
 
   const handleMediaSelection = async (fileOrPath) => {
     if (!fileOrPath) return
     setInspectingMedia(true)
     setInspectError(null)
+    setSelectedMediaFile(fileOrPath)
     try {
       const inspection = await inspectMediaFile(fileOrPath)
-      setSelectedMediaFile(fileOrPath)
       setMediaInspection(inspection)
       setSubmitForm(f => {
         const rawName = inspection.name || (fileOrPath?.name || (typeof fileOrPath === 'string' ? fileOrPath.split(/[/\\]/).pop() : ''))
@@ -195,25 +221,36 @@ export default function CommunityPage() {
   }
 
   const handleBrowseComputer = async () => {
-    if (isTauri()) {
-      try {
-        const { open } = await import('@tauri-apps/plugin-dialog')
-        const isVid = submitForm.type === 'video'
-        const selected = await open({
-          multiple: false,
-          filters: isVid
-            ? [{ name: 'Video Loops (*.mp4, *.webm)', extensions: ['mp4', 'webm', 'mov', 'mkv'] }]
-            : [{ name: 'Pictures (*.png, *.jpg, *.webp)', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }]
-        })
-        if (selected && typeof selected === 'string') {
-          await handleMediaSelection(selected)
+    if (isBrowsingRef.current) return
+    isBrowsingRef.current = true
+    try {
+      if (isTauri()) {
+        try {
+          const { open } = await import('@tauri-apps/plugin-dialog')
+          const isVid = submitForm.type === 'video'
+          const selected = await open({
+            multiple: false,
+            filters: isVid
+              ? [{ name: 'Video Loops (*.mp4, *.webm)', extensions: ['mp4', 'webm', 'mov', 'mkv'] }]
+              : [{ name: 'Pictures (*.png, *.jpg, *.webp)', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }]
+          })
+          if (selected && typeof selected === 'string') {
+            await handleMediaSelection(selected)
+          }
+          // In Tauri, whether a file was chosen or the dialog was closed/cancelled,
+          // we must return immediately so it NEVER falls through to triggering
+          // the hidden HTML file input (which causes a second dialog to open).
           return
+        } catch (err) {
+          console.warn('[Community] Native file picker error:', err)
         }
-      } catch (err) {
-        console.warn('[Community] Native file picker error:', err)
       }
+      fileInputRef.current?.click()
+    } finally {
+      setTimeout(() => {
+        isBrowsingRef.current = false
+      }, 300)
     }
-    fileInputRef.current?.click()
   }
 
   const handleDropMedia = (e) => {
@@ -619,13 +656,23 @@ export default function CommunityPage() {
     }
 
     setDownloadingIds(prev => new Set(prev).add(wallpaper.id))
-    setDownloadProgress(prev => ({ ...prev, [wallpaper.id]: 0 }))
+    setDownloadProgress(prev => ({ ...prev, [wallpaper.id]: { percent: 0, downloaded: 0, total: 0 } }))
     showNotice(`Downloading "${wallpaper.name}" for offline playback…`)
 
     try {
       const res = await downloadCommunityWallpaper(wallpaper, (progress) => {
-        if (progress && typeof progress.percent === 'number') {
-          setDownloadProgress(prev => ({ ...prev, [wallpaper.id]: Math.round(progress.percent) }))
+        if (progress) {
+          const pct = typeof progress.percent === 'number'
+            ? progress.percent
+            : (typeof progress.progress === 'number' ? progress.progress : 0)
+          setDownloadProgress(prev => ({
+            ...prev,
+            [wallpaper.id]: {
+              percent: Math.round(pct),
+              downloaded: progress.downloaded || 0,
+              total: progress.total || 0,
+            }
+          }))
         }
       })
 
@@ -963,6 +1010,7 @@ export default function CommunityPage() {
         title: '', description: '', type: 'video', source: '', tags: [], authorName: '',
         authorPortfolio: '', license: 'CC BY-NC-ND 4.0',
       })
+      setCustomTagInput('')
       setSelectedMediaFile(null)
       setMediaInspection(null)
       setUploadProgress(null)
@@ -1685,7 +1733,11 @@ export default function CommunityPage() {
                 const isApplying = applyingId === item.id
                 const isAddingLib = addingLibraryId === item.id
                 const isDownloading = downloadingIds.has(item.id)
-                const downloadPercent = downloadProgress[item.id] || 0
+                const rawProg = downloadProgress[item.id]
+                const downloadInfo = typeof rawProg === 'object' && rawProg !== null
+                  ? rawProg
+                  : { percent: typeof rawProg === 'number' ? rawProg : 0, downloaded: 0, total: 0 }
+                const downloadPercent = downloadInfo.percent || 0
                 const isStreamItem = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
                 const isNoDownload = isStreamItem
 
@@ -1694,12 +1746,11 @@ export default function CommunityPage() {
                   ? '4K UHD'
                   : (item.dimensions ? item.dimensions : (item.type === 'video' ? '1080P FHD' : 'HD ART'))
                 const fpsOrDuration = item.duration ? `${item.duration}s • 60 FPS` : '60 FPS'
-                const fileSizeMb = item.fileSize
-                  ? Math.max(1, Math.round(item.fileSize / (1024 * 1024)))
-                  : (item.file_size ? Math.max(1, Math.round(item.file_size / (1024 * 1024))) : (item.type === 'video' ? 42 : 12))
+                const rawBytes = item.fileSize || item.file_size || 0
+                const formattedSize = formatBytes(rawBytes)
 
                 const cleanAuthor = item.author || 'Community Artist'
-                const authorPortfolio = item.authorPortfolio || item.author_portfolio || ''
+                const authorPortfolio = item.authorPortfolio || item.author_portfolio || item.communityMeta?.authorPortfolio || ''
 
                 return (
                   <div key={item.id} className="hub-card">
@@ -1757,9 +1808,9 @@ export default function CommunityPage() {
                           <span>Audio Track</span>
                         </span>
                       )}
-                      {!isNoDownload && (
+                      {!isNoDownload && formattedSize && (
                         <span className="hub-spec-pill">
-                          {fileSizeMb} MB
+                          {formattedSize}
                         </span>
                       )}
                     </div>
@@ -1978,7 +2029,7 @@ export default function CommunityPage() {
                               className="hub-dock-btn hub-btn-download"
                               disabled={isDownloading || isApplying}
                               onClick={() => handleDownloadOffline(item)}
-                              title={isEngine ? 'Download engine for 100% offline playback' : `Download media file (${fileSizeMb}MB) for offline playback`}
+                              title={isEngine ? 'Download engine for 100% offline playback' : (formattedSize ? `Download media file (${formattedSize}) for offline playback` : 'Download for offline playback')}
                             >
                               {isDownloading ? (
                                 <>
@@ -1988,7 +2039,7 @@ export default function CommunityPage() {
                               ) : (
                                 <>
                                   <Download size={11} />
-                                  <span>Download {isEngine ? 'Offline' : `(${fileSizeMb}MB)`}</span>
+                                  <span>Download {isEngine ? 'Offline' : (formattedSize ? `(${formattedSize})` : 'Offline')}</span>
                                 </>
                               )}
                             </button>
@@ -1996,6 +2047,33 @@ export default function CommunityPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Active Download Progress Bar on Card */}
+                    {isDownloading && (
+                      <div style={{ padding: '0 14px 10px', marginTop: -4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-brand)', marginBottom: 3, fontWeight: 600 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <RefreshCw size={9} className="spin" />
+                            <span>Downloading…</span>
+                          </span>
+                          <span>
+                            {downloadPercent > 0 ? `${downloadPercent}%` : ''}
+                            {downloadInfo.total > 0 ? ` (${formatBytes(downloadInfo.downloaded)} / ${formatBytes(downloadInfo.total)})` : ''}
+                          </span>
+                        </div>
+                        <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.12)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${Math.max(4, downloadPercent)}%`,
+                              height: '100%',
+                              background: 'linear-gradient(90deg, var(--color-brand), #a855f7)',
+                              borderRadius: 2,
+                              transition: 'width 0.2s ease',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -2448,6 +2526,8 @@ export default function CommunityPage() {
                   name: sub.title,
                   description: sub.description,
                   author: sub.author,
+                  authorPortfolio: sub.authorPortfolio || sub.author_portfolio || '',
+                  license: sub.license || 'CC BY-NC-ND 4.0',
                   type: sub.type,
                   source: sub.source,
                   preview: sub.preview,
@@ -2787,6 +2867,7 @@ export default function CommunityPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0]
                       if (file) handleMediaSelection(file)
+                      e.target.value = ''
                     }}
                   />
 
@@ -3100,7 +3181,82 @@ export default function CommunityPage() {
                     <label className="text-xs font-semibold text-muted" style={{ display: 'block', marginBottom: 6 }}>
                       Tags
                     </label>
-                    <div className="flex gap-1.5" style={{ flexWrap: 'wrap' }}>
+                    {/* Selected Tags Badge List */}
+                    {submitForm.tags.length > 0 && (
+                      <div className="flex gap-1.5" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+                        {submitForm.tags.map(tag => (
+                          <span
+                            key={tag}
+                            className="badge badge-brand"
+                            style={{
+                              fontSize: 11,
+                              padding: '3px 8px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                            }}
+                          >
+                            #{tag}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSubmitForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }))
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                color: 'inherit',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title={`Remove #${tag}`}
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Custom Tag Input */}
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <input
+                        type="text"
+                        placeholder="Add custom tag (e.g. sci-fi, synthwave) — press Enter or comma…"
+                        value={customTagInput}
+                        onChange={e => setCustomTagInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault()
+                            handleAddCustomTag()
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '7px 11px',
+                          background: 'var(--bg-base)',
+                          border: '1px solid var(--border-main)',
+                          borderRadius: 7,
+                          color: 'var(--text-main)',
+                          fontSize: 12,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleAddCustomTag()}
+                        disabled={!customTagInput.trim()}
+                        style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Plus size={12} /> Add
+                      </button>
+                    </div>
+
+                    {/* Popular / Suggested Tags */}
+                    <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
+                      <span className="text-xs text-subtle" style={{ fontSize: 10, marginRight: 2 }}>Popular:</span>
                       {TAGS.map(tag => {
                         const isSelected = submitForm.tags.includes(tag)
                         return (
@@ -3108,7 +3264,13 @@ export default function CommunityPage() {
                             key={tag}
                             type="button"
                             className={`badge ${isSelected ? 'badge-brand' : ''}`}
-                            style={{ cursor: 'pointer', border: '1px solid var(--border-main)', fontSize: 11, padding: '3px 7px' }}
+                            style={{
+                              cursor: 'pointer',
+                              border: '1px solid var(--border-main)',
+                              fontSize: 10.5,
+                              padding: '2px 7px',
+                              opacity: isSelected ? 1 : 0.75,
+                            }}
                             onClick={() => {
                               setSubmitForm(f => ({
                                 ...f,
@@ -3280,6 +3442,8 @@ export default function CommunityPage() {
                   name: sub.title,
                   description: sub.description,
                   author: sub.author,
+                  authorPortfolio: sub.authorPortfolio || sub.author_portfolio || '',
+                  license: sub.license || 'CC BY-NC-ND 4.0',
                   type: sub.type,
                   source: sub.source,
                   preview: sub.preview,
@@ -3558,7 +3722,8 @@ export default function CommunityPage() {
           isApplying={applyingId === previewItem.id}
           isAddingLib={addingLibraryId === previewItem.id}
           isDownloading={downloadingIds.has(previewItem.id)}
-          downloadPercent={downloadProgress[previewItem.id] || 0}
+          downloadPercent={(typeof downloadProgress[previewItem.id] === 'object' && downloadProgress[previewItem.id] !== null ? downloadProgress[previewItem.id].percent : downloadProgress[previewItem.id]) || 0}
+          downloadInfo={typeof downloadProgress[previewItem.id] === 'object' && downloadProgress[previewItem.id] !== null ? downloadProgress[previewItem.id] : { percent: downloadProgress[previewItem.id] || 0, downloaded: 0, total: 0 }}
         />
       )}
     </div>
@@ -3858,6 +4023,7 @@ function CommunityPreviewModal({
   isAddingLib,
   isDownloading,
   downloadPercent,
+  downloadInfo = null,
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -3873,6 +4039,10 @@ function CommunityPreviewModal({
   const isEngine = item.type === 'engine' || Boolean(item.engine)
   const isStream = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
   const isNoDownload = isStream
+  const authorPortfolio = item.authorPortfolio || item.author_portfolio || item.communityMeta?.authorPortfolio || ''
+  const rawBytes = item.fileSize || item.file_size || 0
+  const formattedSize = formatBytes(rawBytes)
+  const info = downloadInfo || { percent: downloadPercent || 0, downloaded: 0, total: 0 }
 
   return createPortal(
     <div
@@ -3950,11 +4120,11 @@ function CommunityPreviewModal({
               <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 2 }}>
                 <span className="text-xs text-muted" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   by
-                  {item.authorPortfolio ? (
+                  {authorPortfolio ? (
                     <button
                       type="button"
-                      onClick={() => openExternalUrl(item.authorPortfolio)}
-                      title={`Visit ${item.author}'s portfolio (${item.authorPortfolio})`}
+                      onClick={() => openExternalUrl(authorPortfolio)}
+                      title={`Visit ${item.author}'s portfolio (${authorPortfolio})`}
                       style={{
                         background: 'none', border: 'none', padding: 0,
                         color: 'var(--color-brand)', fontWeight: 600, cursor: 'pointer',
@@ -3987,9 +4157,9 @@ function CommunityPreviewModal({
                     <Volume2 size={10} /> Has Audio
                   </span>
                 )}
-                {item.fileSize > 0 && (
+                {formattedSize && (
                   <span className="badge" style={{ fontSize: 10, padding: '1px 6px' }}>
-                    {(item.fileSize / (1024 * 1024)).toFixed(1)} MB
+                    {formattedSize}
                   </span>
                 )}
                 {item.dimensions && (
@@ -4079,8 +4249,102 @@ function CommunityPreviewModal({
                 ))}
               </div>
             )}
+
+            {/* Prominent Creator Portfolio Link Section */}
+            {authorPortfolio && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '9px 13px',
+                  borderRadius: 8,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border-main)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 }}>
+                  <Globe size={15} style={{ color: 'var(--color-brand)', flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-subtle)', fontWeight: 600 }}>
+                      Artist Portfolio / Source
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={authorPortfolio}
+                    >
+                      {authorPortfolio}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => openExternalUrl(authorPortfolio)}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--color-brand)',
+                    borderColor: 'color-mix(in srgb, var(--color-brand) 30%, transparent)',
+                    background: 'color-mix(in srgb, var(--color-brand) 10%, transparent)',
+                    borderRadius: 6,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                  }}
+                  title={`Open ${item.author || 'creator'}'s portfolio in browser`}
+                >
+                  <span>Visit Portfolio</span>
+                  <ExternalLink size={11} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Live Download Progress Bar in Modal */}
+        {isDownloading && (
+          <div
+            style={{
+              padding: '10px 20px',
+              background: 'color-mix(in srgb, var(--color-brand) 8%, var(--bg-card))',
+              borderTop: '1px solid var(--border-main)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-brand)', marginBottom: 5, fontWeight: 600 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <RefreshCw size={12} className="spin" />
+                Downloading for offline playback…
+              </span>
+              <span>
+                {downloadPercent > 0 ? `${downloadPercent}%` : 'Connecting…'}
+                {info.total > 0 ? ` • ${formatBytes(info.downloaded)} / ${formatBytes(info.total)}` : ''}
+              </span>
+            </div>
+            <div style={{ width: '100%', height: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 3, overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: `${Math.max(4, downloadPercent)}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, var(--color-brand), #a855f7)',
+                  borderRadius: 3,
+                  transition: 'width 0.2s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Bottom Actions Bar */}
         <div
