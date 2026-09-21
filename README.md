@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.0">
+  <a href="https://github.com/aetherflow-official/aetherflow/releases/tag/v1.0.0">
     <img src="https://img.shields.io/badge/Release-v1.0.0-00f0ff?style=for-the-badge&logo=github" alt="Release v1.0.0" />
   </a>
   <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows" alt="Platform" />
@@ -21,11 +21,11 @@
 </p>
 
 <p align="center">
-  <a href="https://yashpreeto7.github.io/aetherflow/"><strong>🌐 Official Website</strong></a> •
-  <a href="https://yashpreeto7.github.io/aetherflow/manual.html"><strong>📖 User Operating Manual</strong></a> •
-  <a href="https://yashpreeto7.github.io/aetherflow/privacy.html"><strong>🔒 Privacy Policy</strong></a> •
-  <a href="https://yashpreeto7.github.io/aetherflow/license.html"><strong>⚖️ License Terms (EULA)</strong></a> •
-  <a href="https://github.com/yashpreeto7/aetherflow/issues"><strong>💬 Issues &amp; Support</strong></a>
+  <a href="https://aetherflow-official.github.io/aetherflow/"><strong>🌐 Official Website</strong></a> •
+  <a href="https://aetherflow-official.github.io/aetherflow/manual.html"><strong>📖 User Operating Manual</strong></a> •
+  <a href="https://aetherflow-official.github.io/aetherflow/privacy.html"><strong>🔒 Privacy Policy</strong></a> •
+  <a href="https://aetherflow-official.github.io/aetherflow/license.html"><strong>⚖️ License Terms (EULA)</strong></a> •
+  <a href="https://github.com/aetherflow-official/aetherflow/issues"><strong>💬 Issues &amp; Support</strong></a>
 </p>
 
 ---
@@ -115,13 +115,13 @@ Ultra-lightweight simulations running at steady 60 FPS with minimal CPU usage (~
 
 ### Option 1: Standalone Executable (Portable)
 *No installation wizard required. Zero footprint.*
-1. Download **[`AetherFlow.exe`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.0/AetherFlow.exe)** (~8.2 MB).
+1. Download **[`AetherFlow.exe`](https://github.com/aetherflow-official/aetherflow/releases/download/v1.0.0/AetherFlow.exe)** (~8.2 MB).
 2. Place it in any directory (e.g. `C:\Tools\AetherFlow\`).
 3. Double-click to launch.
 
 ### Option 2: Signed Windows MSIX Package
 *Includes Windows Start Menu integration and Windows Startup support.*
-1. Download **[`AetherFlow_1.0.0_x64.msix`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.0/AetherFlow_1.0.0_x64.msix)** (~208 MB).
+1. Download **[`AetherFlow_1.0.0_x64.msix`](https://github.com/aetherflow-official/aetherflow/releases/download/v1.0.0/AetherFlow_1.0.0_x64.msix)** (~208 MB).
 2. Trust the developer certificate:
    - **Quick Method:** Run `install_cert.bat` as Administrator.
    - **Manual Method:** Right-click MSIX → *Properties* → *Digital Signatures* → *Details* → *View Certificate* → *Install Certificate* → *Local Machine* → *Trusted Root Certification Authorities*.
@@ -150,7 +150,7 @@ AetherFlow operates under a strict **Zero-Telemetry Protocol**:
 - **In-Memory Audio**: Audio visualizer computes FFT spectrums transiently in RAM without saving or transmitting audio.
 - **Camera Access Disabled**: Chromium video-capture modules are permanently disabled (`--disable-video-capture`) at the engine level.
 
-Read the full [Privacy Policy](https://yashpreeto7.github.io/aetherflow/privacy.html) for complete details.
+Read the full [Privacy Policy](https://aetherflow-official.github.io/aetherflow/privacy.html) for complete details.
 
 ---
 
@@ -163,7 +163,7 @@ Copyright © 2026 Yashpreet. All Rights Reserved.
 - **Restrictions:** Reverse engineering, decompilation, resale, bundling, and unauthorized redistribution of modified binaries are strictly prohibited.
 - **Community Art:** Artwork submitted to the Community Hub remains under copyright of respective creators.
 
-See the complete [End User License Agreement (EULA)](https://yashpreeto7.github.io/aetherflow/license.html) for legal terms.
+See the complete [End User License Agreement (EULA)](https://aetherflow-official.github.io/aetherflow/license.html) for legal terms.
 
 ---
 

@@ -47,11 +47,11 @@ AetherFlow is suitable for general audiences and does not knowingly collect pers
 
 ## 6. Open Source Transparency
 AetherFlow's source code is publicly accessible on GitHub at:  
-https://github.com/yashpreeto7/aetherflow
+https://github.com/aetherflow-official/aetherflow
 
 ---
 
 ## 7. Contact
 For questions, support, or privacy inquiries:
-- **Project Repository:** https://github.com/yashpreeto7/aetherflow/issues
+- **Project Repository:** https://github.com/aetherflow-official/aetherflow/issues
 - **Developer:** Yashpreet

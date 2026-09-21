@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "AetherFlow — High-Performance Windows Desktop Engine & Live Visuals Platform"
 authors = ["Yashpreet"]
 license = "Proprietary"
-repository = "https://github.com/aetherflow/aetherflow"
+repository = "https://github.com/aetherflow-official/aetherflow"
 edition = "2021"
 default-run = "aetherflow"
 

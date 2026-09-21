@@ -58,9 +58,9 @@ Under **AetherFlow** -> **Submissions** -> **Start a submission**:
 
 ### B. Properties
 - **Category:** Personalization > Wallpaper & Themes
-- **Support Contact:** `https://github.com/yashpreeto7/aetherflow/issues`
+- **Support Contact:** `https://github.com/aetherflow-official/aetherflow/issues`
 - **Privacy Policy URL:**  
-  `https://github.com/yashpreeto7/aetherflow/blob/main/PRIVACY.md`
+  `https://github.com/aetherflow-official/aetherflow/blob/main/PRIVACY.md`
 
 ### C. Age Ratings (IARC)
 - Complete the short IARC questionnaire.

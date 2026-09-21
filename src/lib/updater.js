@@ -18,7 +18,7 @@ export function compareVersions(v1, v2) {
  */
 export async function checkForUpdate() {
   try {
-    const response = await fetch('https://api.github.com/repos/yashpreeto7/aetherflow/releases/latest', {
+    const response = await fetch('https://api.github.com/repos/aetherflow-official/aetherflow/releases/latest', {
       headers: {
         'Accept': 'application/vnd.github.v3+json',
       }
