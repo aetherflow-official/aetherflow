@@ -372,6 +372,10 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
       <img
         src={staticThumbUrl}
         alt={wallpaper.name}
+        loading="lazy"
+        decoding="async"
+        width="320"
+        height="180"
         onError={() => setImgLoadError(true)}
         style={{
           position: 'absolute',

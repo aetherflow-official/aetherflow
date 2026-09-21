@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pilot Operating Manual // AetherFlow Windows Engine</title>
+    <meta name="description" content="AetherFlow User Manual. Complete operational handbook covering installation, certificate setup, local 4K MP4s, YouTube web streams, procedural Canvas 2D engines, and multi-monitor configuration.">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+JP:wght@700;900&family=Oswald:wght@500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+    <script>
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+        window.scrollTo(0, 0);
+    </script>
+
+    <style>
+        :root {
+            --ink: #0a0a0a;
+            --paper: #f4f4f0;
+            --paper-card: #ffffff;
+            --hot-pink: #ff0055;
+            --electric-cyan: #00e5ff;
+            --hazard: #ffe600;
+            --blood-orange: #ff3c00;
+            
+            --border-thick: 6px solid var(--ink);
+            --border-mid: 4px solid var(--ink);
+            --border-thin: 2px solid var(--ink);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: clip;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--paper);
+            color: var(--ink);
+            font-family: 'Oswald', sans-serif;
+            background-image: radial-gradient(var(--ink) 15%, transparent 16%);
+            background-size: 6px 6px;
+            background-position: 0 0, 3px 3px;
+        }
+
+        .speedlines {
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: repeating-conic-gradient(
+                from 0deg,
+                transparent 0deg 2deg,
+                rgba(0,0,0,0.04) 2deg 3deg,
+                transparent 3deg 5deg
+            );
+            z-index: -1;
+            pointer-events: none;
+            animation: spin-speed 14s steps(12, end) infinite;
+        }
+
+        @keyframes spin-speed {
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .speedlines { animation: none; }
+        }
+
+        h1, h2, h3, h4, .anton {
+            font-family: 'Anton', sans-serif;
+            text-transform: uppercase;
+            font-style: italic;
+            letter-spacing: 1px;
+        }
+
+        .japanese {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 900;
+        }
+
+        /* Nav */
+        header {
+            position: sticky;
+            top: 0; left: 0; width: 100%;
+            z-index: 1000;
+            padding: 16px 20px;
+            background: rgba(244, 244, 240, 0.94);
+            backdrop-filter: blur(8px);
+            border-bottom: var(--border-mid);
+        }
+
+        .nav-container {
+            max-width: 1300px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2.2rem;
+            color: var(--paper);
+            text-decoration: none;
+            background: var(--ink);
+            padding: 4px 18px;
+            clip-path: polygon(0 0, 100% 10%, 95% 100%, 5% 90%);
+            transform: rotate(-3deg);
+            display: inline-block;
+            text-shadow: 2px 2px 0 var(--hot-pink);
+            border: 2px solid var(--paper);
+            box-shadow: 4px 4px 0 var(--electric-cyan);
+        }
+
+        .logo .japanese {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--hazard);
+            text-shadow: none;
+            letter-spacing: 2px;
+            transform: translateY(-4px);
+        }
+
+        .menu {
+            background: var(--paper);
+            padding: 6px 20px;
+            border: var(--border-thick);
+            clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
+            transform: rotate(1deg);
+            display: flex;
+            gap: 20px;
+        }
+
+        .menu a {
+            font-family: 'Anton', sans-serif;
+            font-size: 1.3rem;
+            color: var(--ink);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: color 0.1s;
+        }
+
+        .menu a:hover, .menu a.active {
+            color: var(--hot-pink);
+            text-shadow: 2px 2px 0 var(--hazard);
+        }
+
+        .btn-persona {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--hazard);
+            color: #0a0a0a;
+            font-family: 'Anton', sans-serif;
+            font-size: 1.2rem;
+            padding: 8px 24px;
+            text-decoration: none;
+            text-transform: uppercase;
+            transform: rotate(-2deg);
+            border: 3px solid var(--ink);
+            cursor: pointer;
+            box-shadow: -4px 4px 0 var(--hot-pink), -8px 8px 0 var(--electric-cyan);
+            clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 96%);
+        }
+
+        .btn-persona:hover {
+            transform: rotate(0deg) scale(1.05);
+            background: var(--electric-cyan);
+        }
+
+        /* Layout Grid with Sidebar */
+        .manual-layout {
+            max-width: 1300px;
+            margin: 40px auto 80px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        /* Sidebar Navigation */
+        .manual-sidebar {
+            position: sticky;
+            top: 100px;
+            background: var(--ink);
+            color: var(--paper);
+            padding: 24px;
+            border: var(--border-thick);
+            box-shadow: 8px 8px 0 var(--hazard);
+        }
+
+        .sidebar-title {
+            font-size: 1.5rem;
+            color: var(--hazard);
+            margin-bottom: 16px;
+            border-bottom: 3px dashed var(--hot-pink);
+            padding-bottom: 8px;
+        }
+
+        .sidebar-nav {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sidebar-nav a {
+            color: #ccc;
+            text-decoration: none;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 6px 10px;
+            display: block;
+            border-left: 3px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .sidebar-nav a:hover {
+            color: var(--electric-cyan);
+            background: rgba(255, 255, 255, 0.06);
+            border-left-color: var(--electric-cyan);
+            transform: translateX(4px);
+        }
+
+        /* Main Content */
+        .manual-content {
+            min-width: 0;
+        }
+
+        .doc-hero {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 40px;
+            border: var(--border-thick);
+            box-shadow: 12px 12px 0 var(--electric-cyan);
+            margin-bottom: 40px;
+            position: relative;
+            transform: rotate(-0.5deg);
+        }
+
+        .doc-hero-tag {
+            background: var(--hot-pink);
+            color: #fff;
+            font-family: 'Anton', sans-serif;
+            font-size: 1.2rem;
+            padding: 4px 14px;
+            display: inline-block;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            transform: rotate(-2deg);
+            border: 2px solid var(--paper);
+        }
+
+        .doc-hero h1 {
+            font-size: 3.8rem;
+            line-height: 1;
+            margin-bottom: 12px;
+            color: #ffffff;
+            text-shadow: 3px 3px 0 var(--hazard);
+        }
+
+        .doc-hero p {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.25rem;
+            color: #ccc;
+            line-height: 1.5;
+        }
+
+        /* Section Cards */
+        .manual-card {
+            background: var(--paper-card);
+            border: var(--border-thick);
+            padding: 36px;
+            margin-bottom: 36px;
+            box-shadow: 8px 8px 0 var(--ink);
+            position: relative;
+            scroll-margin-top: 110px;
+        }
+
+        .card-num {
+            position: absolute;
+            top: -16px;
+            right: 24px;
+            background: var(--electric-cyan);
+            color: var(--ink);
+            font-family: 'Anton', sans-serif;
+            font-size: 1.1rem;
+            padding: 4px 16px;
+            border: 3px solid var(--ink);
+            transform: rotate(2deg);
+        }
+
+        .manual-card h2 {
+            font-size: 2.2rem;
+            color: var(--ink);
+            margin-bottom: 16px;
+            border-bottom: 4px dashed var(--hot-pink);
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .manual-card h3 {
+            font-size: 1.5rem;
+            color: var(--ink);
+            margin: 24px 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .manual-card p, .manual-card li {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.15rem;
+            line-height: 1.7;
+            color: #222;
+            margin-bottom: 14px;
+        }
+
+        .manual-card ul, .manual-card ol {
+            margin-left: 28px;
+            margin-bottom: 18px;
+        }
+
+        .manual-card li strong {
+            color: var(--ink);
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.2rem;
+        }
+
+        .code-block {
+            background: #08080d;
+            color: #00ffaa;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.95rem;
+            padding: 16px 20px;
+            border: 3px solid var(--ink);
+            box-shadow: 4px 4px 0 var(--ink);
+            margin: 14px 0 20px 0;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+
+        .highlight-box {
+            background: #fffde6;
+            border-left: 8px solid var(--hazard);
+            border-top: 2px solid var(--ink);
+            border-right: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+            padding: 18px 24px;
+            margin: 20px 0;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .highlight-box.pink {
+            background: #fff0f5;
+            border-left-color: var(--hot-pink);
+        }
+
+        .highlight-box.cyan {
+            background: #f0fdff;
+            border-left-color: var(--electric-cyan);
+        }
+
+        .step-pill {
+            display: inline-block;
+            background: var(--ink);
+            color: #fff;
+            font-family: 'Anton', sans-serif;
+            font-size: 0.95rem;
+            padding: 2px 10px;
+            margin-right: 8px;
+            letter-spacing: 1px;
+            vertical-align: middle;
+        }
+
+        /* Keyboard Shortcut Table */
+        .key-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .key-table th, .key-table td {
+            border: 2px solid var(--ink);
+            padding: 12px 16px;
+            text-align: left;
+        }
+
+        .key-table th {
+            background: var(--ink);
+            color: var(--hazard);
+            font-family: 'Anton', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+        }
+
+        .key-badge {
+            background: var(--paper);
+            color: var(--ink);
+            border: 2px solid var(--ink);
+            box-shadow: 2px 2px 0 var(--ink);
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 2px;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 50px 20px;
+            text-align: center;
+            border-top: 5px dashed var(--hot-pink);
+        }
+
+        .footer-logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2rem;
+            color: var(--hazard);
+            text-decoration: none;
+            margin-bottom: 18px;
+            display: inline-block;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            font-family: 'Oswald', sans-serif;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--paper);
+            text-decoration: none;
+            text-transform: uppercase;
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+        
+        .footer-links a:hover { color: var(--electric-cyan); }
+
+        @media (max-width: 950px) {
+            .manual-layout { grid-template-columns: 1fr; }
+            .manual-sidebar { display: none; }
+            .doc-hero h1 { font-size: 2.6rem; }
+            .menu { display: none; }
+            .manual-card { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="speedlines"></div>
+
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="logo" aria-label="AetherFlow Home">
+                AETHER<span style="color:var(--electric-cyan)">FLOW</span>
+                <span class="japanese">エーテルフロー</span>
+            </a>
+            <nav class="menu" aria-label="Main Navigation">
+                <a href="index.html#features">Engine</a>
+                <a href="index.html#gallery">Gallery</a>
+                <a href="manual.html" class="active">Manual</a>
+                <a href="index.html#download">Download</a>
+                <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">GitHub ↗</a>
+            </nav>
+            <div class="header-actions">
+                <a href="index.html#download" class="btn-persona">
+                    GET v1.0.0
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="manual-layout">
+        <!-- Sticky Sidebar Navigation -->
+        <aside class="manual-sidebar">
+            <h3 class="sidebar-title">OPERATIONAL LOG</h3>
+            <ul class="sidebar-nav">
+                <li><a href="#installation">01. Installation &amp; Setup</a></li>
+                <li><a href="#certificate">02. MSIX Certificate Trust</a></li>
+                <li><a href="#engines">03. Wallpaper Engines</a></li>
+                <li><a href="#controls">04. Real-Time Controls</a></li>
+                <li><a href="#audio">05. Audio Visualizer</a></li>
+                <li><a href="#monitors">06. Multi-Monitor Setup</a></li>
+                <li><a href="#themes">07. Theme Studio &amp; Taskbar</a></li>
+                <li><a href="#ergonomics">08. Gaming &amp; Screensaver</a></li>
+                <li><a href="#hotkeys">09. Hotkeys &amp; Shortcuts</a></li>
+                <li><a href="#troubleshooting">10. Troubleshooting FAQ</a></li>
+            </ul>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="manual-content">
+            <div class="doc-hero">
+                <span class="doc-hero-tag">OPERATING MANUAL // HANDBOOK v1.0.0</span>
+                <h1>AETHERFLOW PILOT MANUAL</h1>
+                <p>
+                    Welcome to the operational manual for AetherFlow. Everything you need to know about pinning live wallpapers to the Windows desktop, configuring multi-monitor matrices, applying anime visualizers, and maximizing performance.
+                </p>
+            </div>
+
+            <!-- Chapter 1: Installation -->
+            <section id="installation" class="manual-card">
+                <span class="card-num">CHAPTER 01</span>
+                <h2>1. INSTALLATION &amp; INITIAL LAUNCH</h2>
+                <p>
+                    AetherFlow is distributed in two official Windows formats:
+                </p>
+                <h3>Option A: Standalone Executable (Portable)</h3>
+                <p>
+                    The fastest way to experience AetherFlow. No installer wizard required.
+                </p>
+                <ol>
+                    <li>Download <strong>AetherFlow.exe</strong> (~8.2 MB) from the <a href="index.html#download" style="color:var(--hot-pink); font-weight:700;">Downloads section</a>.</li>
+                    <li>Place the executable in any folder of your choice (e.g. <code>C:\Tools\AetherFlow\</code> or your Desktop).</li>
+                    <li>Double-click to launch. AetherFlow initializes its desktop layer immediately.</li>
+                </ol>
+
+                <h3>Option B: Signed MSIX Package</h3>
+                <p>
+                    Provides seamless Windows 11 integration, clean App list registration, sandboxed security, and Windows Startup toggle support.
+                </p>
+                <ol>
+                    <li>Download <strong>AetherFlow_1.0.0_x64.msix</strong> (~208 MB).</li>
+                    <li>Ensure the developer certificate is trusted on your machine (see Chapter 02 below).</li>
+                    <li>Double-click the <code>.msix</code> file and click <strong>Install</strong>.</li>
+                </ol>
+            </section>
+
+            <!-- Chapter 2: Certificate Trust -->
+            <section id="certificate" class="manual-card">
+                <span class="card-num">CHAPTER 02</span>
+                <h2>2. MSIX CERTIFICATE TRUST SETUP</h2>
+                <p>
+                    Because AetherFlow is released directly as independent freeware, Windows requires our Package Identity certificate to be added to your local machine's trusted certificate store before installing the MSIX package.
+                </p>
+                <div class="highlight-box cyan">
+                    <strong>Quick 1-Click Method:</strong> If you downloaded the repository or packages bundle, simply right-click <code>install_cert.bat</code> and select <strong>Run as Administrator</strong>.
+                </div>
+                <h3>Manual Certificate Installation (30 Seconds):</h3>
+                <ol>
+                    <li>Right-click <code>AetherFlow_1.0.0_x64.msix</code> → Click <strong>Properties</strong>.</li>
+                    <li>Select the <strong>Digital Signatures</strong> tab → Select the signer (<em>AetherFlow Developer</em>) → Click <strong>Details</strong>.</li>
+                    <li>Click <strong>View Certificate</strong> → Click <strong>Install Certificate...</strong></li>
+                    <li>Select <strong>Local Machine</strong> (requires Administrator prompt) → Click <strong>Next</strong>.</li>
+                    <li>Select <strong>Place all certificates in the following store</strong> → Click <strong>Browse...</strong></li>
+                    <li>Choose <strong>Trusted Root Certification Authorities</strong> (or <strong>Trusted People</strong>) → Click <strong>OK</strong> → Click <strong>Finish</strong>.</li>
+                </ol>
+                <p>
+                    Once imported, double-clicking the MSIX file will open the Windows App Installer with a verified signature and a blue <strong>Install</strong> button.
+                </p>
+            </section>
+
+            <!-- Chapter 3: Engines -->
+            <section id="engines" class="manual-card">
+                <span class="card-num">CHAPTER 03</span>
+                <h2>3. WALLPAPER ENGINES &amp; MEDIA IMPORT</h2>
+                <p>
+                    AetherFlow features four specialized rendering pipelines built to handle diverse media types:
+                </p>
+                <h3>1. High-Performance Local Video Engine</h3>
+                <p>
+                    Plays 1080p, 4K, and ultra-wide video clips with hardware-accelerated decoding.
+                </p>
+                <ul>
+                    <li><strong>Supported formats:</strong> <code>.mp4</code>, <code>.webm</code>, <code>.mkv</code>, <code>.mov</code>.</li>
+                    <li><strong>How to add:</strong> Click <strong>+ Add Media</strong> in the top header or navigate to <em>Library → Import Video</em>.</li>
+                    <li><strong>Seamless looping:</strong> Videos loop continuously with zero stutter or frame drops.</li>
+                </ul>
+
+                <h3>2. Live Web Streams &amp; YouTube</h3>
+                <p>
+                    Transforms live YouTube streams, animated HTML5 canvases, and web video feeds into desktop backgrounds.
+                </p>
+                <ul>
+                    <li>Click <strong>Add Web Stream</strong> on the Home dashboard.</li>
+                    <li>Paste your YouTube stream URL or live stream link (e.g. Lofi Girl, 24/7 Tokyo live cams, or custom web shaders).</li>
+                    <li>AetherFlow strips player chrome and pins the stream frameless behind desktop icons.</li>
+                </ul>
+
+                <h3>3. Procedural Canvas 2D Simulations</h3>
+                <p>
+                    Lightweight, math-driven visual engines written strictly in Canvas 2D:
+                </p>
+                <ul>
+                    <li><strong>Matrix Rain:</strong> Classic digital glyphs with phosphorescent green glow.</li>
+                    <li><strong>Cyber Particles:</strong> Constellation particle mesh reacting to cursor proximity.</li>
+                    <li><strong>Synthwave Grid:</strong> 80s neon wireframe highway with undulating horizon mountains.</li>
+                    <li><strong>Deep Space:</strong> Starfield warp drive simulation with customizable warp speed.</li>
+                    <li><strong>Aurora:</strong> Soft atmospheric light waves designed for calm focus.</li>
+                    <li><strong>Tokyo Rain:</strong> Neon drizzle on window glass with city reflections.</li>
+                    <li><strong>Quantum Flux:</strong> Vibrant kinetic plasma field.</li>
+                </ul>
+            </section>
+
+            <!-- Chapter 4: Real-time Controls -->
+            <section id="controls" class="manual-card">
+                <span class="card-num">CHAPTER 04</span>
+                <h2>4. REAL-TIME PLAYBACK CONTROLS</h2>
+                <p>
+                    The <strong>Active Controls Bar</strong> on the Home dashboard provides instant desktop adjustments without restarting the engine:
+                </p>
+                <ul>
+                    <li><strong>Opacity Slider (0% - 100%):</strong> Blend the wallpaper into a solid backdrop. Allows high-contrast icons to pop or creates a moody ambient aesthetic.</li>
+                    <li><strong>Brightness Slider (20% - 150%):</strong> Darken intense video scenes or elevate shadow details.</li>
+                    <li><strong>Playback Speed (0.25x - 3.0x):</strong> Slow down energetic video loops for relaxing ambient motion or accelerate procedural flow.</li>
+                    <li><strong>Volume Control &amp; Mute:</strong> Independently control audio output for video wallpapers with soundtracks without affecting your Windows master volume.</li>
+                </ul>
+            </section>
+
+            <!-- Chapter 5: Audio Visualizer -->
+            <section id="audio" class="manual-card">
+                <span class="card-num">CHAPTER 05</span>
+                <h2>5. AUDIO SPECTRUM REACTIVE ENGINE</h2>
+                <p>
+                    Transform your desktop into a responsive audio visualizer synced to music, gaming audio, and voice calls.
+                </p>
+                <ul>
+                    <li>Navigate to the <strong>Audio</strong> tab in the sidebar.</li>
+                    <li>Toggle <strong>Enable Audio Reactivity</strong> to ON.</li>
+                    <li>Select your preferred loopback audio device (e.g. <em>Default Audio Output</em> or <em>Stereo Mix</em>).</li>
+                    <li><strong>Tuning Sliders:</strong> Adjust <em>Sensitivity</em> (amplification of quiet tracks), <em>Frequency Smoothing</em> (fluidity of bar bounce), and <em>Decay Rate</em>.</li>
+                </ul>
+                <div class="highlight-box pink">
+                    <strong>Zero Audio Telemetry:</strong> Audio calculation occurs strictly in volatile memory using the Web Audio API FFT analyzer. No recordings or transcripts are ever created.
+                </div>
+            </section>
+
+            <!-- Chapter 6: Multi-Monitor -->
+            <section id="monitors" class="manual-card">
+                <span class="card-num">CHAPTER 06</span>
+                <h2>6. MULTI-MONITOR MATRIX CONFIGURATION</h2>
+                <p>
+                    AetherFlow is engineered for modern multi-display battle stations:
+                </p>
+                <ul>
+                    <li><strong>Automatic Display Topology:</strong> Detects primary and secondary monitors, refresh rates (60Hz, 144Hz, 240Hz+), and display scale factors (100%, 125%, 150%, 200%).</li>
+                    <li><strong>Per-Display Mode:</strong> Assign a different live wallpaper to each connected monitor (e.g. Cyberpunk GT-R on Display 1, Matrix Rain on Display 2).</li>
+                    <li><strong>Spanning Matrix Mode:</strong> Span an ultra-wide 32:9 or 48:9 panorama video wallpaper across all monitors.</li>
+                    <li><strong>DWM Seamless Alignment:</strong> Compresses Windows non-client margins to ensure wallpapers align pixel-perfect with no border gaps.</li>
+                </ul>
+            </section>
+
+            <!-- Chapter 7: Themes & Taskbar -->
+            <section id="themes" class="manual-card">
+                <span class="card-num">CHAPTER 07</span>
+                <h2>7. THEME STUDIO &amp; TASKBAR PERSONALIZATION</h2>
+                <p>
+                    Customize both the application's appearance and the Windows Taskbar:
+                </p>
+                <h3>Built-In Themes:</h3>
+                <p>
+                    Select from 8 crafted presets: <em>Sovereign, Dark I, Light I, Day I, Obsidian, Cyberpunk, Emerald, and Sakura</em>.
+                </p>
+                <h3>Live Theme Studio:</h3>
+                <p>
+                    Open the Theme Editor in <em>Personalization</em> to tune CSS custom properties live. Modify brand tints, neon glow radius, card opacity, and bevel highlights, then export your custom palette as a JSON profile.
+                </p>
+                <h3>Windows Taskbar Styling:</h3>
+                <p>
+                    In <em>Personalization → Taskbar Integration</em>, choose how the Windows Taskbar interacts with your live wallpaper:
+                </p>
+                <ul>
+                    <li><strong>Transparent:</strong> Strips the taskbar background, letting the wallpaper flow behind system icons.</li>
+                    <li><strong>Acrylic Blur:</strong> Modern frosted glass aesthetic with adaptive luminosity.</li>
+                    <li><strong>Color Matched:</strong> Automatically tints the taskbar to match your active theme's accent color.</li>
+                </ul>
+            </section>
+
+            <!-- Chapter 8: Ergonomics -->
+            <section id="ergonomics" class="manual-card">
+                <span class="card-num">CHAPTER 08</span>
+                <h2>8. HARDWARE ERGONOMICS &amp; GAME MODE</h2>
+                <p>
+                    AetherFlow is designed to be invisible to your hardware when performance matters:
+                </p>
+                <ul>
+                    <li><strong>Automatic Fullscreen Game Suppression:</strong> Detects when a 3D game, emulator, or CAD application enters fullscreen. The live wallpaper engine immediately suspends execution, dropping CPU and GPU consumption to 0.0%.</li>
+                    <li><strong>Battery Preservation:</strong> Automatically throttles animation frame rates to 30 FPS when running on laptop battery power.</li>
+                    <li><strong>OLED Deep Blackout Screensaver:</strong> Enables an intelligent idle timer that transitions the desktop into pure <code>#000000</code> OLED blackout, preventing panel burn-in.</li>
+                </ul>
+            </section>
+
+            <!-- Chapter 9: Hotkeys -->
+            <section id="hotkeys" class="manual-card">
+                <span class="card-num">CHAPTER 09</span>
+                <h2>9. KEYBOARD SHORTCUTS &amp; SYSTEM TRAY</h2>
+                <table class="key-table">
+                    <thead>
+                        <tr>
+                            <th>SHORTCUT</th>
+                            <th>ACTION</th>
+                            <th>DESCRIPTION</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="key-badge">Ctrl</span> + <span class="key-badge">Shift</span> + <span class="key-badge">P</span></td>
+                            <td>Toggle Play / Pause</td>
+                            <td>Instantly pause or resume the active desktop wallpaper.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key-badge">Ctrl</span> + <span class="key-badge">Shift</span> + <span class="key-badge">M</span></td>
+                            <td>Toggle Audio Mute</td>
+                            <td>Mutes/unmutes video wallpaper soundtracks immediately.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key-badge">Ctrl</span> + <span class="key-badge">Shift</span> + <span class="key-badge">N</span></td>
+                            <td>Next Wallpaper</td>
+                            <td>Skips to the next item in the active playlist.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="key-badge">Ctrl</span> + <span class="key-badge">Shift</span> + <span class="key-badge">B</span></td>
+                            <td>OLED Blackout</td>
+                            <td>Instantly forces pure black screen for display protection.</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>
+                    <strong>System Tray:</strong> Right-click the AetherFlow tray icon in the Windows taskbar corner to access quick wallpaper switches, pause toggles, and quit options.
+                </p>
+            </section>
+
+            <!-- Chapter 10: Troubleshooting -->
+            <section id="troubleshooting" class="manual-card">
+                <span class="card-num">CHAPTER 10</span>
+                <h2>10. TROUBLESHOOTING &amp; FREQUENTLY ASKED QUESTIONS</h2>
+                <h3>Q: Why does Windows SmartScreen show "Unknown Publisher"?</h3>
+                <p>
+                    A: Because AetherFlow is an independent community project signed with a self-generated developer certificate. To run the portable EXE, click <em>"More info" → "Run anyway"</em>. For the MSIX, run <code>install_cert.bat</code> as Administrator once.
+                </p>
+                <h3>Q: Why is my video wallpaper paused?</h3>
+                <p>
+                    A: Check if a game or browser window is currently running in exclusive fullscreen mode. AetherFlow's Game Suppression automatically pauses to conserve GPU power. You can toggle this behavior in <em>Settings → Game Pause Mode</em>.
+                </p>
+                <h3>Q: Where are my downloaded and imported wallpapers stored?</h3>
+                <p>
+                    A: All local media files and configuration profiles reside in:
+                </p>
+                <div class="code-block">
+                    %APPDATA%\AetherFlow\
+                </div>
+                <h3>Q: How do I report a bug or suggest a feature?</h3>
+                <p>
+                    A: We actively track issues on our official GitHub repository: <a href="https://github.com/yashpreeto7/aetherflow/issues" target="_blank" rel="noopener" style="color:var(--hot-pink); font-weight:700;">https://github.com/yashpreeto7/aetherflow/issues</a>.
+                </p>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <a href="index.html" class="footer-logo">AETHERFLOW SYSTEM</a>
+        <div class="footer-links">
+            <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">Source (GitHub)</a>
+            <a href="https://github.com/yashpreeto7/aetherflow/issues" target="_blank" rel="noopener">Issues &amp; Support</a>
+            <a href="manual.html" style="color:var(--electric-cyan);">Manual</a>
+            <a href="index.html#download">Downloads</a>
+            <a href="privacy.html">Privacy</a>
+            <a href="license.html">License</a>
+        </div>
+        <p style="font-family: 'Oswald', sans-serif; font-weight: 500; color: #888; letter-spacing: 1px;">
+            © 2026 AETHERFLOW. ENGINEERED WITH TAURI 2 &amp; RUST. ALL SYSTEMS OPERATIONAL.
+        </p>
+    </footer>
+
+    <script>
+        window.addEventListener('beforeunload', () => window.scrollTo(0, 0));
+        window.addEventListener('pageshow', () => window.scrollTo(0, 0));
+        window.addEventListener('DOMContentLoaded', () => window.scrollTo(0, 0));
+        window.addEventListener('load', () => window.scrollTo(0, 0));
+    </script>
+</body>
+</html>

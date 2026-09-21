@@ -95,6 +95,21 @@ export async function tauriInvoke(cmd, args) {
 // Track monotonically increasing apply transaction IDs per monitor scope
 const monitorApplyTransactions = new Map()
 
+let settleTrimTimer = null
+
+/**
+ * Trims process memory after wallpaper initialization settles, purging transient
+ * startup pages (codec DLL mappings, shader compilation caches, V8 JIT heap) to
+ * drop working set memory down to true steady-state requirements (~200-300 MB).
+ */
+export function schedulePostApplyTrim(delayMs = 10000) {
+  if (settleTrimTimer) clearTimeout(settleTrimTimer)
+  settleTrimTimer = setTimeout(() => {
+    settleTrimTimer = null
+    tauriInvoke('trim_memory').catch(() => {})
+  }, delayMs)
+}
+
 /**
  * Applies any wallpaper (built-in or custom video) to the Windows desktop
  * directly via Tauri backend.
@@ -171,6 +186,9 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
       state.setWallpaperRunning(true)
     }
 
+    // Auto-trim working set after wallpaper decoders and GPU pipeline settle
+    schedulePostApplyTrim(10000)
+
     return true
   } catch (err) {
     console.error('[AetherFlow] Failed to apply wallpaper to desktop:', err)
@@ -206,6 +224,7 @@ export async function stopDesktopWallpaper(targetMonitor = null) {
       state.setWallpaperRunning(false)
       state.setCurrentDesktopWallpaper(null)
     }
+    tauriInvoke('trim_memory').catch(() => {})
     return true
   } catch (err) {
     console.error('[AetherFlow] Failed to stop wallpaper:', err)

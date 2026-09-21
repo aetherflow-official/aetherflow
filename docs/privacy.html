@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy // AetherFlow — Zero-Telemetry Engine</title>
+    <meta name="description" content="AetherFlow Privacy Policy. Local-first live wallpaper engine with zero telemetry, zero audio recording, and camera hardware suppression.">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+JP:wght@700;900&family=Oswald:wght@500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+    <script>
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+        window.scrollTo(0, 0);
+    </script>
+
+    <style>
+        :root {
+            --ink: #0a0a0a;
+            --paper: #f4f4f0;
+            --paper-card: #ffffff;
+            --hot-pink: #ff0055;
+            --electric-cyan: #00e5ff;
+            --hazard: #ffe600;
+            --blood-orange: #ff3c00;
+            
+            --border-thick: 6px solid var(--ink);
+            --border-mid: 4px solid var(--ink);
+            --border-thin: 2px solid var(--ink);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: clip;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--paper);
+            color: var(--ink);
+            font-family: 'Oswald', sans-serif;
+            background-image: radial-gradient(var(--ink) 15%, transparent 16%);
+            background-size: 6px 6px;
+            background-position: 0 0, 3px 3px;
+        }
+
+        .speedlines {
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: repeating-conic-gradient(
+                from 0deg,
+                transparent 0deg 2deg,
+                rgba(0,0,0,0.04) 2deg 3deg,
+                transparent 3deg 5deg
+            );
+            z-index: -1;
+            pointer-events: none;
+            animation: spin-speed 12s steps(12, end) infinite;
+        }
+
+        @keyframes spin-speed {
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .speedlines { animation: none; }
+        }
+
+        h1, h2, h3, .anton {
+            font-family: 'Anton', sans-serif;
+            text-transform: uppercase;
+            font-style: italic;
+            letter-spacing: 1px;
+        }
+
+        .japanese {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 900;
+        }
+
+        /* Nav */
+        header {
+            position: sticky;
+            top: 0; left: 0; width: 100%;
+            z-index: 1000;
+            padding: 16px 20px;
+            background: rgba(244, 244, 240, 0.92);
+            backdrop-filter: blur(8px);
+            border-bottom: var(--border-mid);
+        }
+
+        .nav-container {
+            max-width: 1300px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2.2rem;
+            color: var(--paper);
+            text-decoration: none;
+            background: var(--ink);
+            padding: 4px 18px;
+            clip-path: polygon(0 0, 100% 10%, 95% 100%, 5% 90%);
+            transform: rotate(-3deg);
+            display: inline-block;
+            text-shadow: 2px 2px 0 var(--hot-pink);
+            border: 2px solid var(--paper);
+            box-shadow: 4px 4px 0 var(--electric-cyan);
+        }
+
+        .logo .japanese {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--hazard);
+            text-shadow: none;
+            letter-spacing: 2px;
+            transform: translateY(-4px);
+        }
+
+        .menu {
+            background: var(--paper);
+            padding: 6px 20px;
+            border: var(--border-thick);
+            clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
+            transform: rotate(1deg);
+            display: flex;
+            gap: 20px;
+        }
+
+        .menu a {
+            font-family: 'Anton', sans-serif;
+            font-size: 1.3rem;
+            color: var(--ink);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: color 0.1s;
+        }
+
+        .menu a:hover, .menu a.active {
+            color: var(--hot-pink);
+            text-shadow: 2px 2px 0 var(--hazard);
+        }
+
+        .btn-persona {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--hazard);
+            color: #0a0a0a;
+            font-family: 'Anton', sans-serif;
+            font-size: 1.2rem;
+            padding: 8px 24px;
+            text-decoration: none;
+            text-transform: uppercase;
+            transform: rotate(-2deg);
+            border: 3px solid var(--ink);
+            cursor: pointer;
+            box-shadow: -4px 4px 0 var(--hot-pink), -8px 8px 0 var(--electric-cyan);
+            clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 96%);
+        }
+
+        .btn-persona:hover {
+            transform: rotate(0deg) scale(1.05);
+            background: var(--electric-cyan);
+        }
+
+        /* Container */
+        .doc-wrapper {
+            max-width: 1100px;
+            margin: 40px auto 80px auto;
+            padding: 0 20px;
+        }
+
+        .doc-hero {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 40px;
+            border: var(--border-thick);
+            box-shadow: 12px 12px 0 var(--hot-pink);
+            margin-bottom: 40px;
+            position: relative;
+            transform: rotate(-0.5deg);
+        }
+
+        .doc-hero-tag {
+            background: var(--hazard);
+            color: var(--ink);
+            font-family: 'Anton', sans-serif;
+            font-size: 1.2rem;
+            padding: 4px 14px;
+            display: inline-block;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            transform: rotate(-2deg);
+            border: 2px solid var(--paper);
+        }
+
+        .doc-hero h1 {
+            font-size: 3.8rem;
+            line-height: 1;
+            margin-bottom: 12px;
+            color: #ffffff;
+            text-shadow: 3px 3px 0 var(--electric-cyan);
+        }
+
+        .doc-hero p {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.25rem;
+            color: #ccc;
+            max-width: 850px;
+            line-height: 1.5;
+        }
+
+        .meta-strip {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            color: var(--electric-cyan);
+            font-size: 1rem;
+            text-transform: uppercase;
+        }
+
+        /* Section Cards */
+        .doc-card {
+            background: var(--paper-card);
+            border: var(--border-thick);
+            padding: 36px;
+            margin-bottom: 30px;
+            box-shadow: 8px 8px 0 var(--ink);
+            position: relative;
+        }
+
+        .doc-card-badge {
+            position: absolute;
+            top: -16px;
+            right: 24px;
+            background: var(--hot-pink);
+            color: #fff;
+            font-family: 'Anton', sans-serif;
+            font-size: 1.1rem;
+            padding: 4px 16px;
+            border: 3px solid var(--ink);
+            transform: rotate(2deg);
+        }
+
+        .doc-card h2 {
+            font-size: 2.2rem;
+            color: var(--ink);
+            margin-bottom: 16px;
+            border-bottom: 4px dashed var(--hazard);
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .doc-card p, .doc-card li {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.15rem;
+            line-height: 1.7;
+            color: #222;
+            margin-bottom: 14px;
+        }
+
+        .doc-card ul {
+            margin-left: 28px;
+            margin-bottom: 16px;
+        }
+
+        .doc-card li strong {
+            color: var(--ink);
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.2rem;
+        }
+
+        .highlight-box {
+            background: #fff0f5;
+            border-left: 8px solid var(--hot-pink);
+            border-top: 2px solid var(--ink);
+            border-right: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+            padding: 18px 24px;
+            margin: 20px 0;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .highlight-box.cyan {
+            background: #f0fdff;
+            border-left-color: var(--electric-cyan);
+        }
+
+        .highlight-box.yellow {
+            background: #fffde6;
+            border-left-color: var(--hazard);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 50px 20px;
+            text-align: center;
+            border-top: 5px dashed var(--hot-pink);
+        }
+
+        .footer-logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2rem;
+            color: var(--hazard);
+            text-decoration: none;
+            margin-bottom: 18px;
+            display: inline-block;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 24px;
+            font-family: 'Oswald', sans-serif;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--paper);
+            text-decoration: none;
+            text-transform: uppercase;
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+        
+        .footer-links a:hover { color: var(--electric-cyan); }
+
+        @media (max-width: 800px) {
+            .doc-hero h1 { font-size: 2.5rem; }
+            .menu { display: none; }
+            .doc-card { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="speedlines"></div>
+
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="logo" aria-label="AetherFlow Home">
+                AETHER<span style="color:var(--electric-cyan)">FLOW</span>
+                <span class="japanese">エーテルフロー</span>
+            </a>
+            <nav class="menu" aria-label="Main Navigation">
+                <a href="index.html#features">Engine</a>
+                <a href="index.html#gallery">Gallery</a>
+                <a href="manual.html">Manual</a>
+                <a href="index.html#download">Download</a>
+                <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">GitHub ↗</a>
+            </nav>
+            <div class="header-actions">
+                <a href="index.html#download" class="btn-persona">
+                    GET v1.0.0
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="doc-wrapper">
+        <div class="doc-hero">
+            <span class="doc-hero-tag">SECURITY PROTOCOL // ZERO TELEMETRY</span>
+            <h1>PRIVACY POLICY</h1>
+            <p>
+                AetherFlow was built on a foundational principle: <strong>Your desktop belongs to you.</strong> We do not track you, we do not log your habits, and we do not sell data. Here is our absolute commitment to your privacy.
+            </p>
+            <div class="meta-strip">
+                <span>⚡ APPLIES TO: AETHERFLOW v1.0.0+</span>
+                <span>⚡ LAST REVISED: SEPTEMBER 2026</span>
+                <span>⚡ JURISDICTION: GLOBAL STANDARDS</span>
+            </div>
+        </div>
+
+        <!-- Section 1 -->
+        <article class="doc-card">
+            <span class="doc-card-badge">CORE COMMITMENT</span>
+            <h2>1. LOCAL-FIRST COMPUTING ARCHITECTURE</h2>
+            <p>
+                AetherFlow operates entirely offline by default. All core wallpaper rendering engines—including local 4K MP4 playback, Canvas 2D procedural simulations, high-resolution static artwork, and theme customizations—execute strictly on your local hardware.
+            </p>
+            <div class="highlight-box cyan">
+                <strong>No Mandatory Cloud Account:</strong> You can download, install, and run AetherFlow indefinitely without providing an email, username, or signing into any cloud service.
+            </div>
+            <ul>
+                <li><strong>Local Storage:</strong> Your wallpaper configurations, monitor assignments, custom theme values, and volume adjustments are saved exclusively to your local device (in <code>%APPDATA%\AetherFlow</code> or sandboxed package storage).</li>
+                <li><strong>No Telemetry Pings:</strong> The app does not include Google Analytics, Mixpanel, Sentry beacons, or background telemetry trackers.</li>
+            </ul>
+        </article>
+
+        <!-- Section 2 -->
+        <article class="doc-card">
+            <span class="doc-card-badge">HARDWARE INTEGRITY</span>
+            <h2>2. AUDIO VISUALIZATION &amp; PERIPHERALS SAFETY</h2>
+            <p>
+                AetherFlow includes an audio-reactive spectrum engine that animates procedural wallpapers in response to system sound.
+            </p>
+            <ul>
+                <li><strong>Real-Time In-Memory FFT:</strong> When enabled, audio frequency spectrums are calculated strictly in transient RAM using standard Web Audio API fast Fourier transforms.</li>
+                <li><strong>Zero Recording or Transmission:</strong> Audio signals are never recorded, compressed, stored to disk, or transmitted outside your local machine.</li>
+                <li><strong>Microphone Safety:</strong> AetherFlow does not listen to room conversations. Microphone scanning is strictly on-demand when explicitly testing audio inputs.</li>
+            </ul>
+            <div class="highlight-box">
+                <strong>Camera Hardware Suppression:</strong> AetherFlow permanently disables Chromium video-capture modules (<code>--disable-video-capture</code> and <code>MediaFoundationVideoCapture</code> suppression) at the engine level. AetherFlow cannot and will never access your webcam.
+            </div>
+        </article>
+
+        <!-- Section 3 -->
+        <article class="doc-card">
+            <span class="doc-card-badge">OPTIONAL SERVICES</span>
+            <h2>3. OPTIONAL CLOUD FEATURES &amp; THIRD PARTIES</h2>
+            <p>
+                Certain features interact with third-party networks only when explicitly initiated by the user:
+            </p>
+            <ul>
+                <li><strong>Community Hub (Supabase):</strong> If you choose to publish a custom wallpaper or browse online community packages, requests are made securely to our Supabase database over HTTPS / TLS 1.3. Creating an author account requires an email address managed securely by Supabase Auth.</li>
+                <li><strong>Web Streams &amp; YouTube:</strong> If you configure a live web stream or YouTube URL as your desktop background, network packets travel directly between your device and the media hosting provider. Those streams are governed by the hosting provider's privacy policy.</li>
+                <li><strong>GitHub Releases Updater:</strong> When checking for software updates, AetherFlow queries the public GitHub Releases API (<code>api.github.com/repos/yashpreeto7/aetherflow/releases</code>). No identifying user tokens are passed.</li>
+            </ul>
+        </article>
+
+        <!-- Section 4 -->
+        <article class="doc-card">
+            <span class="doc-card-badge">USER CONTROL</span>
+            <h2>4. DATA RETENTION &amp; COMPLETE DELETION</h2>
+            <p>
+                Because AetherFlow stores its settings locally, you have total authority over your data at all times:
+            </p>
+            <ul>
+                <li><strong>Reset Preferences:</strong> You can reset all application data to default values directly inside <em>Settings → Reset to Defaults</em>.</li>
+                <li><strong>Complete Uninstallation:</strong> Uninstalling AetherFlow removes the binary and its packaged assets. To remove all cached preferences, simply delete <code>%APPDATA%\AetherFlow</code>.</li>
+                <li><strong>Community Account Deletion:</strong> If you have created a community publisher account and wish to delete your uploaded submissions or author profile, you can request immediate removal via our GitHub support channel.</li>
+            </ul>
+        </article>
+
+        <!-- Section 5 -->
+        <article class="doc-card">
+            <span class="doc-card-badge">CONTACT &amp; TRANSPARENCY</span>
+            <h2>5. OPEN SOURCE TRANSPARENCY &amp; INQUIRIES</h2>
+            <p>
+                We believe security through obscurity is no security at all. AetherFlow's source code, release tags, and issue tracker are publicly verifiable on GitHub.
+            </p>
+            <div class="highlight-box yellow">
+                <strong>Source Repository:</strong> <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener" style="color:var(--ink); font-weight:700;">https://github.com/yashpreeto7/aetherflow</a><br>
+                <strong>Security &amp; Inquiries:</strong> File an issue directly at <a href="https://github.com/yashpreeto7/aetherflow/issues" target="_blank" rel="noopener" style="color:var(--ink); font-weight:700;">GitHub Issues Tracker</a>.<br>
+                <strong>Lead Developer:</strong> Yashpreet (yashpreeto7)
+            </div>
+        </article>
+    </main>
+
+    <footer>
+        <a href="index.html" class="footer-logo">AETHERFLOW SYSTEM</a>
+        <div class="footer-links">
+            <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">Source (GitHub)</a>
+            <a href="https://github.com/yashpreeto7/aetherflow/issues" target="_blank" rel="noopener">Issues &amp; Support</a>
+            <a href="manual.html">Manual</a>
+            <a href="index.html#download">Downloads</a>
+            <a href="privacy.html" style="color:var(--electric-cyan);">Privacy</a>
+            <a href="license.html">License</a>
+        </div>
+        <p style="font-family: 'Oswald', sans-serif; font-weight: 500; color: #888; letter-spacing: 1px;">
+            © 2026 AETHERFLOW. ENGINEERED WITH TAURI 2 &amp; RUST. ALL SYSTEMS OPERATIONAL.
+        </p>
+    </footer>
+
+    <script>
+        window.addEventListener('beforeunload', () => window.scrollTo(0, 0));
+        window.addEventListener('pageshow', () => window.scrollTo(0, 0));
+        window.addEventListener('DOMContentLoaded', () => window.scrollTo(0, 0));
+        window.addEventListener('load', () => window.scrollTo(0, 0));
+    </script>
+</body>
+</html>

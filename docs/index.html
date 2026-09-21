@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherFlow — Anime Overdrive Edition | Ultra-Lightweight Windows Live Wallpaper Engine</title>
+    <meta name="description" content="AetherFlow is a high-performance, ultra-lightweight Windows live wallpaper engine. Powered by Tauri 2, MPV, and Canvas 2D. 8MB binary, 30MB RAM, zero lag.">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+
+    <!-- Typography: Anton, Noto Sans JP, Oswald -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+JP:wght@700;900&family=Oswald:wght@500;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+    <script>
+        // Immediately reset scroll on reload or navigation
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+        window.scrollTo(0, 0);
+    </script>
+
+    <style>
+        :root {
+            /* High-contrast anime palette */
+            --ink: #0a0a0a;
+            --paper: #f4f4f0;
+            --paper-card: #ffffff;
+            --hot-pink: #ff0055;
+            --electric-cyan: #00e5ff;
+            --hazard: #ffe600;
+            --blood-orange: #ff3c00;
+            
+            --border-thick: 6px solid var(--ink);
+            --border-mid: 4px solid var(--ink);
+            --border-thin: 2px solid var(--ink);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            overflow-x: clip;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--paper);
+            color: var(--ink);
+            font-family: 'Oswald', sans-serif;
+            /* Halftone base */
+            background-image: radial-gradient(var(--ink) 15%, transparent 16%);
+            background-size: 6px 6px;
+            background-position: 0 0, 3px 3px;
+        }
+
+        /* Speed lines overlay */
+        .speedlines {
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: repeating-conic-gradient(
+                from 0deg,
+                transparent 0deg 2deg,
+                rgba(0,0,0,0.05) 2deg 3deg,
+                transparent 3deg 5deg
+            );
+            z-index: -1;
+            pointer-events: none;
+            /* Stepped rotation animation for anime feel */
+            animation: spin-speed 10s steps(12, end) infinite;
+        }
+
+        @keyframes spin-speed {
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .speedlines { animation: none; }
+        }
+
+        h1, h2, h3, .anton {
+            font-family: 'Anton', sans-serif;
+            text-transform: uppercase;
+            font-style: italic;
+        }
+
+        .japanese {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 900;
+        }
+
+        /* Persona-style Jagged Button */
+        .btn-persona {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: var(--hazard);
+            color: #0a0a0a;
+            font-family: 'Anton', sans-serif;
+            font-size: 2rem;
+            padding: 12px 44px;
+            text-decoration: none;
+            text-transform: uppercase;
+            position: relative;
+            transform: rotate(-3deg);
+            transition: all 0.12s steps(2, end);
+            border: 4px solid var(--ink);
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: -8px 8px 0 var(--hot-pink), -16px 16px 0 var(--electric-cyan);
+            user-select: none;
+            clip-path: polygon(2% 0, 100% 4%, 98% 100%, 0 96%);
+        }
+
+        .btn-persona:hover {
+            transform: rotate(-1deg) scale(1.05);
+            background: var(--electric-cyan);
+            color: #0a0a0a;
+            box-shadow: -10px 10px 0 var(--hot-pink), -20px 20px 0 var(--hazard);
+        }
+
+        .btn-persona.btn-hazard {
+            background: var(--hazard);
+            color: #0a0a0a;
+        }
+
+        .btn-persona.cta-btn {
+            background: var(--hot-pink);
+            color: #ffffff;
+            border-color: var(--paper);
+            box-shadow: -10px 10px 0 var(--electric-cyan), -20px 20px 0 var(--hazard);
+        }
+
+        .btn-persona.cta-btn:hover {
+            background: var(--hazard);
+            color: #0a0a0a;
+            border-color: var(--ink);
+        }
+
+        /* Header */
+        header {
+            position: fixed;
+            top: 0; left: 0; width: 100%;
+            z-index: 1000;
+            padding: 20px;
+            pointer-events: none;
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: auto;
+        }
+
+        .logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2.6rem;
+            color: var(--paper);
+            text-decoration: none;
+            background: var(--ink);
+            padding: 5px 22px;
+            clip-path: polygon(0 0, 100% 10%, 95% 100%, 5% 90%);
+            transform: rotate(-4deg);
+            display: inline-block;
+            text-shadow: 2px 2px 0 var(--hot-pink);
+            border: 2px solid var(--paper);
+            box-shadow: 4px 4px 0 var(--electric-cyan);
+            transition: transform 0.1s;
+        }
+
+        .logo:hover {
+            transform: rotate(-2deg) scale(1.04);
+        }
+
+        .logo .japanese {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--hazard);
+            text-shadow: none;
+            letter-spacing: 2px;
+            transform: translateY(-5px);
+        }
+
+        .menu {
+            background: var(--paper);
+            padding: 8px 28px;
+            border: var(--border-thick);
+            clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
+            transform: rotate(2deg);
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            box-shadow: 6px 6px 0 var(--electric-cyan);
+        }
+
+        .menu a {
+            font-family: 'Anton', sans-serif;
+            font-size: 1.4rem;
+            color: var(--ink);
+            text-decoration: none;
+            text-transform: uppercase;
+            position: relative;
+            transition: color 0.1s, transform 0.1s;
+            display: inline-block;
+        }
+
+        .menu a:hover {
+            color: var(--hot-pink);
+            transform: scale(1.08);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 120px 20px 80px;
+            overflow: hidden;
+        }
+
+        .hero-bg-text {
+            position: absolute;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 18vw;
+            font-weight: 900;
+            color: transparent;
+            -webkit-text-stroke: 4px var(--ink);
+            white-space: nowrap;
+            opacity: 0.18;
+            z-index: 1;
+            transform: rotate(-10deg) scale(1.4);
+            pointer-events: none;
+            animation: pulse-stroke 2.5s steps(4, end) infinite;
+        }
+
+        @keyframes pulse-stroke {
+            50% { opacity: 0.45; -webkit-text-stroke: 6px var(--hot-pink); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .shatter-text {
+            font-size: clamp(3.8rem, 9vw, 7.8rem);
+            line-height: 0.9;
+            color: var(--paper);
+            text-shadow: 
+                -4px -4px 0 var(--ink),
+                4px -4px 0 var(--ink),
+                -4px 4px 0 var(--ink),
+                4px 4px 0 var(--ink),
+                10px 10px 0 var(--hot-pink),
+                20px 20px 0 var(--electric-cyan);
+            transform: rotate(-4deg);
+            position: relative;
+            display: inline-block;
+            margin-bottom: 28px;
+            user-select: none;
+        }
+
+        .shatter-text span {
+            display: block;
+        }
+        
+        .shatter-text .highlight {
+            color: var(--hazard);
+            text-shadow: 
+                -4px -4px 0 var(--ink),
+                4px -4px 0 var(--ink),
+                -4px 4px 0 var(--ink),
+                4px 4px 0 var(--ink),
+                10px 10px 0 var(--ink),
+                18px 18px 0 var(--hot-pink);
+        }
+
+        .hero-sub {
+            background: var(--ink);
+            color: var(--hazard);
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 24px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            transform: rotate(1.5deg);
+            margin-bottom: 36px;
+            border: 3px solid var(--hot-pink);
+            box-shadow: -8px 8px 0 var(--electric-cyan);
+        }
+
+        .hero-desc {
+            font-size: 1.45rem;
+            font-weight: 700;
+            color: var(--ink);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 22px;
+            display: inline-block;
+            border: var(--border-mid);
+            box-shadow: 6px 6px 0 var(--ink);
+            margin-bottom: 32px;
+            transform: rotate(-1deg);
+        }
+
+        .hero-cta-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Spec Badges */
+        .specs-ribbon {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .spec-badge {
+            background: var(--paper-card);
+            border: var(--border-thin);
+            padding: 4px 14px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            box-shadow: 3px 3px 0 var(--ink);
+            color: var(--ink);
+        }
+
+        .spec-badge.glow {
+            background: var(--hazard);
+            color: var(--ink);
+        }
+
+        /* Winget Bar */
+        .winget-bar {
+            background: var(--ink);
+            color: var(--electric-cyan);
+            border: var(--border-mid);
+            padding: 6px 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.95rem;
+            box-shadow: 6px 6px 0 var(--hot-pink);
+            transform: rotate(1deg);
+            margin-top: 6px;
+        }
+
+        .winget-bar code {
+            color: #ffffff;
+            user-select: all;
+        }
+
+        .winget-copy-btn {
+            background: var(--hazard);
+            color: #0a0a0a;
+            border: none;
+            font-family: 'Anton', sans-serif;
+            font-size: 0.9rem;
+            padding: 3px 12px;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .winget-copy-btn:hover {
+            background: var(--electric-cyan);
+        }
+
+        /* Manga Section */
+        .manga-section {
+            padding: 100px 20px;
+            background: var(--ink);
+            position: relative;
+            z-index: 20;
+            border-top: 15px solid var(--hazard);
+            border-bottom: 15px solid var(--hazard);
+        }
+
+        .section-title {
+            color: var(--paper);
+            font-size: clamp(3rem, 6vw, 5.5rem);
+            text-align: center;
+            margin-bottom: 50px;
+            text-shadow: 6px 6px 0 var(--hot-pink);
+            transform: skewX(-8deg);
+            line-height: 0.95;
+        }
+        
+        .section-title .japanese {
+            display: block;
+            font-size: clamp(1.2rem, 2.5vw, 2rem);
+            color: var(--electric-cyan);
+            text-shadow: none;
+            margin-top: 8px;
+        }
+
+        .manga-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            max-width: 1350px;
+            margin: 0 auto;
+            background: var(--paper);
+            padding: 24px;
+            border: var(--border-thick);
+            box-shadow: 18px 18px 0 var(--hot-pink);
+        }
+
+        @media (max-width: 960px) {
+            .manga-grid { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: var(--ink);
+            border: var(--border-thick);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: transform 0.15s steps(2, end), box-shadow 0.15s;
+            box-shadow: 8px 8px 0 var(--ink);
+        }
+
+        .panel:hover {
+            transform: translateY(-6px);
+            box-shadow: 12px 12px 0 var(--electric-cyan);
+        }
+
+        /* Panel Imagery & 16:9 Frame */
+        .panel-img-wrap {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #08080d;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: var(--border-thick);
+        }
+
+        .panel-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            transition: transform 0.25s ease, filter 0.2s ease;
+        }
+
+        .panel:hover .panel-img {
+            transform: scale(1.02);
+            filter: contrast(106%) brightness(1.04);
+        }
+
+        .panel-zoom-hint {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(10, 10, 10, 0.88);
+            color: var(--hazard);
+            border: 2px solid var(--hazard);
+            padding: 4px 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.9;
+            transition: all 0.15s;
+            z-index: 15;
+            box-shadow: 2px 2px 0 var(--ink);
+        }
+
+        .panel:hover .panel-zoom-hint {
+            opacity: 1;
+            background: var(--hazard);
+            color: var(--ink);
+            transform: scale(1.05);
+        }
+
+        /* Comic SFX Tag - Non-intrusive corner placement */
+        .panel-sfx-tag {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: var(--hot-pink);
+            color: #ffffff;
+            border: 2px solid var(--ink);
+            padding: 2px 10px;
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 900;
+            font-size: 0.85rem;
+            z-index: 15;
+            box-shadow: 3px 3px 0 var(--ink);
+            pointer-events: none;
+            text-shadow: 1px 1px 0 var(--ink);
+        }
+
+        .panel-sfx-tag.tag-cyan {
+            background: var(--electric-cyan);
+            color: #0a0a0a;
+        }
+
+        .panel-sfx-tag.tag-hazard {
+            background: var(--hazard);
+            color: #0a0a0a;
+        }
+
+        .panel-caption {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            background: var(--ink);
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .caption-pink { border-top: 4px solid var(--hot-pink); }
+        .caption-cyan { border-top: 4px solid var(--electric-cyan); }
+        .caption-hazard { border-top: 4px solid var(--hazard); }
+
+        .panel-tag {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--hazard);
+        }
+
+        .panel-caption h3 {
+            font-size: 1.55rem;
+            line-height: 1.1;
+            color: #ffffff;
+            margin: 0;
+        }
+        
+        .panel-caption p {
+            font-family: 'Oswald', sans-serif;
+            font-size: 0.95rem;
+            color: #d1d5db;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        /* Marquee Ticker */
+        .marquee-strip {
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            z-index: 30;
+            padding: 24px 0;
+            margin: -16px 0;
+        }
+
+        .marquee-wrapper {
+            background: var(--hot-pink);
+            border-top: var(--border-thick);
+            border-bottom: var(--border-thick);
+            padding: 12px 0;
+            overflow: hidden;
+            display: flex;
+            white-space: nowrap;
+            transform: rotate(-2deg) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            user-select: none;
+        }
+        
+        .marquee-wrapper.reverse {
+            background: var(--hazard);
+            transform: rotate(2deg) scale(1.05);
+            margin-top: -12px;
+        }
+
+        .marquee-content {
+            display: flex;
+            animation: marquee 11s linear infinite;
+        }
+        
+        .marquee-wrapper.reverse .marquee-content {
+            animation: marquee-rev 13s linear infinite;
+        }
+
+        .marquee-item {
+            font-family: 'Anton', sans-serif;
+            font-size: 3rem;
+            color: var(--ink);
+            padding: 0 40px;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .marquee-item::after {
+            content: '✦';
+            font-size: 1.8rem;
+        }
+
+        @keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        @keyframes marquee-rev { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+
+        /* Gallery Section */
+        .gallery-section {
+            padding: 100px 20px 80px;
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .gallery-title {
+            color: var(--ink);
+            font-size: clamp(2.8rem, 5.5vw, 4.8rem);
+            text-align: center;
+            margin-bottom: 50px;
+            text-shadow: 5px 5px 0 var(--hot-pink);
+            transform: skewX(-6deg);
+        }
+
+        .gallery-title .japanese {
+            display: block;
+            font-size: 1.6rem;
+            color: var(--electric-cyan);
+            text-shadow: none;
+            margin-top: 6px;
+        }
+
+        .gallery-grid {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .char-card {
+            width: 400px;
+            max-width: 100%;
+            height: 310px;
+            background: var(--ink);
+            border: var(--border-thick);
+            position: relative;
+            transform: skewX(-2deg);
+            transition: transform 0.2s steps(3, end), box-shadow 0.2s;
+            box-shadow: 10px 10px 0 var(--electric-cyan);
+            cursor: pointer;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .char-card:hover {
+            transform: skewX(-2deg) translateY(-10px);
+            box-shadow: 14px 14px 0 var(--hot-pink);
+        }
+
+        .char-card:nth-child(2) { transform: skewX(2deg); box-shadow: -10px 10px 0 var(--hazard); }
+        .char-card:nth-child(2):hover { transform: skewX(2deg) translateY(-10px); box-shadow: -14px 14px 0 var(--hot-pink); }
+
+        .char-card:nth-child(3) { transform: skewX(-2deg); box-shadow: 10px 10px 0 var(--hot-pink); }
+        .char-card:nth-child(3):hover { transform: skewX(-2deg) translateY(-10px); box-shadow: 14px 14px 0 var(--electric-cyan); }
+
+        .char-card:nth-child(4) { transform: skewX(2deg); box-shadow: -10px 10px 0 var(--electric-cyan); }
+        .char-card:nth-child(4):hover { transform: skewX(2deg) translateY(-10px); box-shadow: -14px 14px 0 var(--hazard); }
+
+        .char-card:nth-child(5) { transform: skewX(-2deg); box-shadow: 10px 10px 0 var(--hazard); }
+        .char-card:nth-child(5):hover { transform: skewX(-2deg) translateY(-10px); box-shadow: 14px 14px 0 var(--hot-pink); }
+
+        .char-card:nth-child(6) { transform: skewX(2deg); box-shadow: -10px 10px 0 var(--hot-pink); }
+        .char-card:nth-child(6):hover { transform: skewX(2deg) translateY(-10px); box-shadow: -14px 14px 0 var(--electric-cyan); }
+
+        .char-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            filter: contrast(105%) brightness(1.0);
+            transition: all 0.25s;
+        }
+
+        .char-card:hover .char-img {
+            filter: contrast(110%) brightness(1.06);
+            transform: scale(1.04);
+        }
+
+        .char-info {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            background: var(--ink);
+            padding: 8px 16px;
+            border: 2px solid var(--paper);
+            z-index: 10;
+            box-shadow: 4px 4px 0 var(--hot-pink);
+        }
+
+        .char-card:nth-child(2n) .char-info {
+            box-shadow: 4px 4px 0 var(--hazard);
+        }
+
+        .char-info h4 {
+            font-size: 1.6rem;
+            line-height: 1;
+            margin-bottom: 3px;
+            color: #ffffff;
+        }
+
+        .char-info p {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--electric-cyan);
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        /* Fullscreen Lightbox Modal */
+        .lightbox-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 10, 0.94);
+            backdrop-filter: blur(12px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .lightbox-modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .lightbox-container {
+            position: relative;
+            max-width: 95vw;
+            max-height: 94vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: var(--ink);
+            border: 5px solid var(--paper);
+            box-shadow: 16px 16px 0 var(--hot-pink), -10px -10px 0 var(--electric-cyan);
+            padding: 12px;
+            animation: popIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.92); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 44px;
+            height: 44px;
+            background: var(--hazard);
+            color: var(--ink);
+            border: 3px solid var(--ink);
+            font-family: 'Anton', sans-serif;
+            font-size: 1.6rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 4px 4px 0 var(--hot-pink);
+            transition: all 0.1s;
+            z-index: 10001;
+        }
+
+        .lightbox-close:hover {
+            transform: scale(1.1);
+            background: var(--hot-pink);
+            color: #fff;
+        }
+
+        .lightbox-img {
+            max-width: 90vw;
+            max-height: 76vh;
+            object-fit: contain;
+            display: block;
+            border: 2px solid #222;
+            background: #000;
+        }
+
+        .lightbox-footer {
+            width: 100%;
+            padding: 12px 14px 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            color: var(--paper);
+            flex-wrap: wrap;
+        }
+
+        .lightbox-title {
+            font-family: 'Anton', sans-serif;
+            font-size: 1.45rem;
+            color: var(--hazard);
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        .lightbox-desc {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            color: #d1d5db;
+            margin: 2px 0 0;
+        }
+
+        .lightbox-raw-btn {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            background: var(--electric-cyan);
+            color: #0a0a0a;
+            padding: 8px 16px;
+            text-decoration: none;
+            border: 2px solid var(--ink);
+            box-shadow: 3px 3px 0 var(--hot-pink);
+            white-space: nowrap;
+            transition: all 0.1s;
+            cursor: pointer;
+        }
+
+        .lightbox-raw-btn:hover {
+            background: var(--hazard);
+            transform: scale(1.05);
+        }
+
+        /* Power & Screensaver Feature Banner */
+        .power-banner {
+            max-width: 1250px;
+            margin: 40px auto 60px;
+            background: var(--ink);
+            border: var(--border-thick);
+            box-shadow: 16px 16px 0 var(--hazard);
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            align-items: center;
+            gap: 30px;
+            padding: 36px;
+            position: relative;
+            z-index: 25;
+            transform: skewX(-2deg);
+        }
+
+        @media (max-width: 900px) {
+            .power-banner { grid-template-columns: 1fr; padding: 24px; }
+        }
+
+        .power-banner-content {
+            transform: skewX(2deg);
+            color: var(--paper);
+        }
+
+        .power-banner-tag {
+            background: var(--hot-pink);
+            color: #fff;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 800;
+            padding: 4px 12px;
+            display: inline-block;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .power-banner-title {
+            font-size: clamp(2.2rem, 4vw, 3.4rem);
+            line-height: 1;
+            color: var(--paper);
+            margin-bottom: 14px;
+            text-shadow: 3px 3px 0 var(--electric-cyan);
+        }
+
+        .power-banner-desc {
+            font-size: 1.1rem;
+            color: #d1d5db;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        .power-banner-img-wrap {
+            transform: skewX(2deg);
+            border: var(--border-mid);
+            box-shadow: 8px 8px 0 var(--electric-cyan);
+            overflow: hidden;
+            background: #000;
+        }
+
+        .power-banner-img {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: cover;
+        }
+
+        /* CTA Download Section */
+        .cta-section {
+            min-height: 80vh;
+            background: var(--ink);
+            color: var(--paper);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            position: relative;
+            z-index: 20;
+            width: 100%;
+            clip-path: polygon(0 50px, 100% 0, 100% calc(100% - 50px), 0 100%);
+            margin-top: 40px;
+            padding: 100px 20px 80px;
+            overflow: hidden;
+        }
+
+        .cta-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(
+                45deg,
+                var(--ink),
+                var(--ink) 20px,
+                #181822 20px,
+                #181822 40px
+            );
+            z-index: 0;
+        }
+
+        .cta-content {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            max-width: 960px;
+        }
+
+        .cta-title {
+            font-size: clamp(3.5rem, 8vw, 6.5rem);
+            color: var(--paper);
+            text-shadow: 8px 8px 0 var(--electric-cyan);
+            margin-bottom: 20px;
+            transform: scaleY(1.15);
+            line-height: 0.95;
+        }
+
+        .cta-lead {
+            font-size: 1.4rem;
+            color: #d1d5db;
+            margin-bottom: 30px;
+        }
+
+        .cta-btn-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        
+        .cta-btn {
+            font-size: 2.6rem;
+            padding: 18px 58px;
+            clip-path: polygon(4% 0, 100% 8%, 96% 100%, 0 92%);
+        }
+
+        .download-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 50px;
+            text-align: left;
+        }
+
+        .dl-card {
+            background: #14141d;
+            border: var(--border-mid);
+            padding: 20px;
+            box-shadow: 6px 6px 0 var(--hazard);
+            transition: transform 0.15s;
+        }
+
+        .dl-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 8px 8px 0 var(--hot-pink);
+        }
+
+        .dl-badge {
+            background: var(--hot-pink);
+            color: #ffffff;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        .dl-title {
+            font-size: 1.6rem;
+            color: var(--paper);
+            margin-bottom: 6px;
+        }
+
+        .dl-desc {
+            font-size: 0.95rem;
+            color: #9ca3af;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .dl-btn {
+            display: block;
+            width: 100%;
+            text-align: center;
+            font-family: 'Anton', sans-serif;
+            font-size: 1.15rem;
+            padding: 10px;
+            text-decoration: none;
+            background: var(--hazard);
+            color: #0a0a0a;
+            border: 2px solid var(--paper);
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .dl-btn:hover {
+            background: var(--electric-cyan);
+            color: #0a0a0a;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 60px 20px;
+            text-align: center;
+            border-top: 5px dashed var(--hot-pink);
+        }
+
+        .footer-logo {
+            font-family: 'Anton', sans-serif;
+            font-size: 2.2rem;
+            color: var(--hazard);
+            text-decoration: none;
+            margin-bottom: 20px;
+            display: inline-block;
+            transition: transform 0.1s;
+        }
+
+        .footer-logo:hover {
+            transform: scale(1.05);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+            font-family: 'Oswald', sans-serif;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--paper);
+            text-decoration: none;
+            text-transform: uppercase;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        
+        .footer-links a:hover { color: var(--electric-cyan); }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--ink);
+            color: var(--hazard);
+            border: var(--border-mid);
+            padding: 14px 22px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            box-shadow: 6px 6px 0 var(--electric-cyan);
+            z-index: 2000;
+            transform: translateY(150%);
+            transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .toast.show {
+            transform: translateY(0);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .manga-grid { grid-template-columns: 1fr; }
+            .shatter-text { font-size: 5rem; }
+            .cta-title { font-size: 4rem; }
+            .download-cards-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .menu { display: none; }
+            .shatter-text { font-size: 3.5rem; }
+            .cta-btn { font-size: 2rem; padding: 15px 30px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="speedlines" aria-hidden="true"></div>
+
+    <!-- Toast Notice -->
+    <div id="toast" class="toast" role="alert">
+        ⚡ Direct Download Initiated!
+    </div>
+
+    <!-- Navigation Header -->
+    <header>
+        <div class="nav-container">
+            <a href="#" class="logo" aria-label="AetherFlow Home">
+                AETHER<span style="color:var(--electric-cyan)">FLOW</span>
+                <span class="japanese">エーテルフロー</span>
+            </a>
+            <nav class="menu" aria-label="Main Navigation">
+                <a href="#features">Engine</a>
+                <a href="#gallery">Gallery</a>
+                <a href="manual.html">Manual</a>
+                <a href="#download">Download</a>
+                <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">GitHub ↗</a>
+            </nav>
+            <div class="header-actions">
+                <a href="assets/AetherFlow.exe" download="AetherFlow.exe" class="btn-persona btn-hazard" style="font-size: 1.1rem; padding: 8px 24px;" onclick="showToast('⚡ Standalone executable download started!')">
+                    GET v1.0.0
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-bg-text" aria-hidden="true">画面を解放しろ！ 画面を解放しろ！</div>
+        
+        <div class="hero-content">
+            <div class="hero-sub">
+                <span style="display:inline-block; width:8px; height:8px; background:var(--hot-pink); border-radius:50%;"></span>
+                TAURI 2 &amp; RUST · NATIVE WIN32 LIVE WALLPAPERS
+            </div>
+
+            <h1 class="shatter-text">
+                <span>UNLEASH</span>
+                <span class="highlight">YOUR SCREEN</span>
+            </h1>
+
+            <div>
+                <p class="hero-desc">THE ULTRA-LIGHTWEIGHT LIVE WALLPAPER ENGINE FOR WINDOWS</p>
+            </div>
+
+            <div class="hero-cta-group">
+                <a href="assets/AetherFlow.exe" download="AetherFlow.exe" class="btn-persona btn-hazard" onclick="showToast('⚡ Downloading AetherFlow v1.0.0 Standalone EXE (8.2MB)...')">
+                    START IGNITION <span class="japanese" style="font-size: 1.2rem;">(起動)</span>
+                </a>
+
+                <div class="specs-ribbon">
+                    <span class="spec-badge glow">WINDOWS 11 / 10 64-BIT</span>
+                    <span class="spec-badge glow">TAURI 2 &amp; RUST CORE</span>
+                    <span class="spec-badge">CANVAS 2D &amp; MPV ENGINES</span>
+                    <span class="spec-badge">SMART FULLSCREEN PAUSE</span>
+                    <span class="spec-badge">MULTI-MONITOR READY</span>
+                </div>
+
+                <!-- Winget Quick Copy -->
+                <div class="winget-bar">
+                    <span style="opacity: 0.6;">PS&gt;</span>
+                    <code id="winget-text">winget install AetherFlow</code>
+                    <button class="winget-copy-btn" onclick="copyWinget()">COPY</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Manga Section ("THE ENGINE") -->
+    <section id="features" class="manga-section">
+        <h2 class="section-title">
+            THE ENGINE
+            <span class="japanese">究極のパフォーマンス</span>
+        </h2>
+
+        <div class="manga-grid">
+            <!-- Panel 1: Live Player & Controls -->
+            <div class="panel" onclick="openLightbox('assets/app_home_controls.png', 'LIVE DESKTOP PLAYER &amp; REAL-TIME CONTROLS', 'Live wallpaper playback engine with individual sliders for Opacity, Brightness, Speed, and Volume.')">
+                <div class="panel-img-wrap">
+                    <img src="assets/app_home_controls.png" alt="AetherFlow Live Desktop Player &amp; Controls" class="panel-img" loading="eager">
+                    <div class="panel-sfx-tag">ドーン!!</div>
+                    <span class="panel-zoom-hint">🔍 CLICK TO ENLARGE</span>
+                </div>
+                <div class="panel-caption caption-pink">
+                    <span class="panel-tag">CORE ENGINE</span>
+                    <h3>LIVE DESKTOP PLAYER</h3>
+                    <p>Real-time playback controls for opacity, brightness, speed, and volume across all displays.</p>
+                </div>
+            </div>
+            
+            <!-- Panel 2: Video & Media Favorites -->
+            <div class="panel" onclick="openLightbox('assets/app_favorites_grid.png', 'FAVORITES GALLERY &amp; VIDEO LIBRARY', 'Organize custom 4K MP4s, anime clips, and web streams with 1-click desktop apply.')">
+                <div class="panel-img-wrap">
+                    <img src="assets/app_favorites_grid.png" alt="AetherFlow Favorites &amp; Video Library" class="panel-img" loading="eager">
+                    <div class="panel-sfx-tag tag-cyan">ゴゴゴゴ</div>
+                    <span class="panel-zoom-hint">🔍 CLICK TO ENLARGE</span>
+                </div>
+                <div class="panel-caption caption-cyan">
+                    <span class="panel-tag">FAVORITES GALLERY</span>
+                    <h3>VIDEO &amp; MEDIA LIBRARY</h3>
+                    <p>Organize custom 4K MP4s, anime clips, and web streams with 1-click desktop apply.</p>
+                </div>
+            </div>
+
+            <!-- Panel 3: Community Catalog -->
+            <div class="panel" onclick="openLightbox('assets/app_community.png', 'COMMUNITY HUB &amp; OPEN CATALOG', 'Discover, preview, and download community wallpapers curated worldwide.')">
+                <div class="panel-img-wrap">
+                    <img src="assets/app_community.png" alt="AetherFlow Community Hub" class="panel-img" loading="eager">
+                    <div class="panel-sfx-tag tag-cyan">ズバッ</div>
+                    <span class="panel-zoom-hint">🔍 CLICK TO ENLARGE</span>
+                </div>
+                <div class="panel-caption caption-cyan">
+                    <span class="panel-tag">OPEN CATALOG</span>
+                    <h3>COMMUNITY HUB</h3>
+                    <p>Discover, preview, and download community wallpapers curated worldwide.</p>
+                </div>
+            </div>
+
+            <!-- Panel 4: Personalization & Themes -->
+            <div class="panel" onclick="openLightbox('assets/app_personalization.png', 'THEME STUDIO &amp; PERSONALIZATION', '8 built-in themes plus non-intrusive Live Theme Studio with custom palette export.')">
+                <div class="panel-img-wrap">
+                    <img src="assets/app_personalization.png" alt="AetherFlow Theme Studio &amp; Presets" class="panel-img" loading="eager">
+                    <div class="panel-sfx-tag tag-hazard">ドドドド</div>
+                    <span class="panel-zoom-hint">🔍 CLICK TO ENLARGE</span>
+                </div>
+                <div class="panel-caption caption-hazard">
+                    <span class="panel-tag">THEME STUDIO</span>
+                    <h3>PERSONALIZATION</h3>
+                    <p>8 built-in themes plus non-intrusive Live Theme Studio with custom palette export.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Opposing Skew Marquees -->
+    <div class="marquee-strip" aria-hidden="true">
+        <div class="marquee-wrapper">
+            <div class="marquee-content">
+                <span class="marquee-item">ライブ壁紙</span>
+                <span class="marquee-item">TAURI 2 &amp; RUST</span>
+                <span class="marquee-item">AETHERFLOW</span>
+                <span class="marquee-item">CANVAS 2D &amp; MPV</span>
+                <span class="marquee-item">SMART AUTO-PAUSE</span>
+                <span class="marquee-item">MULTI-MONITOR</span>
+                <!-- Duplicate for loop -->
+                <span class="marquee-item">ライブ壁紙</span>
+                <span class="marquee-item">TAURI 2 &amp; RUST</span>
+                <span class="marquee-item">AETHERFLOW</span>
+                <span class="marquee-item">CANVAS 2D &amp; MPV</span>
+                <span class="marquee-item">SMART AUTO-PAUSE</span>
+                <span class="marquee-item">MULTI-MONITOR</span>
+            </div>
+        </div>
+        <div class="marquee-wrapper reverse">
+            <div class="marquee-content">
+                <span class="marquee-item">HARDWARE ACCELERATED</span>
+                <span class="marquee-item">NO DESKTOP FLASH</span>
+                <span class="marquee-item">OPEN COMMUNITY CATALOG</span>
+                <span class="marquee-item">SYSTEM READY</span>
+                <span class="marquee-item">CUSTOM VIDEO &amp; MEDIA</span>
+                <!-- Duplicate for loop -->
+                <span class="marquee-item">HARDWARE ACCELERATED</span>
+                <span class="marquee-item">NO DESKTOP FLASH</span>
+                <span class="marquee-item">OPEN COMMUNITY CATALOG</span>
+                <span class="marquee-item">SYSTEM READY</span>
+                <span class="marquee-item">CUSTOM VIDEO &amp; MEDIA</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gallery Section -->
+    <section id="gallery" class="gallery-section">
+        <h3 class="gallery-title">
+            CURATED SHOWCASE
+            <span class="japanese">人気ライブ壁紙</span>
+        </h3>
+
+        <div class="gallery-grid">
+            <div class="char-card" onclick="openLightbox('assets/cyberpunk_gtr.jpg', 'CYBERPUNK NISSAN GT-R', 'Hardware-accelerated MPV video engine with dynamic rain overlay.')">
+                <img src="assets/cyberpunk_gtr.jpg" alt="Cyberpunk Nissan GT-R Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>CYBERPUNK GT-R</h4>
+                    <p>ENGINE: MPV VIDEO · RAIN EFFECT</p>
+                </div>
+            </div>
+            
+            <div class="char-card" onclick="openLightbox('assets/the_batman.png', 'THE BATMAN MONOCHROME', 'High-contrast cinematic live wallpaper with atmospheric grain and zero stutter.')">
+                <img src="assets/the_batman.png" alt="The Batman Monochrome Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>THE BATMAN</h4>
+                    <p>ENGINE: CINEMATIC LIVE WALLPAPER</p>
+                </div>
+            </div>
+
+            <div class="char-card" onclick="openLightbox('assets/desktop_cyberpunk_lucy.jpg', 'CYBER CITY (DAVID &amp; LUCY)', 'Live desktop wallpaper behind native Windows taskbar and icons.')">
+                <img src="assets/desktop_cyberpunk_lucy.jpg" alt="Cyberpunk Lucy & David Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>CYBER CITY</h4>
+                    <p>ENGINE: MPV VIDEO · RAIN EFFECT</p>
+                </div>
+            </div>
+
+            <div class="char-card" onclick="openLightbox('assets/desktop_cherry_blossom.png', 'SAKURA DRIFT TREE', '60 FPS live web stream rendering behind native translucent taskbar.')">
+                <img src="assets/desktop_cherry_blossom.png" alt="Cherry Blossom Tree Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>SAKURA DRIFT</h4>
+                    <p>ENGINE: LIVE WEB STREAM · 60 FPS</p>
+                </div>
+            </div>
+
+            <div class="char-card" onclick="openLightbox('assets/desktop_anime_hashira.jpg', 'SERPENT HASHIRA (OBANAI)', 'Cinematic live wallpaper running seamlessly on Windows 11 desktop.')">
+                <img src="assets/desktop_anime_hashira.jpg" alt="Anime Serpent Hashira Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>SERPENT HASHIRA</h4>
+                    <p>ENGINE: CINEMATIC LIVE WALLPAPER</p>
+                </div>
+            </div>
+
+            <div class="char-card" onclick="openLightbox('assets/desktop_matrix_rain.png', 'MATRIX CODE RAIN', 'Procedural Canvas 2D engine with zero CPU consumption and customizable speed.')">
+                <img src="assets/desktop_matrix_rain.png" alt="Matrix Rain Procedural Live Wallpaper" class="char-img" loading="eager">
+                <div class="char-info">
+                    <h4>MATRIX RAIN</h4>
+                    <p>ENGINE: PROCEDURAL CANVAS 2D</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Hardware Ergonomics & Screensaver Feature Banner -->
+    <div class="power-banner" onclick="openLightbox('assets/app_screensaver.png', 'OLED DEEP BLACKOUT SCREENSAVER', 'Integrated pure-display sleep timer and automatic fullscreen application suppression.')" style="cursor: pointer;">
+        <div class="power-banner-content">
+            <span class="power-banner-tag">HARDWARE ERGONOMICS</span>
+            <h3 class="power-banner-title">OLED DEEP BLACKOUT</h3>
+            <p class="power-banner-desc">
+                Integrated pure-display sleep timer with smart fullscreen app suppression. When you step away or enter full-screen gaming, rendering halts instantly to preserve hardware lifespans.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <span class="spec-badge glow">ZERO GPU BURN</span>
+                <span class="spec-badge">AUTO-IDLE DETECT</span>
+                <span class="spec-badge">FULLSCREEN SAFE</span>
+                <span class="spec-badge" style="background:var(--electric-cyan); color:#0a0a0a;">🔍 CLICK TO ENLARGE</span>
+            </div>
+        </div>
+        <div class="power-banner-img-wrap">
+            <img src="assets/app_screensaver.png" alt="AetherFlow OLED Deep Blackout Screensaver" class="power-banner-img" loading="eager">
+        </div>
+    </div>
+
+    <!-- Download Section -->
+    <section id="download" class="cta-section">
+        <div class="cta-bg" aria-hidden="true"></div>
+        <div class="cta-content">
+            <h2 class="cta-title">THE FINAL<br>UPGRADE</h2>
+            <p class="cta-lead">
+                Ditch bloated engines. Experience crisp native desktop wallpapers powered by Tauri 2 and Rust with smart automatic pause when gaming or working.
+            </p>
+
+            <div class="cta-btn-wrapper">
+                <a href="assets/AetherFlow.exe" download="AetherFlow.exe" class="btn-persona btn-hazard cta-btn" onclick="showToast('⚡ Standalone executable download started!')">
+                    DOWNLOAD NOW <span class="japanese" style="font-size: 1.4rem;">(ダウンロード)</span>
+                </a>
+            </div>
+
+            <!-- Download Matrix -->
+            <div class="download-cards-grid">
+                <!-- Standalone EXE -->
+                <div class="dl-card">
+                    <span class="dl-badge">RECOMMENDED</span>
+                    <div class="dl-title">STANDALONE .EXE</div>
+                    <p class="dl-desc">Single 8.18MB portable executable. Run immediately anywhere without administrator install.</p>
+                    <a href="assets/AetherFlow.exe" download="AetherFlow.exe" class="dl-btn" onclick="showToast('⚡ Standalone executable download started!')">
+                        DOWNLOAD .EXE (8.2MB)
+                    </a>
+                </div>
+
+                <!-- Windows MSIX Package -->
+                <div class="dl-card">
+                    <span class="dl-badge" style="background:var(--electric-cyan); color:#0a0a0a;">SIGNED PACKAGE</span>
+                    <div class="dl-title">WINDOWS MSIX</div>
+                    <p class="dl-desc">Signed package for Windows 11 with native Windows Package Identity and 1-click clean uninstall.</p>
+                    <a href="assets/AetherFlow_1.0.0_x64.msix" download="AetherFlow_1.0.0_x64.msix" class="dl-btn" style="background:var(--electric-cyan);" onclick="showToast('⚡ Downloading signed MSIX package...')">
+                        DOWNLOAD MSIX (218MB)
+                    </a>
+                </div>
+
+                <!-- Winget CLI -->
+                <div class="dl-card">
+                    <span class="dl-badge" style="background:var(--hazard); color:#0a0a0a;">TERMINAL CLI</span>
+                    <div class="dl-title">WINGET INSTALL</div>
+                    <p class="dl-desc">Direct install via Windows Package Manager. Automatic background update support.</p>
+                    <button class="dl-btn" style="background:var(--ink); color:var(--paper); border-color:var(--paper);" onclick="copyWinget()">
+                        COPY WINGET COMMAND
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Universal Fullscreen Lightbox Modal -->
+    <div id="lightbox-modal" class="lightbox-modal" onclick="closeLightbox(event)">
+        <div class="lightbox-container" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeLightbox(event)" aria-label="Close">✕</button>
+            <img id="lightbox-img" src="" alt="Screenshot Full View" class="lightbox-img">
+            <div class="lightbox-footer">
+                <div>
+                    <h4 id="lightbox-title" class="lightbox-title"></h4>
+                    <p id="lightbox-desc" class="lightbox-desc"></p>
+                </div>
+                <a id="lightbox-raw" href="" target="_blank" class="lightbox-raw-btn">OPEN RAW IMAGE ↗</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <a href="#" class="footer-logo">AETHERFLOW SYSTEM</a>
+        <div class="footer-links">
+            <a href="https://github.com/yashpreeto7/aetherflow" target="_blank" rel="noopener">Source (GitHub)</a>
+            <a href="https://github.com/yashpreeto7/aetherflow/issues" target="_blank" rel="noopener">Issues &amp; Support</a>
+            <a href="manual.html">Manual</a>
+            <a href="#download">Downloads</a>
+            <a href="privacy.html">Privacy</a>
+            <a href="license.html">License</a>
+        </div>
+        <p style="font-family: 'Oswald', sans-serif; font-weight: 500; color: #888; letter-spacing: 1px;">
+            © 2026 AETHERFLOW. ENGINEERED WITH TAURI 2 &amp; RUST. ALL SYSTEMS OPERATIONAL.
+        </p>
+    </footer>
+
+    <script>
+        // Force scroll to top on reload, page load, or restore
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+        window.scrollTo(0, 0);
+
+        window.addEventListener('beforeunload', () => {
+            window.scrollTo(0, 0);
+        });
+        window.addEventListener('pageshow', () => {
+            window.scrollTo(0, 0);
+        });
+        window.addEventListener('DOMContentLoaded', () => {
+            window.scrollTo(0, 0);
+        });
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                window.scrollTo(0, 0);
+            }, 10);
+        });
+
+        // Universal Lightbox
+        function openLightbox(src, title, desc) {
+            const modal = document.getElementById('lightbox-modal');
+            const img = document.getElementById('lightbox-img');
+            const titleEl = document.getElementById('lightbox-title');
+            const descEl = document.getElementById('lightbox-desc');
+            const rawEl = document.getElementById('lightbox-raw');
+
+            if (modal && img) {
+                img.src = src;
+                titleEl.textContent = title || 'AetherFlow Desktop Capture';
+                descEl.textContent = desc || '';
+                rawEl.href = src;
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeLightbox(e) {
+            const modal = document.getElementById('lightbox-modal');
+            if (modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Close lightbox on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeLightbox();
+            }
+        });
+
+        // Parallax for the background text based on mouse movement
+        document.addEventListener('mousemove', (e) => {
+            const x = (e.clientX / window.innerWidth - 0.5) * 2;
+            const y = (e.clientY / window.innerHeight - 0.5) * 2;
+            
+            const bgText = document.querySelector('.hero-bg-text');
+            if(bgText) {
+                const moveX = Math.round(x * 30 / 5) * 5; 
+                const moveY = Math.round(y * 30 / 5) * 5;
+                bgText.style.transform = `translate(${moveX}px, ${moveY}px) rotate(-10deg) scale(1.4)`;
+            }
+        });
+
+        // Toast feedback
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.textContent = msg;
+                toast.classList.add('show');
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 4000);
+            }
+        }
+
+        // Copy Winget command
+        function copyWinget() {
+            const cmd = 'winget install AetherFlow';
+            navigator.clipboard.writeText(cmd).then(() => {
+                showToast('📋 Copied: ' + cmd);
+            }).catch(() => {
+                showToast('📋 Winget: ' + cmd);
+            });
+        }
+    </script>
+</body>
+</html>

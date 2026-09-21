@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">
+  <defs>
+    <radialGradient id="grad_quantum-flux" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#b400ff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#06080f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="#06080f"/>
+  <rect width="100%" height="100%" fill="url(#grad_quantum-flux)"/>
+  <polygon points="160,50 190,67 190,103 160,120 130,103 130,67" stroke="#00f0ff" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <polygon points="160,65 178,75 178,97 160,107 142,97 142,75" stroke="#b400ff" stroke-width="1.2" fill="none" opacity="0.8"/>
+  <circle cx="160" cy="86" r="4" fill="#00f0ff"/>
+  <text x="50%" y="152" fill="#00f0ff" font-family="monospace" font-size="14" font-weight="bold" text-anchor="middle" letter-spacing="1">Quantum Flux</text>
+</svg>

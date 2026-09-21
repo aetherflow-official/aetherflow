@@ -1,210 +1,172 @@
 # AetherFlow ⚡
 
 <p align="center">
-  <strong>Ultra-Lightweight, High-Performance Windows Desktop Engine & Live Visuals Platform</strong>
+  <strong>Ultra-Lightweight, High-Performance Windows Desktop Live Wallpaper Engine</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v1.0.1-00f0ff?style=for-the-badge&logo=github" alt="Release v1.0.1" />
+  <a href="https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.0">
+    <img src="https://img.shields.io/badge/Release-v1.0.0-00f0ff?style=for-the-badge&logo=github" alt="Release v1.0.0" />
+  </a>
   <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows" alt="Platform" />
-  <img src="https://img.shields.io/badge/Backend-Tauri%202%20%2B%20Rust-orange?style=for-the-badge&logo=rust" alt="Tauri 2 + Rust" />
-  <img src="https://img.shields.io/badge/Frontend-React%2019%20%2B%20Canvas%202D-61dafb?style=for-the-badge&logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/License-Freeware-00f0ff?style=for-the-badge" alt="License Freeware" />
+  <img src="https://img.shields.io/badge/Core-Tauri%202%20%2B%20Rust-orange?style=for-the-badge&logo=rust" alt="Tauri 2 + Rust" />
+  <img src="https://img.shields.io/badge/License-Proprietary%20Freeware-ffe600?style=for-the-badge" alt="Proprietary Freeware" />
+  <img src="https://img.shields.io/badge/Source-Closed%20Source-ff0055?style=for-the-badge" alt="Closed Source" />
 </p>
 
 ---
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="AetherFlow Dashboard" width="95%" style="border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);" />
+  <img src="docs/screenshots/desktop_cyberpunk_lucy.jpg" alt="AetherFlow Live Desktop" width="95%" style="border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);" />
 </p>
-
----
-
-## 🌟 Overview
-
-**AetherFlow** is a modern, ultra-efficient live wallpaper engine for Windows. Built from the ground up with **Tauri 2**, **Rust**, and **React 19**, AetherFlow delivers smooth animated visuals behind your desktop icons with almost zero resource footprint (~30MB RAM, 0% CPU when idle).
-
-Unlike heavy Chromium-based alternatives that consume hundreds of megabytes of RAM and drain your battery, AetherFlow is fully portable, launches in milliseconds, and automatically optimizes itself when you work or game.
-
----
-
-## ✨ Key Features
-
-### 🎨 8 Built-In Canvas 2D Animated Engines
-- **FPS Benchmark HUD**: Cyberpunk telemetry wallpaper displaying a real-time rolling FPS counter, target FPS cap indicator, frame-time in milliseconds, rolling oscilloscope graph, and rotating tachometer gauges.
-- **Matrix Rain**: Classic green phosphor katakana digital rain with speed, density, and glyph customization.
-- **Cyber Particles**: Interconnected particle mesh with dynamic distance links and interactive cursor repulsion.
-- **Synthwave Grid**: Retro 80s neon perspective grid with scrolling horizon and sunset glow.
-- **Deep Space**: Multi-layered starfield parallax, procedural nebulae, and shooting stars.
-- **Aurora Borealis**: Flowing luminous curtains of arctic light across starry night skies.
-- **Tokyo Neon Rain**: Cyberpunk cityscape bathed in procedurally generated rain and neon reflections.
-- **Audio Spectrum**: Microphone-reactive visualizer bars inspired by CAVA.
 
 <p align="center">
-  <img src="docs/screenshots/home-active-wallpaper.png" alt="Active Wallpaper & Controls" width="90%" style="border-radius: 8px;" />
+  <a href="https://yashpreeto7.github.io/aetherflow/"><strong>🌐 Official Website</strong></a> •
+  <a href="https://yashpreeto7.github.io/aetherflow/manual.html"><strong>📖 User Operating Manual</strong></a> •
+  <a href="https://yashpreeto7.github.io/aetherflow/privacy.html"><strong>🔒 Privacy Policy</strong></a> •
+  <a href="https://yashpreeto7.github.io/aetherflow/license.html"><strong>⚖️ License Terms (EULA)</strong></a> •
+  <a href="https://github.com/yashpreeto7/aetherflow/issues"><strong>💬 Issues &amp; Support</strong></a>
 </p>
 
 ---
 
-### 🎬 Video & High-Resolution Image Wallpapers
-- **Video Wallpapers**: Drop in any `.mp4`, `.webm`, or `.mkv` video. Powered by an integrated hardware-accelerated pipeline with audio muting, volume controls, and loop playback.
-- **Picture Wallpapers**: Full support for `.png`, `.jpg`, `.jpeg`, `.webp`, and `.bmp` pictures with customizable fit modes (`Cover`, `Contain`, `Stretch`).
-- **One-Click Windows Wallpaper Sync**: Instantly set any imported image as your permanent Windows desktop background using native Win32 APIs.
+## 🌟 What is AetherFlow?
 
+**AetherFlow** is a modern, ultra-efficient live wallpaper and desktop personalization engine engineered specifically for Windows 10 and 11. Built with a high-performance native **Tauri 2 & Rust** core paired with a reactive UI, AetherFlow pins animated video loops, live web streams, and procedural simulations directly behind your Windows desktop icons with virtually zero resource footprint.
+
+AetherFlow is distributed as **Proprietary Freeware (Closed-Source)** — 100% free for personal desktop use with no advertisements, no tracking telemetry, and no bloatware.
+
+---
+
+## 📸 Desktop & In-App Showcase
+
+### 1. Live Desktop Player & Real-Time Controls
+Adjust opacity, brightness, playback speed, and volume in real-time with instant hardware preview.
 <p align="center">
-  <img src="docs/screenshots/library.png" alt="Wallpaper Library" width="90%" style="border-radius: 8px;" />
+  <img src="docs/screenshots/app_home_controls.png" alt="AetherFlow Live Desktop Player" width="92%" style="border-radius: 8px;" />
 </p>
 
----
-
-### 🔋 Intelligent Power & Fullscreen Optimization
-- **Auto-Pause on Battery**: Detects when your laptop switches to battery power (`GetSystemPowerStatus`) and pauses animations to maximize battery longevity.
-- **Auto-Pause on Fullscreen Apps & Games**: Real-time foreground window detection automatically pauses video and canvas rendering when a game or full-screen app is focused, freeing up 100% of GPU and CPU resources.
-- **Zero-Resource Idle**: When paused or hidden, process working sets are actively trimmed to keep memory usage under 20MB.
-
+### 2. Video & Media Library
+Manage custom 4K MP4s, anime clips, and web streams with one-click desktop application.
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Performance & Power Settings" width="90%" style="border-radius: 8px;" />
+  <img src="docs/screenshots/app_favorites_grid.png" alt="Favorites and Media Library" width="92%" style="border-radius: 8px;" />
 </p>
 
----
+### 3. Real Windows Desktop Captures
+Live wallpapers pinned behind native Windows desktop icons with taskbar integration:
 
-### 🌈 Sovereign Theme System & Theme Editor
-- Switch between 6 curated Sovereign themes (Cyberpunk, Obsidian, Synthwave, Solarized Dark, Nord, and Emerald).
-- Built-in visual **Theme Editor**: live-tune CSS custom properties, tweak accent colors, and export your personal color palette.
+| The Batman Cinematic Wallpaper | Cyberpunk GT-R Widebody (Video Engine) |
+|:---:|:---:|
+| <img src="docs/screenshots/the_batman.png" width="100%" /> | <img src="docs/screenshots/cyberpunk_gtr.jpg" width="100%" /> |
 
+| Sakura Drift (Live Stream) | Demon Slayer Snake Hashira |
+|:---:|:---:|
+| <img src="docs/screenshots/desktop_cherry_blossom.png" width="100%" /> | <img src="docs/screenshots/desktop_anime_hashira.jpg" width="100%" /> |
+
+### 4. Community Hub Catalog
+Discover, preview, and download curated wallpapers created worldwide.
 <p align="center">
-  <img src="docs/screenshots/theme-editor.png" alt="Theme Customizer" width="90%" style="border-radius: 8px;" />
+  <img src="docs/screenshots/app_community.png" alt="AetherFlow Community Hub" width="92%" style="border-radius: 8px;" />
+</p>
+
+### 5. Live Theme Studio & Taskbar Personalization
+8 built-in themes plus a live CSS palette editor with Windows Taskbar transparent, acrylic blur, and color-matched modes.
+<p align="center">
+  <img src="docs/screenshots/app_personalization.png" alt="Theme Studio and Taskbar" width="92%" style="border-radius: 8px;" />
 </p>
 
 ---
 
-### 🖥️ Multi-Monitor Geometry & Icon Z-Order
-- Precise per-monitor DPI and non-client border compensation — eliminates border bleed and white edge lines on multi-monitor setups.
-- Pins cleanly behind `SHELLDLL_DefView` and `WorkerW` in Windows 10 & 11, ensuring desktop icons remain interactive and clearly visible.
-- Dual arrangement modes: **Duplicate All** (sync across all screens) or **Distinct** (per-screen wallpaper assignments).
+## ✨ Core Features
 
-### 🚀 Silent Windows Startup
-- One-click autostart configuration via native Windows registry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
-- Boots quietly to the system tray (`--autostart --minimized`) without annoying popups when logging into Windows.
+### 🎬 High-Performance Video Engine
+- **Hardware-Accelerated Decoding**: Plays 1080p, 4K, and ultra-wide video wallpapers (`.mp4`, `.webm`, `.mkv`, `.mov`).
+- **Seamless Looping**: Perfect continuous playback with zero frame stutter.
+- **Audio Control**: Independent audio volume and mute controls separate from Windows system volume.
+
+### 🌐 Live Web Streams & YouTube
+- Pin any YouTube live stream (e.g. Lofi Girl, Tokyo 24/7 city cameras) or HTML5 stream directly to your desktop.
+- Player UI and ads are automatically stripped for a clean, frameless wallpaper presentation.
+
+### 🎨 8 Procedural Canvas 2D Animated Engines
+Ultra-lightweight simulations running at steady 60 FPS with minimal CPU usage (~0.5% CPU):
+- **Matrix Rain**: Classic green phosphor digital glyphs.
+- **Cyber Particles**: Dynamic constellation particle mesh reacting to cursor movement.
+- **Synthwave Grid**: Retro 80s neon horizon with undulating wireframe mountains.
+- **Deep Space**: Multi-layered starfield parallax and warp drive acceleration.
+- **Aurora Borealis**: Flowing luminous curtains of arctic light.
+- **Tokyo Neon Rain**: Cyberpunk city street drenched in neon reflections.
+- **Quantum Flux**: Vibrant kinetic plasma waves.
+- **Audio Spectrum HUD**: Real-time frequency bars reacting to system sound.
+
+### ⚡ Intelligent Hardware Ergonomics
+- **Automatic Fullscreen Game Suppression**: Instantly detects when a 3D game, CAD tool, or full-screen app is active and suspends wallpaper rendering, dropping CPU and GPU consumption to **0.0%**.
+- **OLED Deep Blackout Screensaver**: Prevents burn-in on OLED displays by activating a true `#000000` blackout mode after a configurable idle timer.
+- **Battery Preservation**: Automatically throttles frame rates to 30 FPS when running on laptop battery power.
+
+### 🖥️ Multi-Monitor Geometry & Icon Layering
+- **Per-Display or Spanning**: Run independent wallpapers on each screen or span ultra-wide panoramas across multiple monitors.
+- **Desktop Icon Integrity**: Attached strictly behind Windows `SHELLDLL_DefView` and `WorkerW`, keeping desktop icons interactive and visible.
+- **DWM Margin Compensation**: Eliminates border bleed and white edge lines across mixed-DPI displays.
 
 ---
 
 ## 📥 Download & Installation
 
-### Option 1: Standalone Executable (Recommended)
-No installation required! Just download and run:
+### Option 1: Standalone Executable (Portable)
+*No installation wizard required. Zero footprint.*
+1. Download **[`AetherFlow.exe`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.0/AetherFlow.exe)** (~8.2 MB).
+2. Place it in any directory (e.g. `C:\Tools\AetherFlow\`).
+3. Double-click to launch.
 
-1. Download **[`AetherFlow.exe`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow.exe)** directly.
-2. Double-click `AetherFlow.exe` to run.
-3. Choose any wallpaper from the dashboard and enjoy!
-
-| Package | Format | Direct Download Link |
-|---|---|---|
-| **Standalone Executable** | `.exe` (~7.3MB) | [⚡ **Download AetherFlow.exe**](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow.exe) |
-| **Portable Package (with MPV)** | `.zip` (Self-Contained) | [📦 **Download AetherFlow-v1.0.1-Portable.zip**](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow-v1.0.1-Portable.zip) |
-| **Windows Installer** | `.exe` (NSIS Setup) | [💿 **Download AetherFlow-Setup.exe**](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow-Setup.exe) |
-| **All Releases & Notes** | GitHub Page | [🚀 **View GitHub Releases**](https://github.com/yashpreeto7/aetherflow/releases/tag/v1.0.1) |
-
-### Option 2: Windows Installer
-If you prefer a standard Windows installation with Desktop shortcuts and Start Menu integration:
-1. Download **[`AetherFlow-Setup.exe`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow-Setup.exe)**.
-2. Run the installer and launch AetherFlow.
-
-### Option 3: Full Portable Zip
-For zero installation with the dedicated hardware-accelerated MPV video engine included:
-1. Download **[`AetherFlow-v1.0.1-Portable.zip`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.1/AetherFlow-v1.0.1-Portable.zip)**.
-2. Extract the folder anywhere and run `AetherFlow.exe`.
-
----
-
-## 🛠️ Building from Source
-
-### Prerequisites
-- **Node.js** (v18 or higher) & `npm`
-- **Rust Toolchain**: `rustup default stable` with `x86_64-pc-windows-msvc`
-- **C++ Build Tools**: Visual Studio Build Tools with C++ workload
-- **WebView2 Runtime** (Pre-installed on Windows 10 & 11)
-
-### Build Steps
-
-```powershell
-# 1. Clone the repository
-git clone https://github.com/yashpreeto7/aetherflow.git
-cd aetherflow
-
-# 2. Install dependencies
-npm install
-
-# 3. Run in development mode
-npm run dev           # Frontend only (browser at http://localhost:1420)
-npm run tauri:dev     # Native Windows desktop app with live reload
-
-# 4. Compile optimized release executable
-npm run build         # Build frontend bundle
-cargo build --release --bin aetherflow  # Compile standalone AetherFlow.exe
-
-# 5. Build NSIS installer package
-npm run tauri:build
-```
-
-The resulting standalone executable will be located at:
-```
-AetherFlow.exe  (or src-tauri\target\release\aetherflow.exe)
-```
-
----
-
-## 📂 Project Architecture
-
-```
-AetherFlow/
-├── docs/screenshots/     # High-resolution screenshots for documentation
-├── src/                  # React 19 Frontend
-│   ├── components/       # UI components (WallpaperPlayer, StatusBar, ThemeEditor)
-│   ├── engines/          # Canvas 2D wallpaper engines (Matrix, Aurora, Cyber, etc.)
-│   ├── pages/            # Home, Library, Marketplace, Settings
-│   ├── store/            # Zustand global state (persisted to localStorage)
-│   └── styles/           # Sovereign theme definitions and design system
-│
-├── src-tauri/            # Rust Backend (Tauri 2)
-│   ├── src/
-│   │   ├── main.rs       # Win32 WorkerW pinning, power/fullscreen monitor, autostart
-│   │   └── mpv.rs        # Hardware-accelerated MPV IPC management
-│   ├── Cargo.toml        # Rust dependencies (windows-sys, tauri, serde)
-│   └── tauri.conf.json   # Tauri 2 app configuration and capabilities
-│
-└── package.json          # Vite 8 + React scripts and packages
-```
+### Option 2: Signed Windows MSIX Package
+*Includes Windows Start Menu integration and Windows Startup support.*
+1. Download **[`AetherFlow_1.0.0_x64.msix`](https://github.com/yashpreeto7/aetherflow/releases/download/v1.0.0/AetherFlow_1.0.0_x64.msix)** (~208 MB).
+2. Trust the developer certificate:
+   - **Quick Method:** Run `install_cert.bat` as Administrator.
+   - **Manual Method:** Right-click MSIX → *Properties* → *Digital Signatures* → *Details* → *View Certificate* → *Install Certificate* → *Local Machine* → *Trusted Root Certification Authorities*.
+3. Double-click the `.msix` file and click **Install**.
 
 ---
 
 ## ⚙️ System Requirements
 
-| Specification | Minimum | Recommended |
+| Specification | Minimum Requirement | Recommended |
 |---|---|---|
-| **OS** | Windows 10 (64-bit) 19041+ | Windows 11 (64-bit) |
-| **Processor** | Dual-core 1.6 GHz | Quad-core 2.0 GHz+ |
-| **RAM** | 2 GB | 4 GB+ |
+| **Operating System** | Windows 10 (64-bit) 19041+ | Windows 11 (64-bit) |
+| **Processor** | Dual-core 1.6 GHz | Quad-core 2.4 GHz+ |
+| **Memory (RAM)** | 2 GB | 4 GB+ |
 | **Graphics** | DirectX 11 compatible | DirectX 12 compatible |
-| **Storage** | 50 MB free space | 100 MB free space |
+| **Storage** | 50 MB free disk space | 250 MB free disk space |
+| **Web Runtime** | WebView2 (pre-installed on Win 10/11) | WebView2 Evergreen |
 
 ---
 
-## 💬 Support & Issues
+## 🔒 Privacy & Security
 
-Have feedback, bug reports, or feature requests?
-Feel free to open a ticket on the [issues tracker](https://github.com/yashpreeto7/aetherflow/issues) or join the community discussion.
+AetherFlow operates under a strict **Zero-Telemetry Protocol**:
+- **No Background Trackers**: No Google Analytics, Mixpanel, or telemetry spyware.
+- **Local Storage Only**: Preferences and downloaded wallpapers stay in `%APPDATA%\AetherFlow`.
+- **In-Memory Audio**: Audio visualizer computes FFT spectrums transiently in RAM without saving or transmitting audio.
+- **Camera Access Disabled**: Chromium video-capture modules are permanently disabled (`--disable-video-capture`) at the engine level.
+
+Read the full [Privacy Policy](https://yashpreeto7.github.io/aetherflow/privacy.html) for complete details.
 
 ---
 
 ## 📄 License & Terms
 
-AetherFlow is distributed as **Proprietary Freeware**. It is 100% free of charge for personal, non-commercial use on Windows.
+AetherFlow is provided as **Proprietary Freeware (Closed-Source)**.  
+Copyright © 2026 Yashpreet. All Rights Reserved.
 
-All rights reserved. Reverse engineering, decompilation, resale, and unauthorized redistribution of modified binaries are strictly prohibited. See [`LICENSE.md`](LICENSE.md) for full End User License Agreement terms.
+- **Personal Use:** Free of charge for personal desktop customization.
+- **Restrictions:** Reverse engineering, decompilation, resale, bundling, and unauthorized redistribution of modified binaries are strictly prohibited.
+- **Community Art:** Artwork submitted to the Community Hub remains under copyright of respective creators.
+
+See the complete [End User License Agreement (EULA)](https://yashpreeto7.github.io/aetherflow/license.html) for legal terms.
 
 ---
 
 <p align="center">
-  Made with ❤️ by Yashpreet • Powered by <strong>Tauri 2</strong> and <strong>Rust</strong>
+  Crafted by <strong>Yashpreet</strong> • Powered by <strong>Tauri 2</strong> and <strong>Rust</strong>
 </p>

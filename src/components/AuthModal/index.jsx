@@ -203,12 +203,14 @@ export default function AuthModal() {
         {/* Logo & header */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{
-            width: 48, height: 48, borderRadius: 12, margin: '0 auto 16px',
-            background: 'var(--color-brand)',
+            width: 52, height: 52, borderRadius: 14, margin: '0 auto 16px',
+            background: 'radial-gradient(circle, rgba(6, 182, 212, 0.2) 0%, rgba(168, 85, 247, 0.15) 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px color-mix(in srgb, var(--color-brand) 40%, transparent)',
+            boxShadow: '0 8px 24px rgba(6, 182, 212, 0.35)',
+            padding: 4,
           }}>
-            <Zap size={24} color="#fff" />
+            <img src="/logo.png" alt="AetherFlow" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h2 className="font-display font-bold text-lg" style={{ marginBottom: 6 }}>
             Sign in to AetherFlow

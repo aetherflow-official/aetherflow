@@ -16,6 +16,6 @@ certutil -addstore -f "Root" "%~dp0AetherFlowDev.cer"
 echo.
 echo ========================================================
 echo SUCCESS! Certificate trusted by Windows.
-echo You can now double-click 'AetherFlow_1.1.1_x64.msix' to install!
+echo You can now double-click 'AetherFlow_1.0.0_x64.msix' to install!
 echo ========================================================
 pause

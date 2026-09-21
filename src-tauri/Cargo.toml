@@ -1,6 +1,6 @@
 [package]
 name = "aetherflow"
-version = "1.1.1"
+version = "1.0.0"
 description = "AetherFlow — High-Performance Windows Desktop Engine & Live Visuals Platform"
 authors = ["Yashpreet"]
 license = "Proprietary"

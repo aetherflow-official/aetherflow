@@ -31,6 +31,8 @@ src-tauri/bin/
 bin/
 *.exe
 *.old
+*.msix
+*.cer
 release/
 
 # Scratch / temporary debug scripts
