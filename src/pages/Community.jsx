@@ -940,8 +940,14 @@ export default function CommunityPage() {
     }
 
     try {
+      const rawPortfolio = (submitForm.authorPortfolio || '').trim()
+      const normalizedPortfolio = rawPortfolio
+        ? (/^https?:\/\//i.test(rawPortfolio) ? rawPortfolio : `https://${rawPortfolio}`)
+        : ''
+
       await submitWallpaper({
         ...submitForm,
+        authorPortfolio: normalizedPortfolio,
         authorName: submitForm.authorName || authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0],
         mediaFile: selectedMediaFile instanceof File ? selectedMediaFile : null,
         mediaFilePath: mediaInspection?.filePath || (typeof selectedMediaFile === 'string' ? selectedMediaFile : null),
@@ -3045,10 +3051,17 @@ export default function CommunityPage() {
                       Artist Portfolio / Social Link (Optional)
                     </label>
                     <input
-                      type="url"
-                      placeholder="https://artstation.com/fextro"
+                      type="text"
+                      inputMode="url"
+                      placeholder="e.g. mihirkumar.artstation.com or https://artstation.com/artist"
                       value={submitForm.authorPortfolio}
                       onChange={e => setSubmitForm(f => ({ ...f, authorPortfolio: e.target.value }))}
+                      onBlur={e => {
+                        const val = e.target.value.trim()
+                        if (val && !/^https?:\/\//i.test(val)) {
+                          setSubmitForm(f => ({ ...f, authorPortfolio: `https://${val}` }))
+                        }
+                      }}
                       style={{
                         width: '100%', padding: '9px 12px',
                         background: 'var(--bg-base)', border: '1px solid var(--border-main)',

@@ -257,11 +257,15 @@ export function AddWebStreamModal({ isOpen, onClose, onConfirm }) {
 
   function handleSubmit(e) {
     e?.preventDefault()
-    if (!url.trim()) return
+    const trimmed = url.trim()
+    if (!trimmed) return
+    const normalizedUrl = (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && trimmed.includes('.'))
+      ? `https://${trimmed}`
+      : trimmed
     const finalName = name.trim() || (ytId ? 'YouTube Live Stream' : 'Web Stream Wallpaper')
     onConfirm({
       name: finalName,
-      url: url.trim(),
+      url: normalizedUrl,
       ytId,
       muted,
       pinToHome,
@@ -302,7 +306,8 @@ export function AddWebStreamModal({ isOpen, onClose, onConfirm }) {
               Stream or Web URL
             </label>
             <input
-              type="url"
+              type="text"
+              inputMode="url"
               autoFocus
               className="w-full"
               placeholder="e.g. https://www.youtube.com/watch?v=5qap5aO4i9A"

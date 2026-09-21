@@ -66,14 +66,18 @@ export async function safeListen(eventName, callback) {
  */
 export async function openExternalUrl(url) {
   if (!url) return
+  let target = url.trim()
+  if (!/^https?:\/\//i.test(target)) {
+    target = 'https://' + target
+  }
   if (isTauri()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('open_url', { url })
+      await invoke('open_url', { url: target })
       return
     } catch {}
   }
-  window.open(url, '_blank')
+  window.open(target, '_blank', 'noopener,noreferrer')
 }
 
 /**
