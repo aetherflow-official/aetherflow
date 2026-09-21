@@ -89,13 +89,11 @@ Copy-Item $ReleaseExe "$LayoutDir\AetherFlow.exe" -Force
 # Copy MPV and tools
 Copy-Item "$ProjectRoot\src-tauri\bin\mpv\*" "$LayoutDir\bin\mpv" -Recurse -Force
 
-# Copy Assets
+# Copy Assets (including unplated targetsize assets to eliminate taskbar square plate)
 $IconsDir = "$ProjectRoot\src-tauri\icons"
-Copy-Item "$IconsDir\StoreLogo.png" "$LayoutDir\Assets\" -Force
-Copy-Item "$IconsDir\Square44x44Logo.png" "$LayoutDir\Assets\" -Force
-Copy-Item "$IconsDir\Square71x71Logo.png" "$LayoutDir\Assets\" -Force
-Copy-Item "$IconsDir\Square150x150Logo.png" "$LayoutDir\Assets\" -Force
-Copy-Item "$IconsDir\Square310x310Logo.png" "$LayoutDir\Assets\" -Force
+Get-ChildItem -Path $IconsDir -Filter "*.png" | ForEach-Object {
+    Copy-Item $_.FullName "$LayoutDir\Assets\" -Force
+}
 
 Write-Host "==> [3/5] Generating AppxManifest.xml..." -ForegroundColor Cyan
 $ManifestContent = @"
@@ -168,6 +166,12 @@ if (-not $SkipSign) {
 # Clean up layout staging directory to keep packages directory clean
 if (Test-Path $LayoutDir) {
     Remove-Item $LayoutDir -Recurse -Force
+}
+
+# Copy to website assets directory for website distribution
+$WebsiteAssets = Join-Path $ProjectRoot "website\assets"
+if (Test-Path $WebsiteAssets) {
+    Copy-Item $OutputMsix (Join-Path $WebsiteAssets "AetherFlow_${AppVersion}_x64.msix") -Force
 }
 
 # Copy NSIS installer if matching version is available
