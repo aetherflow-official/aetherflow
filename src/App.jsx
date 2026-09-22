@@ -558,7 +558,7 @@ export default function App() {
       {/* Control panel shell */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '230px 1fr',
+        gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '210px 1fr',
         gridTemplateRows: '1fr',
         height: '100vh',
         overflow: 'hidden',
@@ -825,7 +825,7 @@ export default function App() {
         <main style={{
           overflow: 'auto',
           background: 'var(--bg-base)',
-          padding: '24px',
+          padding: 0,
         }}>
           {!isTauri() && (
             <div

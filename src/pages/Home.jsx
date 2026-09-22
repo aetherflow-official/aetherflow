@@ -521,7 +521,7 @@ export default function HomePage() {
   const [applying, setApplying]               = useState(false)
   const [searchQuery, setSearchQuery]         = useState('')
   const [filterCategory, setFilterCategory]   = useState('all')
-  const [sortBy, setSortBy]                   = useState('trending') // 'trending' | 'recent' | 'name' | 'liked'
+  const [sortBy, setSortBy]                   = useState('recent') // 'recent' | 'name' | 'liked'
   const [viewMode, setViewMode]               = useState('grid') // 'grid' | 'list'
   const [hoveredId, setHoveredId]             = useState(null)
 
@@ -1416,7 +1416,6 @@ export default function HomePage() {
             {[
               { id: 'all', label: 'All', count: homeWallpapers.length },
               { id: 'liked', label: 'Liked', count: homeWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
-              { id: 'pinned', label: 'Pinned', count: homeWallpapers.filter(w => (homeWallpaperIds || []).includes(w.id)).length, icon: Pin },
               { id: 'procedural', label: 'Procedural', count: homeWallpapers.filter(w => w.engine !== 'video-player' && w.engine !== 'image-player' && !w.config?.videoPath && !w.config?.imagePath && !w.config?.streamUrl).length, icon: Sparkles },
               { id: 'builtin', label: 'Built-in', count: homeWallpapers.filter(w => !w.isCustom).length },
               { id: 'custom', label: 'Custom Media', count: homeWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
@@ -1453,7 +1452,6 @@ export default function HomePage() {
               onChange={e => setSortBy(e.target.value)}
               className="aether-sort-select"
             >
-              <option value="trending">Trending ▾</option>
               <option value="recent">Recently Added</option>
               <option value="name">Name (A-Z)</option>
               <option value="liked">Most Liked</option>
@@ -1576,7 +1574,7 @@ export default function HomePage() {
           })}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18, marginBottom: 36 }}>
+        <div className="home-wallpaper-grid">
           {filteredWallpapers.map(wallpaper => {
             const isSelected    = activeWallpaper?.id === wallpaper.id
             const activeScreens = getWallpaperActiveScreens(wallpaper)
