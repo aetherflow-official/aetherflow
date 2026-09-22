@@ -1034,6 +1034,124 @@ export default function HomePage() {
 
   return (
     <div className="content-page-container animate-fadeIn">
+      {/* ── Top Header: Long Search Bar + Add Wallpaper Split Button ── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 16,
+          width: '100%',
+        }}
+      >
+        {/* Long Search Bar spanning across (at least preview length) */}
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search
+            size={14}
+            style={{
+              position: 'absolute',
+              left: 13,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Search wallpapers, creators, tags... (Press '/' to focus)"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              height: 38,
+              padding: '0 32px 0 36px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              color: 'var(--text-main)',
+              fontSize: 13,
+              outline: 'none',
+              transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
+            }}
+            onFocus={e => {
+              e.target.style.borderColor = 'var(--color-brand)'
+              e.target.style.background = 'rgba(255, 255, 255, 0.07)'
+              e.target.style.boxShadow = '0 0 0 1px var(--color-brand)'
+            }}
+            onBlur={e => {
+              e.target.style.borderColor = 'var(--border-subtle)'
+              e.target.style.background = 'rgba(255, 255, 255, 0.04)'
+              e.target.style.boxShadow = 'none'
+            }}
+          />
+          {searchQuery && (
+            <button
+              className="btn-icon"
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', padding: 3 }}
+              onClick={() => setSearchQuery('')}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Top Add Wallpaper Split Button */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div className="library-split-btn">
+            <button
+              className="library-split-main"
+              onClick={handleOpenImportDialog}
+              title="Add a local video or picture wallpaper"
+              style={{ height: 38, padding: '0 14px', fontSize: 13 }}
+            >
+              <Plus size={14} /> Add Wallpaper
+            </button>
+            <button
+              className="library-split-arrow"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsAddMenuOpen(!isAddMenuOpen)
+              }}
+              title="More import options"
+              style={{ height: 38, padding: '0 10px' }}
+            >
+              <ChevronDown size={13} />
+            </button>
+          </div>
+
+          {isAddMenuOpen && (
+            <div
+              className="library-context-menu library-add-dropdown"
+              style={{ top: 'calc(100% + 6px)', right: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="library-context-item"
+                onClick={handleOpenImportDialog}
+              >
+                <Plus size={13} /> Add Local Wallpaper(s)
+              </button>
+              <button
+                className="library-context-item"
+                onClick={handleOpenFolderImportDialog}
+              >
+                <FolderPlus size={13} /> Import Entire Folder...
+              </button>
+              <button
+                className="library-context-item"
+                onClick={() => {
+                  setIsAddMenuOpen(false)
+                  setAddStreamModal(true)
+                }}
+              >
+                <Globe size={13} /> Add Web Stream
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Sovereign Split Hero Deck: Live Stage (60%) + Wallpaper Settings (40%) ── */}
       {activeWallpaper ? (
         <div className="sovereign-hero-container">
@@ -1310,7 +1428,7 @@ export default function HomePage() {
 
       {/* Wallpapers Section Header & Filter Toolbar */}
       <div style={{ marginBottom: 16 }}>
-        <div className="flex items-center justify-between gap-4" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>Home Favorites</h2>
             <span className="badge font-mono" style={{ fontSize: 11 }}>{homeWallpapers.length}</span>
@@ -1321,91 +1439,6 @@ export default function HomePage() {
             >
               Manage in Library <ArrowRight size={11} style={{ marginLeft: 3 }} />
             </button>
-          </div>
-
-          <div className="flex items-center gap-3" style={{ flex: 1, justifyContent: 'flex-end', minWidth: 260 }}>
-            {/* Search bar */}
-            <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search home wallpapers…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 26px 6px 30px',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  color: 'var(--text-main)',
-                  fontSize: 12,
-                  outline: 'none',
-                }}
-              />
-              {searchQuery && (
-                <button
-                  className="btn-icon"
-                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 2 }}
-                  onClick={() => setSearchQuery('')}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Split Add Button matching Library */}
-            <div style={{ position: 'relative' }}>
-              <div className="library-split-btn">
-                <button
-                  className="library-split-main"
-                  onClick={handleOpenImportDialog}
-                  title="Add a local video or picture wallpaper"
-                >
-                  <Plus size={14} /> Add Wallpaper
-                </button>
-                <button
-                  className="library-split-arrow"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setIsAddMenuOpen(!isAddMenuOpen)
-                  }}
-                  title="More import options"
-                >
-                  <ChevronDown size={13} />
-                </button>
-              </div>
-
-              {isAddMenuOpen && (
-                <div
-                  className="library-context-menu library-add-dropdown"
-                  style={{ top: 'calc(100% + 6px)', right: 0 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    className="library-context-item"
-                    onClick={handleOpenImportDialog}
-                  >
-                    <Plus size={13} /> Add Local Wallpaper(s)
-                  </button>
-                  <button
-                    className="library-context-item"
-                    onClick={handleOpenFolderImportDialog}
-                  >
-                    <FolderPlus size={13} /> Import Entire Folder...
-                  </button>
-                  <button
-                    className="library-context-item"
-                    onClick={() => {
-                      setIsAddMenuOpen(false)
-                      setAddStreamModal(true)
-                    }}
-                  >
-                    <Globe size={13} /> Add Web Stream
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
