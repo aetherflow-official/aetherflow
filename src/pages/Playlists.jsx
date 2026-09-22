@@ -17,6 +17,9 @@ import {
   FolderPlus,
   Search,
   ExternalLink,
+  Image as ImageIcon,
+  Video,
+  Globe,
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { rotateNext, syncPlaylistTimersToRust } from '../lib/playlistManager.js'
@@ -52,6 +55,7 @@ export default function PlaylistsPage() {
   const [monitors, setMonitors] = useState([])
   const [isAddPickerOpen, setIsAddPickerOpen] = useState(false)
   const [pickerSearch, setPickerSearch] = useState('')
+  const [pickerTab, setPickerTab] = useState('all') // 'all' | 'selected' | 'image' | 'video' | 'stream' | 'procedural'
   const [selectedPickerIds, setSelectedPickerIds] = useState(new Set())
   const [isRotatingNow, setIsRotatingNow] = useState(false)
 
@@ -144,6 +148,7 @@ export default function PlaylistsPage() {
   const handleOpenPicker = () => {
     setSelectedPickerIds(new Set())
     setPickerSearch('')
+    setPickerTab('all')
     setIsAddPickerOpen(true)
   }
 
@@ -181,16 +186,41 @@ export default function PlaylistsPage() {
     return [...customs, ...builtins]
   }, [installed, customNames])
 
-  // Filtered wallpapers for picker
-  const pickerCandidates = useMemo(() => {
+  // All available wallpapers not yet in current playlist
+  const availableWallpapers = useMemo(() => {
     if (!selectedPlaylist) return []
     const existing = new Set(selectedPlaylist.wallpaperIds || [])
-    return allWallpapers.filter(w => {
-      if (existing.has(w.id)) return false
-      if (!pickerSearch) return true
-      return w.name?.toLowerCase().includes(pickerSearch.toLowerCase())
+    return allWallpapers.filter(w => !existing.has(w.id))
+  }, [allWallpapers, selectedPlaylist])
+
+  // Filtered wallpapers for picker
+  const pickerCandidates = useMemo(() => {
+    return availableWallpapers.filter(w => {
+      if (pickerSearch) {
+        const q = pickerSearch.toLowerCase()
+        const matchesName = w.name?.toLowerCase().includes(q)
+        const matchesAuthor = w.author?.toLowerCase().includes(q)
+        const matchesTag = Array.isArray(w.tags) && w.tags.some(t => t.toLowerCase().includes(q))
+        if (!matchesName && !matchesAuthor && !matchesTag) return false
+      }
+      if (pickerTab === 'selected') {
+        return selectedPickerIds.has(w.id)
+      }
+      if (pickerTab === 'image') {
+        return w.engine === 'image-player' || w.mediaType === 'image' || Boolean(w.config?.imagePath && !w.config?.videoPath)
+      }
+      if (pickerTab === 'video') {
+        return w.engine === 'video-player' || w.mediaType === 'video' || Boolean(w.config?.videoPath)
+      }
+      if (pickerTab === 'stream') {
+        return Boolean(w.config?.streamUrl || w.engine === 'web-stream')
+      }
+      if (pickerTab === 'procedural') {
+        return w.engine && w.engine !== 'video-player' && w.engine !== 'image-player' && w.engine !== 'web-stream'
+      }
+      return true
     })
-  }, [allWallpapers, selectedPlaylist, pickerSearch])
+  }, [availableWallpapers, pickerSearch, pickerTab, selectedPickerIds])
 
   // Wallpapers in current playlist
   const playlistWallpapers = useMemo(() => {
@@ -642,8 +672,9 @@ export default function PlaylistsPage() {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.84)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -652,49 +683,68 @@ export default function PlaylistsPage() {
         }}>
           <div className="card animate-fadeIn" style={{
             width: '100%',
-            maxWidth: 720,
-            maxHeight: '85vh',
+            maxWidth: 960,
+            height: '86vh',
+            maxHeight: 740,
             background: 'var(--bg-card)',
             border: '1px solid var(--border-main)',
             borderRadius: 14,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.65)',
           }}>
             {/* Modal Header */}
             <div style={{
-              padding: '16px 20px',
+              padding: '16px 22px',
               borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              background: 'rgba(255, 255, 255, 0.02)',
             }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-main)' }}>
-                  Add Wallpapers to "{selectedPlaylist?.name}"
-                </h3>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                  Select one or more wallpapers from your library to add to this playlist
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.2px' }}>
+                    Add Wallpapers to "{selectedPlaylist?.name}"
+                  </h3>
+                  <span className="badge font-mono" style={{ fontSize: 11 }}>
+                    {availableWallpapers.length} available
+                  </span>
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Select one or more wallpapers from your library to add to this playlist rotation
                 </p>
               </div>
-              <button className="btn-icon" onClick={() => setIsAddPickerOpen(false)}><X size={16} /></button>
+              <button className="btn-icon" onClick={() => setIsAddPickerOpen(false)} title="Close (Esc)"><X size={16} /></button>
             </div>
 
-            {/* Search Input */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+            {/* Search & Filter Ribbon Toolbar */}
+            <div style={{
+              padding: '12px 22px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              background: 'rgba(0,0,0,0.18)',
+              flexWrap: 'wrap',
+            }}>
+              {/* Search Bar */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                background: 'rgba(0,0,0,0.3)',
+                background: 'rgba(0,0,0,0.35)',
                 border: '1px solid var(--border-main)',
                 borderRadius: 8,
-                padding: '8px 12px',
+                padding: '6px 12px',
+                flex: 1,
+                minWidth: 220,
               }}>
                 <Search size={14} className="text-muted" />
                 <input
                   type="text"
-                  placeholder="Search library wallpapers..."
+                  placeholder="Search wallpapers by title, creator, tags..."
                   value={pickerSearch}
                   onChange={e => setPickerSearch(e.target.value)}
                   style={{
@@ -702,29 +752,112 @@ export default function PlaylistsPage() {
                     border: 'none',
                     outline: 'none',
                     color: 'var(--text-main)',
-                    fontSize: 12,
+                    fontSize: 12.5,
                     width: '100%',
                   }}
                 />
+                {pickerSearch && (
+                  <button className="btn-icon" style={{ padding: 2 }} onClick={() => setPickerSearch('')}>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'all', label: 'All', count: availableWallpapers.length },
+                  { id: 'selected', label: 'Selected', count: selectedPickerIds.size, highlight: selectedPickerIds.size > 0 },
+                  { id: 'image', label: 'Pictures' },
+                  { id: 'video', label: 'Videos' },
+                  { id: 'stream', label: 'Streams' },
+                  { id: 'procedural', label: 'Procedural' },
+                ].map(tab => {
+                  const isActive = pickerTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`aether-filter-chip ${isActive ? 'active' : ''}`}
+                      style={{
+                        fontSize: 11,
+                        padding: '4px 10px',
+                        ...(tab.highlight && !isActive ? { borderColor: 'rgba(56, 189, 248, 0.45)', color: 'var(--color-brand)' } : {}),
+                      }}
+                      onClick={() => setPickerTab(tab.id)}
+                    >
+                      <span>{tab.label}</span>
+                      {typeof tab.count === 'number' && (
+                        <span style={{
+                          fontSize: 10,
+                          fontFamily: 'var(--font-mono)',
+                          opacity: 0.85,
+                          background: tab.highlight ? 'rgba(56, 189, 248, 0.28)' : 'rgba(255,255,255,0.08)',
+                          padding: '1px 5px',
+                          borderRadius: 4,
+                        }}>
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Quick Bulk Actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 11, padding: '4px 8px', height: 'auto' }}
+                  onClick={() => {
+                    const allIds = new Set(selectedPickerIds)
+                    pickerCandidates.forEach(w => allIds.add(w.id))
+                    setSelectedPickerIds(allIds)
+                  }}
+                  title="Select all matching wallpapers"
+                >
+                  Select All
+                </button>
+                {selectedPickerIds.size > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: 11, padding: '4px 8px', height: 'auto', color: 'var(--color-rose)' }}
+                    onClick={() => setSelectedPickerIds(new Set())}
+                    title="Clear selection"
+                  >
+                    Clear ({selectedPickerIds.size})
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Wallpapers Selection Grid */}
+            {/* Wallpapers Selection Grid (With gridAutoRows: max-content to prevent overlapping!) */}
             <div style={{
-              padding: 20,
+              padding: '18px 22px',
               overflowY: 'auto',
               flex: 1,
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 12,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gridAutoRows: 'max-content',
+              alignItems: 'start',
+              gap: 14,
             }}>
               {pickerCandidates.length === 0 ? (
-                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                  No available wallpapers to add.
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '50px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                  {pickerTab === 'selected'
+                    ? 'No wallpapers selected yet. Switch to "All" to select wallpapers.'
+                    : 'No wallpapers found matching your search.'}
                 </div>
               ) : (
                 pickerCandidates.map(wp => {
                   const isChecked = selectedPickerIds.has(wp.id)
+                  const isImage = wp.engine === 'image-player' || wp.mediaType === 'image' || Boolean(wp.config?.imagePath && !wp.config?.videoPath)
+                  const isStream = Boolean(wp.config?.streamUrl || wp.engine === 'web-stream')
+                  const isEngine = !isImage && !isStream && wp.engine && wp.engine !== 'video-player' && wp.engine !== 'image-player' && wp.engine !== 'web-stream'
+                  const isVideo = !isImage && !isStream && !isEngine
+
                   return (
                     <div
                       key={wp.id}
@@ -736,50 +869,99 @@ export default function PlaylistsPage() {
                       }}
                       style={{
                         position: 'relative',
-                        borderRadius: 8,
+                        borderRadius: 10,
                         overflow: 'hidden',
                         aspectRatio: '16/9',
                         cursor: 'pointer',
-                        border: isChecked ? '2px solid var(--color-brand)' : '1px solid var(--border-main)',
-                        boxShadow: isChecked ? '0 0 12px var(--color-brand)' : 'none',
-                        transition: 'all 0.15s ease',
+                        border: isChecked ? '2px solid var(--color-brand)' : '1px solid var(--border-subtle)',
+                        boxShadow: isChecked ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
+                        transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
+                        background: '#070b14',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'translateY(-2px)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'translateY(0)'
                       }}
                     >
+                      {/* Wallpaper Thumbnail Surface */}
                       <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
                         <WallpaperThumbnail wallpaper={wp} />
                       </div>
+
+                      {/* Readability Gradient Scrim */}
                       <div style={{
                         position: 'absolute',
                         inset: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%)',
+                        background: 'linear-gradient(to top, rgba(5,8,15,0.92) 0%, rgba(5,8,15,0.2) 50%, rgba(0,0,0,0.4) 100%)',
                         pointerEvents: 'none',
                       }} />
+
+                      {/* Media Type Badge Pill (Top-Left) */}
                       <div style={{
                         position: 'absolute',
-                        bottom: 6,
+                        top: 6,
                         left: 6,
-                        right: 28,
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        color: '#fff',
-                      }} className="truncate">
-                        {wp.name}
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        letterSpacing: '0.04em',
+                        background: isImage
+                          ? 'rgba(16, 185, 129, 0.28)'
+                          : isVideo
+                          ? 'rgba(168, 85, 247, 0.28)'
+                          : isStream
+                          ? 'rgba(6, 182, 212, 0.28)'
+                          : 'rgba(59, 130, 246, 0.28)',
+                        color: isImage
+                          ? '#34d399'
+                          : isVideo
+                          ? '#c084fc'
+                          : isStream
+                          ? '#22d3ee'
+                          : 'var(--color-brand)',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        backdropFilter: 'blur(6px)',
+                        pointerEvents: 'none',
+                      }}>
+                        {isImage ? 'IMAGE' : isVideo ? 'VIDEO' : isStream ? 'STREAM' : 'CANVAS'}
                       </div>
+
+                      {/* Selection Checkmark Box (Top-Right) */}
                       <div style={{
                         position: 'absolute',
                         top: 6,
                         right: 6,
-                        width: 18,
-                        height: 18,
-                        borderRadius: 4,
-                        background: isChecked ? 'var(--color-brand)' : 'rgba(0,0,0,0.6)',
-                        border: '1px solid rgba(255,255,255,0.2)',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 5,
+                        background: isChecked ? 'var(--color-brand)' : 'rgba(0,0,0,0.65)',
+                        border: isChecked ? '1px solid var(--color-brand)' : '1px solid rgba(255,255,255,0.3)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: '#fff',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isChecked ? '0 2px 6px rgba(56, 189, 248, 0.4)' : 'none',
                       }}>
-                        {isChecked && <Check size={12} strokeWidth={3} />}
+                        {isChecked && <Check size={13} strokeWidth={3} />}
+                      </div>
+
+                      {/* Wallpaper Title (Bottom-Left) */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        left: 8,
+                        right: 8,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#ffffff',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                        pointerEvents: 'none',
+                      }} className="truncate" title={wp.name}>
+                        {wp.name}
                       </div>
                     </div>
                   )
@@ -789,16 +971,29 @@ export default function PlaylistsPage() {
 
             {/* Modal Footer */}
             <div style={{
-              padding: '14px 20px',
+              padding: '14px 22px',
               borderTop: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(0,0,0,0.2)',
+              background: 'rgba(0,0,0,0.25)',
             }}>
-              <span className="text-xs text-muted">
-                {selectedPickerIds.size} selected
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="text-xs text-muted">
+                  <strong style={{ color: 'var(--text-main)' }}>{selectedPickerIds.size}</strong> of {availableWallpapers.length} selected
+                </span>
+                {selectedPickerIds.size > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: 11, padding: '2px 8px', height: 'auto', color: 'var(--text-muted)' }}
+                    onClick={() => setPickerTab('selected')}
+                  >
+                    View Selected Only →
+                  </button>
+                )}
+              </div>
+
               <div className="flex gap-2">
                 <button className="btn btn-ghost" onClick={() => setIsAddPickerOpen(false)}>
                   Cancel
@@ -807,6 +1002,9 @@ export default function PlaylistsPage() {
                   className="btn btn-primary"
                   onClick={handleConfirmPicker}
                   disabled={selectedPickerIds.size === 0}
+                  style={{
+                    boxShadow: selectedPickerIds.size > 0 ? '0 2px 12px rgba(56, 189, 248, 0.35)' : 'none',
+                  }}
                 >
                   <Plus size={14} /> Add Selected ({selectedPickerIds.size})
                 </button>

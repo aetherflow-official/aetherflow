@@ -459,6 +459,19 @@ export async function fetchCatalog(forceRefresh = false) {
       }
     }
 
+    const isImageFile = item.type === 'image' ||
+                        /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(item.source || '') ||
+                        Boolean(item.mediaFormat?.startsWith('image/')) ||
+                        (typeof item.source === 'string' && item.source.includes('images.unsplash.com'))
+    const isVideoFile = /\.(mp4|webm|mkv|mov|avi)$/i.test(item.source || '') ||
+                        Boolean(item.mediaFormat?.startsWith('video/'))
+
+    if (isImageFile && !isVideoFile && item.type !== 'engine') {
+      item.type = 'image'
+    } else if (isVideoFile && item.type !== 'engine') {
+      item.type = 'video'
+    }
+
     seenIds.add(item.id)
 
     // Apply any local featured overrides
@@ -635,7 +648,11 @@ export async function searchCatalog({
         return w.type === 'engine' || Boolean(w.engine) || w.source?.startsWith('engine:')
       }
       if (type === 'video') {
-        return w.type === 'video' || /\.(mp4|webm|mkv|mov)$/i.test(w.source || '')
+        const isImg = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(w.source || '') ||
+                      Boolean(w.mediaFormat?.startsWith('image/')) ||
+                      Boolean(w.source?.includes('images.unsplash.com'))
+        if (isImg) return false
+        return w.type === 'video' || /\.(mp4|webm|mkv|mov|avi)$/i.test(w.source || '')
       }
       if (type === 'youtube') {
         return w.type === 'youtube' || w.source?.includes('youtube') || w.source?.includes('youtu.be')
@@ -644,7 +661,10 @@ export async function searchCatalog({
         return w.type === 'stream' || w.type === 'youtube' || Boolean(w.streamUrl || w.config?.streamUrl || w.source?.includes('youtube') || w.source?.includes('youtu.be'))
       }
       if (type === 'image') {
-        return w.type === 'image' || /\.(png|jpg|jpeg|webp|bmp)$/i.test(w.source || '')
+        return w.type === 'image' ||
+               /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(w.source || '') ||
+               Boolean(w.mediaFormat?.startsWith('image/')) ||
+               Boolean(w.source?.includes('images.unsplash.com'))
       }
       return w.type === type
     })

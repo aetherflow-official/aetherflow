@@ -13,7 +13,9 @@ export function getCardBadges(wallpaper) {
   const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
   const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)
   const isStream = engineId === 'web-stream' || Boolean(streamUrl)
-  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
+  const urlOrPath = wallpaper.remoteUrl || wallpaper.localPath || wallpaper.source || wallpaper.config?.imagePath || wallpaper.config?.videoPath || ''
+  const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrPath) || urlOrPath.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.communityMeta?.mediaFormat || '').toLowerCase())
+  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || wallpaper.type === 'image' || hasImageExt || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
   const isBuiltin = wallpaper.builtin || !wallpaper.isCustom
   const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
   const isCommunity = Boolean(wallpaper.id?.startsWith('community-') || wallpaper.communityMeta || wallpaper.remoteUrl)
@@ -45,7 +47,9 @@ export function getCardTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
   const engineId = wallpaper.engine || wallpaper.id
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
-  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
+  const urlOrPath = wallpaper.remoteUrl || wallpaper.localPath || wallpaper.source || wallpaper.config?.imagePath || wallpaper.config?.videoPath || ''
+  const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrPath) || urlOrPath.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.communityMeta?.mediaFormat || '').toLowerCase())
+  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || wallpaper.type === 'image' || hasImageExt || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
   const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
 
   if (isStream) {
@@ -354,7 +358,11 @@ export default function WallpaperCard({
                 disabled={isApplying}
                 title="Apply to desktop"
               >
-                <Play size={10} fill="currentColor" />
+                {typeInfo.type === 'image' ? (
+                  <ImageIcon size={10} />
+                ) : (
+                  <Play size={10} fill="currentColor" />
+                )}
                 <span>{isApplying ? '…' : 'Apply'}</span>
               </button>
             )}

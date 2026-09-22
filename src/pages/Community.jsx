@@ -480,10 +480,13 @@ export default function CommunityPage() {
   const handleAddToLibrary = async (wallpaper) => {
     setAddingLibraryId(wallpaper.id)
     try {
-      const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
-      const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
-      const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
-      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player'))
+      const urlOrSource = wallpaper.source || ''
+      const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.mediaFormat || '').toLowerCase())
+      const isImage = wallpaper.type === 'image' || hasImageExt
+      const isEngine = !isImage && (wallpaper.type === 'engine' || Boolean(wallpaper.engine))
+      const isStream = !isImage && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+      const isVideo = !isImage && !isEngine && !isStream && (wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(urlOrSource))
+      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isImage ? 'image-player' : (isStream ? 'web-stream' : 'video-player'))
       const targetVolume = audioVolume > 0 ? audioVolume : 50
       const cleanAuthor = wallpaper.author || 'Community Contributor'
       const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
@@ -505,12 +508,12 @@ export default function CommunityPage() {
         author: cleanAuthor,
         authorPortfolio: cleanPortfolio,
         license: cleanLicense,
-        mediaType: isEngine ? 'canvas' : (isVideo ? 'video' : (isStream ? 'stream' : 'image')),
+        mediaType: isEngine ? 'canvas' : (isImage ? 'image' : (isStream ? 'stream' : 'video')),
         config: {
           ...(isEngine
             ? { speedMultiplier: 1, ...(wallpaper.config || {}) }
-            : isVideo
-            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
+            : isImage
+            ? { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
             : isStream
             ? {
                 streamUrl: wallpaper.source,
@@ -520,7 +523,7 @@ export default function CommunityPage() {
                 volume: targetVolume,
                 speedMultiplier: 1,
               }
-            : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
+            : { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
           ),
         },
         communityMeta: {
@@ -540,7 +543,7 @@ export default function CommunityPage() {
       installItem(item)
       setWallpaperAudio(item.id, { volume: targetVolume, muted: false })
 
-      if (isVideo && storageMode === 'always_download') {
+      if ((isVideo || isImage) && storageMode === 'always_download') {
         downloadCommunityWallpaper(wallpaper).then(res => {
           if (res?.localPath) {
             useStore.getState().updateInstalledStorage(item.id, {
@@ -548,6 +551,11 @@ export default function CommunityPage() {
               storageStatus: 'downloaded',
               fileSize: res.fileSize,
             })
+            if (isImage) {
+              item.config.imagePath = res.localPath
+            } else {
+              item.config.videoPath = res.localPath
+            }
           }
         }).catch(err => console.warn('[Community] Download failed:', err))
       }
@@ -571,9 +579,12 @@ export default function CommunityPage() {
 
   const handleDownloadOffline = async (wallpaper) => {
     if (!wallpaper) return
-    const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
-    const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
-    const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+    const urlOrSource = wallpaper.source || ''
+    const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.mediaFormat || '').toLowerCase())
+    const isImage = wallpaper.type === 'image' || hasImageExt
+    const isEngine = !isImage && (wallpaper.type === 'engine' || Boolean(wallpaper.engine))
+    const isStream = !isImage && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+    const isVideo = !isImage && !isEngine && !isStream
     
     if (isStream) {
       showNotice(`"${wallpaper.name}" is an external live stream and does not support local offline file saving.`, 'info')
@@ -599,7 +610,7 @@ export default function CommunityPage() {
       return
     }
 
-    const resolvedEngine = isVideo ? 'video-player' : 'image-player'
+    const resolvedEngine = isImage ? 'image-player' : 'video-player'
     const targetVolume = audioVolume > 0 ? audioVolume : 50
     const cleanAuthor = wallpaper.author || 'Community Contributor'
     const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
@@ -623,19 +634,11 @@ export default function CommunityPage() {
         author: cleanAuthor,
         authorPortfolio: cleanPortfolio,
         license: cleanLicense,
+        mediaType: isImage ? 'image' : 'video',
         config: {
-          ...(isVideo
-            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
-            : isStream
-            ? {
-                streamUrl: wallpaper.source,
-                url: wallpaper.source,
-                streamType: wallpaper.type === 'youtube' ? 'youtube' : 'web',
-                muted: false,
-                volume: targetVolume,
-                speedMultiplier: 1,
-              }
-            : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
+          ...(isImage
+            ? { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
+            : { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
           ),
         },
         communityMeta: {
@@ -682,6 +685,15 @@ export default function CommunityPage() {
           storageStatus: res.cached ? 'cached' : 'downloaded',
           fileSize: res.fileSize,
         })
+        const curInstalled = useStore.getState().installed || []
+        const currentItem = curInstalled.find(i => i.id === targetId)
+        if (currentItem) {
+          if (isImage) {
+            currentItem.config.imagePath = res.localPath
+          } else {
+            currentItem.config.videoPath = res.localPath
+          }
+        }
         showNotice(`Downloaded "${wallpaper.name}" to local disk for offline playback!`)
       }
 
@@ -714,10 +726,13 @@ export default function CommunityPage() {
   const handleInstall = async (wallpaper) => {
     setApplyingId(wallpaper.id)
     try {
-      const isVideo = wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(wallpaper.source || '')
-      const isEngine = wallpaper.type === 'engine' || Boolean(wallpaper.engine)
-      const isStream = !isVideo && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
-      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isVideo ? 'video-player' : (isStream ? 'web-stream' : 'image-player'))
+      const urlOrSource = wallpaper.source || ''
+      const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.mediaFormat || '').toLowerCase())
+      const isImage = wallpaper.type === 'image' || hasImageExt
+      const isEngine = !isImage && (wallpaper.type === 'engine' || Boolean(wallpaper.engine))
+      const isStream = !isImage && !isEngine && (wallpaper.type === 'youtube' || wallpaper.type === 'stream' || Boolean(parseYouTubeId(wallpaper.source)))
+      const isVideo = !isImage && !isEngine && !isStream && (wallpaper.type === 'video' || /\.(mp4|webm|mkv|avi|mov)$/i.test(urlOrSource))
+      const resolvedEngine = isEngine ? (wallpaper.engine || wallpaper.source.replace('engine:', '')) : (isImage ? 'image-player' : (isStream ? 'web-stream' : 'video-player'))
       const targetVolume = audioVolume > 0 ? audioVolume : 50
       const cleanAuthor = wallpaper.author || 'Community Contributor'
       const cleanPortfolio = wallpaper.authorPortfolio || wallpaper.author_portfolio || ''
@@ -739,12 +754,12 @@ export default function CommunityPage() {
         author: cleanAuthor,
         authorPortfolio: cleanPortfolio,
         license: cleanLicense,
-        mediaType: isEngine ? 'canvas' : (isVideo ? 'video' : (isStream ? 'stream' : 'image')),
+        mediaType: isEngine ? 'canvas' : (isImage ? 'image' : (isStream ? 'stream' : 'video')),
         config: {
           ...(isEngine
             ? { speedMultiplier: 1, ...(wallpaper.config || {}) }
-            : isVideo
-            ? { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
+            : isImage
+            ? { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
             : isStream
             ? {
                 streamUrl: wallpaper.source,
@@ -754,7 +769,7 @@ export default function CommunityPage() {
                 volume: targetVolume,
                 speedMultiplier: 1,
               }
-            : { imagePath: wallpaper.source, url: wallpaper.source, fit: 'cover' }
+            : { videoPath: wallpaper.source, speedMultiplier: 1, volume: targetVolume, muted: false }
           ),
         },
         communityMeta: {
@@ -771,14 +786,18 @@ export default function CommunityPage() {
         },
       }
 
-      if (isVideo && storageMode === 'always_download') {
+      if ((isVideo || isImage) && storageMode === 'always_download') {
         showNotice(`Downloading "${wallpaper.name}" for offline playback…`)
         try {
           const res = await downloadCommunityWallpaper(wallpaper)
           if (res?.localPath) {
             item.localPath = res.localPath
             item.storageStatus = res.cached ? 'cached' : 'downloaded'
-            item.config.videoPath = res.localPath
+            if (isImage) {
+              item.config.imagePath = res.localPath
+            } else {
+              item.config.videoPath = res.localPath
+            }
           }
         } catch (dlErr) {
           console.warn('[Community] Pre-download error, falling back to stream:', dlErr)
@@ -790,7 +809,7 @@ export default function CommunityPage() {
       setActiveWallpaper(item)
       await applyWallpaperToDesktop(item, { forceVolume: targetVolume, forceMuted: false })
 
-      if (isVideo && storageMode === 'stream_and_cache' && !item.localPath) {
+      if ((isVideo || isImage) && storageMode === 'stream_and_cache' && !item.localPath) {
         downloadCommunityWallpaper(wallpaper).then(res => {
           if (res?.localPath) {
             const isInstalled = (useStore.getState().installed || []).some(i => i.id === item.id)
@@ -808,7 +827,10 @@ export default function CommunityPage() {
                   ...curDesk,
                   localPath: res.localPath,
                   storageStatus: 'cached',
-                  config: { ...curDesk.config, videoPath: res.localPath },
+                  config: {
+                    ...curDesk.config,
+                    ...(isImage ? { imagePath: res.localPath } : { videoPath: res.localPath })
+                  },
                 }
               })
             }
@@ -1508,7 +1530,10 @@ export default function CommunityPage() {
             /* ── COMPACT LIST VIEW ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: isSearching ? 0.75 : 1, transition: 'opacity 0.15s ease' }}>
               {results.map(item => {
-                const badge = TYPE_BADGES[item.type] || {}
+                const urlOrSource = item.source || ''
+                const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(item.mediaFormat || '').toLowerCase())
+                const isItemImage = item.type === 'image' || hasImageExt
+                const badge = (isItemImage ? TYPE_BADGES.image : TYPE_BADGES[item.type]) || {}
                 const rowLiked = isItemLikedByUser(item)
                 const { likes: currentLikes, downloads: currentDownloads } = getWallpaperMetrics(item, likeCounts, downloadCounts, rowLiked)
                 const targetId = `community-${item.id}`
@@ -1568,7 +1593,7 @@ export default function CommunityPage() {
                             borderRadius: 4,
                           }}
                         >
-                          {badge.label || item.type}
+                          {badge.label || (isItemImage ? 'Image' : item.type)}
                         </span>
                         {item.hasAudio && (
                           <span
@@ -1677,7 +1702,7 @@ export default function CommunityPage() {
                           disabled={isApplying}
                           onClick={() => handleInstall(item)}
                         >
-                          <Play size={11} />
+                          {isItemImage ? <Image size={11} /> : <Play size={11} />}
                           <span>{isApplying ? 'Applying…' : 'Apply'}</span>
                         </button>
                       )}
@@ -1727,7 +1752,14 @@ export default function CommunityPage() {
                 const targetId = `community-${item.id}`
                 const libraryItem = (installed || []).find(i => i?.id === targetId || i?.communityMeta?.originalId === item.id)
                 const isInstalledInLibrary = Boolean(libraryItem)
-                const isEngine = item.type === 'engine' || Boolean(item.engine)
+
+                const urlOrSource = item.source || ''
+                const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(item.mediaFormat || '').toLowerCase())
+                const isImage = item.type === 'image' || hasImageExt
+                const isEngine = !isImage && (item.type === 'engine' || Boolean(item.engine))
+                const isStreamItem = !isImage && !isEngine && (item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source)))
+                const isVideo = !isImage && !isEngine && !isStreamItem
+
                 const isLocallyCached = Boolean(libraryItem && (libraryItem.storageStatus === 'cached' || libraryItem.storageStatus === 'downloaded' || libraryItem.localPath || (isEngine && isInstalledInLibrary)))
                 const isCurrentlyApplied = isWallpaperRunning && (currentDesktopWallpaper?.id === targetId || activeWallpaper?.id === targetId)
                 const isApplying = applyingId === item.id
@@ -1738,13 +1770,12 @@ export default function CommunityPage() {
                   ? rawProg
                   : { percent: typeof rawProg === 'number' ? rawProg : 0, downloaded: 0, total: 0 }
                 const downloadPercent = downloadInfo.percent || 0
-                const isStreamItem = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
                 const isNoDownload = isStreamItem
 
                 // Spec calculations
                 const formatLabel = item.dimensions?.includes('3840') || item.tags?.includes('4K') || item.tags?.includes('4k')
                   ? '4K UHD'
-                  : (item.dimensions ? item.dimensions : (item.type === 'video' ? '1080P FHD' : 'HD ART'))
+                  : (item.dimensions ? item.dimensions : (isImage ? 'HD PHOTO' : (item.type === 'video' ? '1080P FHD' : 'HD ART')))
                 const fpsOrDuration = item.duration ? `${item.duration}s • 60 FPS` : '60 FPS'
                 const rawBytes = item.fileSize || item.file_size || 0
                 const formattedSize = formatBytes(rawBytes)
@@ -1793,7 +1824,7 @@ export default function CommunityPage() {
                         {formatLabel}
                       </span>
                       <span className="hub-spec-pill">
-                        {isEngine ? 'Procedural Engine' : (isStreamItem ? 'Live Stream' : fpsOrDuration)}
+                        {isImage ? 'Static Artwork' : (isEngine ? 'Procedural Engine' : (isStreamItem ? 'Live Stream' : fpsOrDuration))}
                       </span>
                       {item.hasAudio && (
                         <span
@@ -1878,7 +1909,7 @@ export default function CommunityPage() {
                       </button>
                     </div>
 
-                    {/* Center Frosted Glass Play Trigger */}
+                    {/* Center Frosted Glass Play/Preview Trigger */}
                     <button
                       type="button"
                       className="hub-center-play"
@@ -1886,7 +1917,11 @@ export default function CommunityPage() {
                       title={`Preview ${item.name}`}
                       aria-label={`Preview ${item.name}`}
                     >
-                      <Play size={20} fill="#ffffff" />
+                      {isImage ? (
+                        <Eye size={20} color="#ffffff" />
+                      ) : (
+                        <Play size={20} fill="#ffffff" />
+                      )}
                     </button>
 
                     {/* Bottom Row: Title Lockup & Translucent Floating Hub */}
@@ -1981,7 +2016,7 @@ export default function CommunityPage() {
                               </>
                             ) : (
                               <>
-                                <Play size={10} fill="currentColor" />
+                                {isImage ? <Image size={10} /> : <Play size={10} fill="currentColor" />}
                                 <span>Apply</span>
                               </>
                             )}
@@ -4035,9 +4070,13 @@ function CommunityPreviewModal({
 
   if (!item) return null
 
-  const badge = TYPE_BADGES[item.type] || {}
-  const isEngine = item.type === 'engine' || Boolean(item.engine)
-  const isStream = item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source))
+  const urlOrSource = item.source || ''
+  const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrSource) || urlOrSource.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(item.mediaFormat || '').toLowerCase())
+  const isImage = item.type === 'image' || hasImageExt
+  const badge = (isImage ? TYPE_BADGES.image : TYPE_BADGES[item.type]) || {}
+  const isEngine = !isImage && (item.type === 'engine' || Boolean(item.engine))
+  const isStream = !isImage && !isEngine && (item.type === 'youtube' || item.type === 'stream' || Boolean(parseYouTubeId(item.source)))
+  const isVideo = !isImage && !isEngine && !isStream
   const isNoDownload = isStream
   const authorPortfolio = item.authorPortfolio || item.author_portfolio || item.communityMeta?.authorPortfolio || ''
   const rawBytes = item.fileSize || item.file_size || 0
@@ -4218,7 +4257,7 @@ function CommunityPreviewModal({
             </div>
           ) : item.type === 'youtube' ? (
             <CleanYouTubePreview source={item.source} title={item.name} />
-          ) : (item.type === 'video' || (item.type === 'stream' && (/\.(mp4|webm|mkv|mov)($|\?)/i.test(item.source || '') || item.mediaFormat?.includes('video')))) ? (
+          ) : isVideo ? (
             <CleanVideoPreview source={item.source} />
           ) : (
             <CleanImagePreview source={item.preview || item.source} title={item.name} />
@@ -4501,7 +4540,7 @@ function CommunityPreviewModal({
                   </>
                 ) : (
                   <>
-                    <Play size={12} fill="currentColor" />
+                    {isImage ? <Image size={12} /> : <Play size={12} fill="currentColor" />}
                     <span>Apply to Desktop</span>
                   </>
                 )}

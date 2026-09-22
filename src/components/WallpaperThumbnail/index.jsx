@@ -283,8 +283,12 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const descriptor = ENGINES[engineId]
 
   const imgPath = wallpaper.config?.imagePath || wallpaper.defaultConfig?.imagePath || ''
+  const urlOrPath = wallpaper.remoteUrl || wallpaper.localPath || wallpaper.source || imgPath || ''
+  const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrPath) || urlOrPath.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.communityMeta?.mediaFormat || '').toLowerCase())
   const isImage = engineId === 'image-player' || 
                   wallpaper.mediaType === 'image' || 
+                  wallpaper.type === 'image' ||
+                  hasImageExt ||
                   Boolean(imgPath && !wallpaper.config?.videoPath) ||
                   Boolean(wallpaper.tags && wallpaper.tags.includes('image'))
 

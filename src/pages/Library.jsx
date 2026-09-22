@@ -30,9 +30,12 @@ import { previewManager } from '../lib/previewManager.js'
 export function getWallpaperTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas 2D', color: 'var(--color-purple)', type: 'canvas', icon: Code }
   const engineId = wallpaper.engine || wallpaper.id
+  const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
   const isStream = engineId === 'web-stream' || Boolean(wallpaper.config?.streamUrl)
-  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
-  const isEngine = wallpaper.type === 'engine' || wallpaper.mediaType === 'canvas' || (Boolean(wallpaper.engine) && wallpaper.engine !== 'video-player' && wallpaper.engine !== 'image-player' && wallpaper.engine !== 'web-stream') || (Array.isArray(wallpaper.tags) && wallpaper.tags.includes('procedural'))
+  const urlOrPath = wallpaper.remoteUrl || wallpaper.localPath || wallpaper.source || wallpaper.config?.imagePath || wallpaper.config?.videoPath || ''
+  const hasImageExt = /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(urlOrPath) || urlOrPath.includes('images.unsplash.com') || ['image', 'jpg', 'jpeg', 'png', 'webp', 'avif'].includes(String(wallpaper.communityMeta?.mediaFormat || '').toLowerCase())
+  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || wallpaper.type === 'image' || hasImageExt || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
+  const isEngine = !isImage && (wallpaper.type === 'engine' || wallpaper.mediaType === 'canvas' || (Boolean(wallpaper.engine) && wallpaper.engine !== 'video-player' && wallpaper.engine !== 'image-player' && wallpaper.engine !== 'web-stream') || (Array.isArray(wallpaper.tags) && wallpaper.tags.includes('procedural')))
   const isVideo = !isImage && !isStream && !isEngine && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
 
   if (isEngine) {
@@ -733,6 +736,8 @@ export default function LibraryPage() {
       // Category Pill Filters
       if (filterCategory === 'liked' && !isLiked) return false
       if (filterCategory === 'pinned' && !isPinned) return false
+      if (filterCategory === 'video' && typeInfo.type !== 'video') return false
+      if (filterCategory === 'image' && typeInfo.type !== 'image') return false
       if (filterCategory === 'builtin' && w.isCustom) return false
       if (filterCategory === 'custom' && (!w.isCustom || w.config?.streamUrl || typeInfo.type === 'canvas')) return false
       if (filterCategory === 'stream' && !w.config?.streamUrl) return false
@@ -809,9 +814,6 @@ export default function LibraryPage() {
     }
   }, [installed])
 
-  // Split out first item for the featured asymmetric hero card if in grid mode and >= 1 item
-  const featuredItem = (viewMode === 'grid' && filteredWallpapers.length > 0) ? filteredWallpapers[0] : null
-  const standardItems = (viewMode === 'grid' && filteredWallpapers.length > 0) ? filteredWallpapers.slice(1) : filteredWallpapers
 
   return (
     <div className="library-page-container animate-fadeIn">
@@ -1057,10 +1059,12 @@ export default function LibraryPage() {
             { id: 'all', label: 'All', count: allWallpapers.length },
             { id: 'liked', label: 'Liked', count: allWallpapers.filter(w => isWallpaperLiked(w)).length, icon: Heart },
             { id: 'pinned', label: 'Pinned', count: homeWallpaperIds.length, icon: Pin },
+            { id: 'video', label: 'Videos', count: allWallpapers.filter(w => getWallpaperTypeInfo(w).type === 'video').length, icon: Video },
+            { id: 'image', label: 'Pictures', count: allWallpapers.filter(w => getWallpaperTypeInfo(w).type === 'image').length, icon: ImageIcon },
             { id: 'procedural', label: 'Procedural', count: allWallpapers.filter(w => getWallpaperTypeInfo(w).type === 'canvas').length, icon: Sparkles },
+            { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length, icon: Globe },
             { id: 'builtin', label: 'Built-in', count: WALLPAPER_LIST.length },
             { id: 'custom', label: 'Custom Media', count: allWallpapers.filter(w => w.isCustom && !w.config?.streamUrl && getWallpaperTypeInfo(w).type !== 'canvas').length },
-            { id: 'stream', label: 'Web Streams', count: allWallpapers.filter(w => w.config?.streamUrl).length },
           ].map(cat => {
             const isActive = filterCategory === cat.id
             const Icon = cat.icon
@@ -1109,35 +1113,9 @@ export default function LibraryPage() {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        /* ── Asymmetric Editorial Grid (Continuous Artwork Card System) ───────── */
+        /* ── Sovereign Uniform Wallpaper Grid (Continuous Artwork Card System) ───────── */
         <div className="library-editorial-grid">
-          {/* Featured Hero Card (Item 1, Spans 2 Columns in Row 1) */}
-          {featuredItem && (
-            <WallpaperCard
-              key={featuredItem.id}
-              wallpaper={featuredItem}
-              isFeatured={true}
-              isLive={Boolean(getActiveStatus(featuredItem))}
-              isLiked={isWallpaperLiked(featuredItem)}
-              isPinned={homeWallpaperIds.includes(featuredItem.id)}
-              isApplying={applyingId === featuredItem.id}
-              thumbnailMode={thumbnailMode}
-              onApply={handleApply}
-              onPreview={setPreviewingWallpaper}
-              onToggleLike={toggleLikeWallpaper}
-              onTogglePin={togglePinToHome}
-              onRename={(id, name) => setRenameModal({ isOpen: true, id, currentName: name })}
-              onDelete={(id) => {
-                if (Boolean(getActiveStatus(featuredItem))) handleStop()
-                uninstallItem(id)
-              }}
-              onDownloadOffline={handleDownloadOffline}
-              onFreeSpace={handleFreeSpace}
-            />
-          )}
-
-          {/* Standard Cards (Cols 3 & 4 in Row 1, and all subsequent rows) */}
-          {standardItems.map(item => {
+          {filteredWallpapers.map(item => {
             const isLive = Boolean(getActiveStatus(item))
             return (
               <WallpaperCard
