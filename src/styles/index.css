@@ -1075,7 +1075,7 @@ input:checked ~ .toggle-thumb {
 
 .content-page-container {
   width: 100%;
-  max-width: 1440px;
+  max-width: 100%;
   margin: 0;
   padding: 16px 20px 48px;
   box-sizing: border-box;
@@ -2808,7 +2808,7 @@ input:checked ~ .toggle-thumb {
 /* 4. Compact Split Hero Deck (Live Stage & Settings Deck) */
 .sovereign-hero-container {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 28%, 420px);
   gap: 16px;
   margin-bottom: 18px;
   align-items: stretch;
@@ -2822,7 +2822,7 @@ input:checked ~ .toggle-thumb {
   background: #060911;
   border: 1px solid var(--border-subtle);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
-  height: 270px;
+  height: 295px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -2837,21 +2837,21 @@ input:checked ~ .toggle-thumb {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-subtle);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
-  padding: 14px 16px;
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 270px;
+  height: 295px;
   width: 100%;
   box-sizing: border-box;
 }
 
 .sovereign-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   flex: 1;
-  align-content: space-between;
+  justify-content: space-between;
 }
 
 /* Responsive adjustment when app window is not full screen */
@@ -2871,8 +2871,7 @@ input:checked ~ .toggle-thumb {
   }
 
   .sovereign-settings-grid {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px 14px;
+    gap: 8px;
   }
 }
 
@@ -2882,8 +2881,7 @@ input:checked ~ .toggle-thumb {
   }
 
   .sovereign-settings-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
   }
 }
 

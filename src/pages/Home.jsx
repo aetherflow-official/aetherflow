@@ -1426,23 +1426,8 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Wallpapers Section Header & Filter Toolbar */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-          <div className="flex items-center gap-3">
-            <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>Home Favorites</h2>
-            <span className="badge font-mono" style={{ fontSize: 11 }}>{homeWallpapers.length}</span>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 11, padding: '2px 8px', height: 'auto', color: 'var(--text-muted)' }}
-              onClick={() => navigate('/library')}
-            >
-              Manage in Library <ArrowRight size={11} style={{ marginLeft: 3 }} />
-            </button>
-          </div>
-        </div>
-
-        {/* Category Filters, Search & View Controls */}
+      {/* Category Filter Chips & View Controls Toolbar */}
+      <div style={{ marginBottom: 16, marginTop: 4 }}>
         <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'nowrap', marginBottom: 6 }}>
           {/* Scrollable Filter Chips */}
           <div className="aether-filter-scroll" style={{ flex: 1, minWidth: 0 }}>
