@@ -7,7 +7,6 @@ import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperAct
 import { supabase, onAuthStateChange, signOut, processOAuthCallback } from './lib/supabase.js'
 import AuthModal from './components/AuthModal/index.jsx'
 import UserAvatar from './components/UserAvatar/index.jsx'
-import PlayerDock from './components/PlayerDock/index.jsx'
 import HomePage from './pages/Home.jsx'
 import CommunityPage from './pages/Community.jsx'
 import LibraryPage from './pages/Library.jsx'
@@ -556,11 +555,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Control panel shell with persistent bottom PlayerDock */}
+      {/* Control panel shell */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '230px 1fr',
-        gridTemplateRows: '1fr auto',
+        gridTemplateRows: '1fr',
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--bg-base)',
@@ -575,7 +574,6 @@ export default function App() {
           display: 'flex',
           flexDirection: 'column',
           padding: '12px 8px',
-          gridRow: '1 / 2',
           overflow: 'visible',
           zIndex: 50,
           position: 'relative',
@@ -591,7 +589,6 @@ export default function App() {
                 cursor: 'pointer',
               }}
               onClick={toggleSidebar}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <div style={{
                 width: 34, height: 34, borderRadius: 10, flexShrink: 0,
@@ -834,8 +831,8 @@ export default function App() {
             <div
               style={{
                 position: 'fixed',
-                bottom: 74,
-                right: 16,
+                bottom: 20,
+                right: 20,
                 zIndex: 9000,
                 background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
                 backdropFilter: 'blur(8px)',
@@ -870,11 +867,6 @@ export default function App() {
             <Route path="/settings"        element={<SettingsPage />} />
           </Routes>
         </main>
-
-        {/* Persistent Bottom Media Player Dock */}
-        <div style={{ gridColumn: '1 / -1', gridRow: '2 / 3', zIndex: 100 }}>
-          <PlayerDock />
-        </div>
       </div>
 
         {/* Floating Update Notification Toast */}

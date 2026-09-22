@@ -82,51 +82,27 @@ export default function WallpaperSettingsPanel({
 
   return (
     <div className="sovereign-settings-panel">
-      {/* ── Header: Title & Reset ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      {/* ── Header: Title, Display Selector & Reset ───────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SlidersHorizontal size={14} style={{ color: 'var(--color-brand)' }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.2px' }}>
             Wallpaper Settings
           </span>
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-muted)',
-            fontSize: 11,
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: '2px 6px',
-            borderRadius: 4,
-            transition: 'all 0.15s ease',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-main)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
-          title="Reset sliders to defaults"
-        >
-          Reset
-        </button>
-      </div>
 
-      {/* ── Main Panel Body: Sliders ─────────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1, justifyContent: 'space-between' }}>
-        {/* Display Dropdown */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingBottom: 2 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>Display</span>
-          <div style={{ position: 'relative', flex: 1, maxWidth: 200 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Display Dropdown */}
+          <div style={{ position: 'relative', minWidth: 130 }}>
             <select
               value={selectedMonitorLabel || ''}
               onChange={e => onSelectMonitor && onSelectMonitor(e.target.value)}
               style={{
                 width: '100%',
-                height: 28,
-                padding: '0 24px 0 10px',
+                height: 26,
+                padding: '0 22px 0 8px',
                 borderRadius: 6,
-                background: 'rgba(255, 255, 255, 0.05)',
+                background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid var(--border-subtle)',
                 color: 'var(--text-main)',
                 fontSize: 11,
@@ -149,11 +125,36 @@ export default function WallpaperSettingsPanel({
                 </option>
               )}
             </select>
-            <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5, fontSize: 9 }}>
+            <div style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5, fontSize: 8 }}>
               ▼
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleReset}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: 'pointer',
+              padding: '2px 6px',
+              borderRadius: 4,
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-main)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
+            title="Reset sliders to defaults"
+          >
+            Reset
+          </button>
         </div>
+      </div>
+
+      {/* ── Main Panel Body: Sliders in responsive grid ───────────────────── */}
+      <div className="sovereign-settings-grid">
 
         {/* Slider: Opacity */}
         <div>
