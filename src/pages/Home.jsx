@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Play, Pause, Zap, MonitorPlay, Square, Monitor, Plus, Search,
   Video, Image as ImageIcon, Trash2, Check, Sparkles, Filter, X, Pin, PinOff, Pencil, ArrowRight, Globe, Eye,
-  Volume2, VolumeX, SlidersHorizontal, Heart, LayoutGrid, List, ChevronDown, Flame
+  Volume2, VolumeX, SlidersHorizontal, Heart, LayoutGrid, List, ChevronDown, Flame, FolderPlus
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
@@ -13,6 +13,8 @@ import WallpaperThumbnail from '../components/WallpaperThumbnail/index.jsx'
 import WallpaperCard from '../components/WallpaperCard/index.jsx'
 import WallpaperSettingsPanel from '../components/Home/WallpaperSettingsPanel.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
+import { BatchImportModal } from '../components/Modals/BatchImportModal.jsx'
+import { scanDirectoryMedia } from '../lib/storageManager.js'
 import {
   applyWallpaperToDesktop,
   stopDesktopWallpaper,
@@ -527,6 +529,8 @@ export default function HomePage() {
   const [addModal, setAddModal] = useState({ isOpen: false, path: '', initialName: '' })
   const [renameModal, setRenameModal] = useState({ isOpen: false, id: null, currentName: '' })
   const [addStreamModal, setAddStreamModal] = useState(false)
+  const [isAddMenuOpen, setIsAddMenuOpen]     = useState(false)
+  const [batchModal, setBatchModal]           = useState({ isOpen: false, paths: [] })
   const [winWallpaperSet, setWinWallpaperSet] = useState(false)
   const [previewWallpaper, setPreviewWallpaper] = useState(null)
 
@@ -630,10 +634,11 @@ export default function HomePage() {
 
   // ── Import file handler with naming modal ──────────────────────────────────
   const handleOpenImportDialog = async () => {
+    setIsAddMenuOpen(false)
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const selected = await open({
-        multiple: false,
+        multiple: true,
         filters: [
           {
             name: 'All Supported Media',
@@ -651,16 +656,70 @@ export default function HomePage() {
       })
 
       if (selected) {
-        const path = typeof selected === 'string' ? selected : selected[0]
-        if (!path) return
-        const filename = path.split('\\').pop().split('/').pop()
-        const cleanName = filename.replace(/\.[^/.]+$/, '')
-        setAddModal({ isOpen: true, path, initialName: cleanName })
+        const paths = Array.isArray(selected) ? selected : [selected]
+        if (paths.length === 1) {
+          const path = paths[0]
+          const filename = path.split('\\').pop().split('/').pop()
+          const cleanName = filename.replace(/\.[^/.]+$/, '')
+          setAddModal({ isOpen: true, path, initialName: cleanName })
+        } else if (paths.length > 1) {
+          setBatchModal({ isOpen: true, paths })
+        }
       }
     } catch (err) {
       console.error('Failed to open import dialog:', err)
     }
   }
+
+  // ── Import folder handler (recursively scans directory) ─────────────────────
+  const handleOpenFolderImportDialog = async () => {
+    setIsAddMenuOpen(false)
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const selectedDir = await open({
+        directory: true,
+        multiple: false,
+      })
+      if (selectedDir) {
+        const dirPath = typeof selectedDir === 'string' ? selectedDir : selectedDir[0]
+        if (dirPath) {
+          const files = await scanDirectoryMedia(dirPath)
+          if (files && files.length > 0) {
+            if (files.length === 1) {
+              const filename = files[0].split(/[/\\]/).pop() || ''
+              setAddModal({ isOpen: true, path: files[0], initialName: filename.replace(/\.[^/.]+$/, '') })
+            } else {
+              setBatchModal({ isOpen: true, paths: files })
+            }
+          } else {
+            alert('No supported media files found in selected folder.')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to open folder import dialog:', err)
+    }
+  }
+
+  // Close dropdown on outside click or Escape
+  useEffect(() => {
+    const handleWindowClick = (e) => {
+      if (!e.target.closest('.library-split-btn') && !e.target.closest('.library-add-dropdown')) {
+        setIsAddMenuOpen(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsAddMenuOpen(false)
+      }
+    }
+    window.addEventListener('click', handleWindowClick)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', handleWindowClick)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   // ── Drag & Drop listener ───────────────────────────────────────────────────
   useEffect(() => {
@@ -975,53 +1034,6 @@ export default function HomePage() {
 
   return (
     <div className="content-page-container animate-fadeIn">
-      {/* Top Application Header */}
-      <div className="content-page-header">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <h1 className="content-page-title">Home</h1>
-            <div
-              className="telemetry-chip"
-              style={{
-                fontSize: 10.5,
-                padding: '2px 8px',
-                color: isWallpaperRunning ? 'var(--color-emerald)' : 'var(--text-muted)',
-                borderColor: isWallpaperRunning ? 'rgba(16, 185, 129, 0.35)' : 'var(--border-subtle)',
-                background: isWallpaperRunning ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
-              }}
-            >
-              {isWallpaperRunning ? (
-                <>
-                  <span className="status-dot-live" style={{ width: 6, height: 6 }} />
-                  <span>DESKTOP ACTIVE</span>
-                </>
-              ) : (
-                <span>DESKTOP IDLE</span>
-              )}
-            </div>
-          </div>
-          <p className="content-page-subtitle">
-            Curated desktop dashboard — monitor, adjust, and switch live wallpapers
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn btn-ghost"
-            onClick={() => setAddStreamModal(true)}
-            style={{ height: 34, fontSize: 12, padding: '0 12px' }}
-          >
-            <Globe size={14} /> Add Web Stream
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleOpenImportDialog}
-            style={{ height: 34, fontSize: 12, padding: '0 14px' }}
-          >
-            <Plus size={14} /> Add Media
-          </button>
-        </div>
-      </div>
-
       {/* ── Sovereign Split Hero Deck: Live Stage (60%) + Wallpaper Settings (40%) ── */}
       {activeWallpaper ? (
         <div className="sovereign-hero-container">
@@ -1298,7 +1310,7 @@ export default function HomePage() {
 
       {/* Wallpapers Section Header & Filter Toolbar */}
       <div style={{ marginBottom: 16 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div className="flex items-center justify-between gap-4" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-base" style={{ letterSpacing: '-0.2px' }}>Home Favorites</h2>
             <span className="badge font-mono" style={{ fontSize: 11 }}>{homeWallpapers.length}</span>
@@ -1311,34 +1323,89 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Search bar */}
-          <div style={{ position: 'relative', width: 220 }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="Search home wallpapers…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 26px 6px 30px',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                color: 'var(--text-main)',
-                fontSize: 12,
-                outline: 'none',
-              }}
-            />
-            {searchQuery && (
-              <button
-                className="btn-icon"
-                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 2 }}
-                onClick={() => setSearchQuery('')}
-              >
-                <X size={12} />
-              </button>
-            )}
+          <div className="flex items-center gap-3" style={{ flex: 1, justifyContent: 'flex-end', minWidth: 260 }}>
+            {/* Search bar */}
+            <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search home wallpapers…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 26px 6px 30px',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 8,
+                  color: 'var(--text-main)',
+                  fontSize: 12,
+                  outline: 'none',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  className="btn-icon"
+                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 2 }}
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Split Add Button matching Library */}
+            <div style={{ position: 'relative' }}>
+              <div className="library-split-btn">
+                <button
+                  className="library-split-main"
+                  onClick={handleOpenImportDialog}
+                  title="Add a local video or picture wallpaper"
+                >
+                  <Plus size={14} /> Add Wallpaper
+                </button>
+                <button
+                  className="library-split-arrow"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsAddMenuOpen(!isAddMenuOpen)
+                  }}
+                  title="More import options"
+                >
+                  <ChevronDown size={13} />
+                </button>
+              </div>
+
+              {isAddMenuOpen && (
+                <div
+                  className="library-context-menu library-add-dropdown"
+                  style={{ top: 'calc(100% + 6px)', right: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="library-context-item"
+                    onClick={handleOpenImportDialog}
+                  >
+                    <Plus size={13} /> Add Local Wallpaper(s)
+                  </button>
+                  <button
+                    className="library-context-item"
+                    onClick={handleOpenFolderImportDialog}
+                  >
+                    <FolderPlus size={13} /> Import Entire Folder...
+                  </button>
+                  <button
+                    className="library-context-item"
+                    onClick={() => {
+                      setIsAddMenuOpen(false)
+                      setAddStreamModal(true)
+                    }}
+                  >
+                    <Globe size={13} /> Add Web Stream
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1555,6 +1622,13 @@ export default function HomePage() {
         initialName={addModal.initialName}
         onClose={() => setAddModal({ isOpen: false, path: '', initialName: '' })}
         onConfirm={handleConfirmAdd}
+      />
+
+      <BatchImportModal
+        isOpen={batchModal.isOpen}
+        filePaths={batchModal.paths}
+        onClose={() => setBatchModal({ isOpen: false, paths: [] })}
+        onSuccess={() => setBatchModal({ isOpen: false, paths: [] })}
       />
 
       <RenameWallpaperModal

@@ -7,7 +7,6 @@ import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperAct
 import { supabase, onAuthStateChange, signOut, processOAuthCallback } from './lib/supabase.js'
 import AuthModal from './components/AuthModal/index.jsx'
 import UserAvatar from './components/UserAvatar/index.jsx'
-import TitleBar from './components/TitleBar/index.jsx'
 import PlayerDock from './components/PlayerDock/index.jsx'
 import HomePage from './pages/Home.jsx'
 import CommunityPage from './pages/Community.jsx'
@@ -557,66 +556,30 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Control panel shell with top TitleBar and persistent bottom PlayerDock */}
+      {/* Control panel shell with persistent bottom PlayerDock */}
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'grid',
+        gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '230px 1fr',
+        gridTemplateRows: '1fr auto',
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--bg-base)',
+        transition: 'grid-template-columns 0.25s var(--ease-smooth)',
       }}>
-        {/* Global Sovereign TitleBar */}
-        <TitleBar
-          onOpenImport={async () => {
-            try {
-              const { open } = await import('@tauri-apps/plugin-dialog')
-              const selected = await open({
-                multiple: false,
-                filters: [
-                  { name: 'All Supported Media', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm', 'mkv', 'avi'] }
-                ]
-              })
-              if (selected) {
-                const path = typeof selected === 'string' ? selected : selected[0]
-                if (path) {
-                  const filename = path.split('\\').pop().split('/').pop()
-                  const cleanName = filename.replace(/\.[^/.]+$/, '')
-                  const { addCustomMediaWallpaper } = await import('./lib/wallpaperActions.js')
-                  await addCustomMediaWallpaper(path, cleanName, true)
-                }
-              }
-            } catch (err) {
-              console.warn('Import failed:', err)
-            }
-          }}
-          onSearch={(query) => {
-            useStore.setState({ globalSearchQuery: query })
-          }}
-          searchQuery={useStore(s => s.globalSearchQuery) || ''}
-        />
-
-        {/* Work Area: Sidebar + Main Content */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '230px 1fr',
-          flex: 1,
-          overflow: 'hidden',
-          transition: 'grid-template-columns 0.25s var(--ease-smooth)',
+        {/* Sidebar */}
+        <aside style={{
+          background: 'var(--bg-sidebar)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderRight: '1px solid var(--border-subtle)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '12px 8px',
+          gridRow: '1 / 2',
+          overflow: 'visible',
+          zIndex: 50,
           position: 'relative',
         }}>
-          {/* Sidebar */}
-          <aside style={{
-            background: 'var(--bg-sidebar)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            borderRight: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '12px 8px',
-            overflow: 'visible',
-            zIndex: 50,
-            position: 'relative',
-          }}>
             {/* Logo */}
             <div
               style={{
@@ -907,10 +870,12 @@ export default function App() {
             <Route path="/settings"        element={<SettingsPage />} />
           </Routes>
         </main>
-      </div>
 
-      {/* Sovereign Persistent Media Player Dock */}
-      <PlayerDock />
+        {/* Persistent Bottom Media Player Dock */}
+        <div style={{ gridColumn: '1 / -1', gridRow: '2 / 3', zIndex: 100 }}>
+          <PlayerDock />
+        </div>
+      </div>
 
         {/* Floating Update Notification Toast */}
         {updateToast && (
@@ -961,7 +926,6 @@ export default function App() {
 
         {/* Auth Modal (rendered at root so it floats above everything) */}
         <AuthModal />
-      </div>
     </BrowserRouter>
   )
 }
