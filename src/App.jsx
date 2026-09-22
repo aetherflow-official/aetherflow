@@ -7,7 +7,8 @@ import { applyWallpaperToDesktop, safeListen, isTauri } from './lib/wallpaperAct
 import { supabase, onAuthStateChange, signOut, processOAuthCallback } from './lib/supabase.js'
 import AuthModal from './components/AuthModal/index.jsx'
 import UserAvatar from './components/UserAvatar/index.jsx'
-import StatusBar from './components/StatusBar/index.jsx'
+import TitleBar from './components/TitleBar/index.jsx'
+import PlayerDock from './components/PlayerDock/index.jsx'
 import HomePage from './pages/Home.jsx'
 import CommunityPage from './pages/Community.jsx'
 import LibraryPage from './pages/Library.jsx'
@@ -556,77 +557,113 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Control panel shell — pure UI, no wallpaper canvas here */}
+      {/* Control panel shell with top TitleBar and persistent bottom PlayerDock */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: sidebarCollapsed ? '60px 1fr' : '215px 1fr',
-        gridTemplateRows: '1fr auto',
+        display: 'flex',
+        flexDirection: 'column',
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--bg-base)',
-        transition: 'grid-template-columns 0.25s var(--ease-smooth)',
       }}>
-        {/* Sidebar */}
-        <aside style={{
-          background: 'var(--bg-sidebar)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          borderRight: '1px solid var(--border-subtle)',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '12px 8px',
-          gridRow: '1 / 3',
-          overflow: 'visible',
-          zIndex: 50,
+        {/* Global Sovereign TitleBar */}
+        <TitleBar
+          onOpenImport={async () => {
+            try {
+              const { open } = await import('@tauri-apps/plugin-dialog')
+              const selected = await open({
+                multiple: false,
+                filters: [
+                  { name: 'All Supported Media', extensions: ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'webm', 'mkv', 'avi'] }
+                ]
+              })
+              if (selected) {
+                const path = typeof selected === 'string' ? selected : selected[0]
+                if (path) {
+                  const filename = path.split('\\').pop().split('/').pop()
+                  const cleanName = filename.replace(/\.[^/.]+$/, '')
+                  const { addCustomMediaWallpaper } = await import('./lib/wallpaperActions.js')
+                  await addCustomMediaWallpaper(path, cleanName, true)
+                }
+              }
+            } catch (err) {
+              console.warn('Import failed:', err)
+            }
+          }}
+          onSearch={(query) => {
+            useStore.setState({ globalSearchQuery: query })
+          }}
+          searchQuery={useStore(s => s.globalSearchQuery) || ''}
+        />
+
+        {/* Work Area: Sidebar + Main Content */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: sidebarCollapsed ? '64px 1fr' : '230px 1fr',
+          flex: 1,
+          overflow: 'hidden',
+          transition: 'grid-template-columns 0.25s var(--ease-smooth)',
           position: 'relative',
         }}>
-          {/* Logo */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 11,
-              padding: '8px 8px 20px',
-              overflow: 'hidden',
-              cursor: 'pointer',
-            }}
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <div style={{
-              width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-              background: 'radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, rgba(168, 85, 247, 0.12) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 16px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
-              overflow: 'hidden',
-              padding: 2,
-            }}>
-              <img
-                src="/logo.png"
-                alt="AetherFlow"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 2px 6px rgba(6, 182, 212, 0.35))'
-                }}
-              />
-            </div>
-            {!sidebarCollapsed && (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span className="font-display font-bold text-lg" style={{ letterSpacing: '-0.5px', lineHeight: 1.2 }}>
-                  AetherFlow
-                </span>
-                <span style={{ fontSize: 9.5, color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
-                  v{APP_VERSION} SOVEREIGN
-                </span>
+          {/* Sidebar */}
+          <aside style={{
+            background: 'var(--bg-sidebar)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            borderRight: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '12px 8px',
+            overflow: 'visible',
+            zIndex: 50,
+            position: 'relative',
+          }}>
+            {/* Logo */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                padding: '8px 8px 16px',
+                overflow: 'hidden',
+                cursor: 'pointer',
+              }}
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <div style={{
+                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                background: 'radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, rgba(168, 85, 247, 0.12) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 16px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+                overflow: 'hidden',
+                padding: 2,
+              }}>
+                <img
+                  src="/logo.png"
+                  alt="AetherFlow"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(0 2px 6px rgba(6, 182, 212, 0.35))'
+                  }}
+                />
               </div>
-            )}
-          </div>
+              {!sidebarCollapsed && (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="font-display font-bold text-lg" style={{ letterSpacing: '-0.5px', lineHeight: 1.2 }}>
+                    AetherFlow
+                  </span>
+                  <span style={{ fontSize: 9.5, color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>
+                    v{APP_VERSION} AETHER
+                  </span>
+                </div>
+              )}
+            </div>
 
-          {/* Nav */}
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+            {/* Nav */}
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
             {NAV.map(({ to, icon: Icon, label }) => (
               <NavLink key={to} to={to} end={to === '/'} style={{ textDecoration: 'none' }}>
                 {({ isActive }) => (
@@ -657,12 +694,24 @@ export default function App() {
             ))}
           </nav>
 
-          {/* User profile / sign-in */}
+          {/* Ambient Motivational Quote Widget (Matching Sovereign Mockup) */}
+          {!sidebarCollapsed && (
+            <div className="sidebar-quote-card">
+              <div className="sidebar-quote-text">
+                “A more beautiful desktop, every day.”
+              </div>
+              <div className="sidebar-quote-author">
+                — AetherFlow
+              </div>
+            </div>
+          )}
+
+          {/* User profile pill matching concept design */}
           <div ref={userMenuRef} style={{
             position: 'relative',
-            padding: '8px',
-            borderTop: '1px solid var(--border-main)',
-            marginTop: 'auto',
+            padding: '6px 4px',
+            borderTop: '1px solid var(--border-subtle)',
+            marginTop: sidebarCollapsed ? 'auto' : 0,
           }}>
             {isAuthenticated && authUser ? (
               <>
@@ -684,7 +733,6 @@ export default function App() {
                     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--border-subtle)',
                     zIndex: 1000,
                   }}>
-                    {/* User header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                       <UserAvatar user={authUser} size={36} />
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -696,7 +744,7 @@ export default function App() {
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                         }}>
-                          {authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.user_metadata?.user_name || 'User'}
+                          {authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Yashpreet'}
                         </div>
                         <div style={{
                           fontSize: 10,
@@ -710,41 +758,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Provider badge */}
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '3px 8px',
-                      borderRadius: 12,
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid var(--border-main)',
-                      fontSize: 10,
-                      color: 'var(--text-muted)',
-                      marginBottom: 12,
-                    }}>
-                      <span style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--color-brand)',
-                      }} />
-                      {(() => {
-                        const meta = authUser?.user_metadata || {}
-                        const appMeta = authUser?.app_metadata || {}
-                        const identities = authUser?.identities || []
-                        const hasGoogle = meta.iss?.includes('google') || appMeta.provider === 'google' || identities.some(i => i.provider === 'google')
-                        const hasGitHub = meta.iss?.includes('github') || appMeta.provider === 'github' || identities.some(i => i.provider === 'github')
-                        if (hasGoogle && hasGitHub) return 'Google + GitHub Linked'
-                        if (hasGoogle) return 'Google Account'
-                        if (hasGitHub) return 'GitHub Account'
-                        return 'Connected Account'
-                      })()}
-                    </div>
-
                     <div style={{ borderTop: '1px solid var(--border-main)', marginBottom: 10 }} />
 
-                    {/* Sign Out button */}
                     <button
                       type="button"
                       onClick={handleSignOut}
@@ -765,8 +780,6 @@ export default function App() {
                         cursor: signingOut ? 'wait' : 'pointer',
                         transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={e => { if (!signingOut) e.currentTarget.style.background = 'rgba(239, 68, 68, 0.22)' }}
-                      onMouseLeave={e => { if (!signingOut) e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)' }}
                     >
                       <LogOut size={13} />
                       <span>{signingOut ? 'Signing out...' : 'Sign Out'}</span>
@@ -774,83 +787,76 @@ export default function App() {
                   </div>
                 )}
 
-                {/* User Pill (Click to open menu) */}
+                {/* Profile Pill */}
                 <button
                   type="button"
                   onClick={() => setShowUserMenu(v => !v)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 8px',
-                    borderRadius: 8,
-                    background: showUserMenu ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                    border: '1px solid',
-                    borderColor: showUserMenu ? 'rgba(255, 255, 255, 0.18)' : 'transparent',
-                    outline: 'none',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={e => { if (!showUserMenu) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)' }}
-                  onMouseLeave={e => { if (!showUserMenu) e.currentTarget.style.background = 'transparent' }}
+                  className="sidebar-profile-pill"
                   title="Account settings & Sign out"
                 >
-                  <UserAvatar user={authUser} size={28} />
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 700, fontSize: 12, flexShrink: 0,
+                    boxShadow: '0 2px 6px rgba(249, 115, 22, 0.35)'
+                  }}>
+                    {(authUser.user_metadata?.full_name || authUser.email || 'Y')[0].toUpperCase()}
+                  </div>
                   {!sidebarCollapsed && (
                     <>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="text-xs font-semibold" style={{
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          color: 'var(--text-main)',
+                        <div style={{
+                          fontSize: 12, fontWeight: 600, color: 'var(--text-main)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                         }}>
-                          {authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.user_metadata?.user_name || 'User'}
+                          {authUser.user_metadata?.full_name || 'Yashpreet'}
                         </div>
-                        <div className="text-xs text-subtle" style={{
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                          fontSize: 10,
-                        }}>
-                          {authUser.email || ''}
+                        <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>
+                          Free User
                         </div>
                       </div>
-                      <ChevronUp size={13} style={{
-                        color: 'var(--text-muted)',
-                        transform: showUserMenu ? 'rotate(0deg)' : 'rotate(180deg)',
-                        transition: 'transform 0.2s ease',
-                        flexShrink: 0,
-                      }} />
+                      <NavLink to="/settings" onClick={e => e.stopPropagation()} style={{ color: 'var(--text-muted)', display: 'flex' }} title="Settings">
+                        <Settings size={14} />
+                      </NavLink>
                     </>
                   )}
                 </button>
               </>
             ) : (
-              <button
-                type="button"
+              <div
+                className="sidebar-profile-pill"
                 onClick={() => setShowAuthModal(true)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                  gap: 8,
-                  padding: '7px 10px',
-                  borderRadius: 8,
-                  background: 'color-mix(in srgb, var(--color-brand) 12%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
-                  color: 'var(--color-brand)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-brand) 20%, transparent)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-brand) 12%, transparent)' }}
-                title="Sign in to AetherFlow"
+                title="Sign in or manage local profile"
               >
-                <LogIn size={15} />
-                {!sidebarCollapsed && <span>Sign In</span>}
-              </button>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontWeight: 700, fontSize: 12, flexShrink: 0,
+                  boxShadow: '0 2px 6px rgba(249, 115, 22, 0.35)'
+                }}>
+                  Y
+                </div>
+                {!sidebarCollapsed && (
+                  <>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 12, fontWeight: 600, color: 'var(--text-main)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                      }}>
+                        Yashpreet
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>
+                        Free User
+                      </div>
+                    </div>
+                    <NavLink to="/settings" onClick={e => e.stopPropagation()} style={{ color: 'var(--text-muted)', display: 'flex' }} title="Settings">
+                      <Settings size={14} />
+                    </NavLink>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </aside>
@@ -865,7 +871,7 @@ export default function App() {
             <div
               style={{
                 position: 'fixed',
-                bottom: 44,
+                bottom: 74,
                 right: 16,
                 zIndex: 9000,
                 background: 'color-mix(in srgb, var(--bg-card) 90%, transparent)',
@@ -901,9 +907,10 @@ export default function App() {
             <Route path="/settings"        element={<SettingsPage />} />
           </Routes>
         </main>
+      </div>
 
-        {/* Status bar */}
-        <StatusBar />
+      {/* Sovereign Persistent Media Player Dock */}
+      <PlayerDock />
 
         {/* Floating Update Notification Toast */}
         {updateToast && (

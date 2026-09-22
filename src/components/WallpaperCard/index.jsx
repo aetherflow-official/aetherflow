@@ -6,6 +6,41 @@ import {
 import WallpaperThumbnail from '../WallpaperThumbnail/index.jsx'
 import { openExternalUrl } from '../../lib/wallpaperActions.js'
 
+export function getCardBadges(wallpaper) {
+  if (!wallpaper) return { typeBadge: { label: 'PROCEDURAL', className: 'wp-badge-procedural' }, originBadge: { label: 'BUILT-IN', className: 'wp-badge-origin' } }
+
+  const engineId = wallpaper.engine || wallpaper.id
+  const streamUrl = wallpaper.config?.streamUrl || wallpaper.config?.url || ''
+  const isYt = /(?:youtu\.be\/|youtube\.com)/.test(streamUrl)
+  const isStream = engineId === 'web-stream' || Boolean(streamUrl)
+  const isImage = engineId === 'image-player' || wallpaper.mediaType === 'image' || Boolean(wallpaper.config?.imagePath && !wallpaper.config?.videoPath)
+  const isBuiltin = wallpaper.builtin || !wallpaper.isCustom
+  const isVideo = !isImage && !isStream && (wallpaper.isCustom || engineId === 'video-player' || wallpaper.mediaType === 'video')
+  const isCommunity = Boolean(wallpaper.id?.startsWith('community-') || wallpaper.communityMeta || wallpaper.remoteUrl)
+
+  // Type Badge
+  let typeBadge = { label: 'PROCEDURAL', className: 'wp-badge-procedural' }
+  if (isImage) {
+    typeBadge = { label: 'IMAGE', className: 'wp-badge-image' }
+  } else if (isVideo || isStream) {
+    typeBadge = { label: 'VIDEO', className: 'wp-badge-video' }
+  }
+
+  // Origin Badge
+  let originBadge = { label: 'LOCAL', className: 'wp-badge-origin' }
+  if (isYt) {
+    originBadge = { label: 'YOUTUBE', className: 'wp-badge-youtube' }
+  } else if (isCommunity && !wallpaper.localPath) {
+    originBadge = { label: 'CLOUD', className: 'wp-badge-origin' }
+  } else if (isBuiltin) {
+    originBadge = { label: 'BUILT-IN', className: 'wp-badge-origin' }
+  } else {
+    originBadge = { label: 'LOCAL', className: 'wp-badge-origin' }
+  }
+
+  return { typeBadge, originBadge }
+}
+
 export function getCardTypeInfo(wallpaper) {
   if (!wallpaper) return { label: 'Canvas', color: 'var(--color-brand)', icon: Sparkles, type: 'canvas' }
   const engineId = wallpaper.engine || wallpaper.id
@@ -99,6 +134,8 @@ export default function WallpaperCard({
     (wallpaper.engine && wallpaper.engine !== 'video-player')
   )
 
+  const badges = getCardBadges(wallpaper)
+
   return (
     <div
       className={`wp-overlay-card ${isFeatured ? 'featured' : ''} ${isLive ? 'is-live' : ''} ${isSelected ? 'selected' : ''}`}
@@ -121,26 +158,14 @@ export default function WallpaperCard({
         />
       </div>
 
-      {/* ── 2. Top-Left: Media Type Indicator & Storage Badge ───────────── */}
+      {/* ── 2. Top-Left: Sovereign Dual Badges ───────────────────────────── */}
       <div className="wp-overlay-badge-tl" style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-        <div className="wp-type-indicator">
-          <TypeIcon size={10} style={{ color: typeInfo.color }} />
-          <span>{typeInfo.label.toUpperCase()}</span>
+        <div className={`wp-badge-pill ${badges.typeBadge.className}`}>
+          {badges.typeBadge.label}
         </div>
-        {isCommunity && (
-          <div
-            className="wp-type-indicator"
-            style={{
-              background: isLocal ? 'rgba(16, 185, 129, 0.22)' : 'rgba(56, 189, 248, 0.22)',
-              color: isLocal ? 'var(--color-emerald)' : 'var(--color-cyan)',
-              border: `1px solid ${isLocal ? 'rgba(16, 185, 129, 0.4)' : 'rgba(56, 189, 248, 0.4)'}`,
-            }}
-            title={isLocal ? 'Stored locally on disk (offline ready)' : 'Cloud stream (saves local disk space)'}
-          >
-            {isLocal ? <HardDrive size={10} /> : <Cloud size={10} />}
-            <span>{isLocal ? 'LOCAL' : 'CLOUD'}</span>
-          </div>
-        )}
+        <div className={`wp-badge-pill ${badges.originBadge.className}`}>
+          {badges.originBadge.label}
+        </div>
       </div>
 
       {/* ── 3. Top-Right: Heart, Pin indicator & Context Menu ───────────────── */}
@@ -253,7 +278,7 @@ export default function WallpaperCard({
               {wallpaper.name}
             </h3>
 
-            <div className="wp-overlay-creator" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div className="wp-overlay-creator" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
               {authorPortfolio ? (
                 <button
                   type="button"
@@ -274,6 +299,24 @@ export default function WallpaperCard({
               ) : (
                 <span>{creatorText}</span>
               )}
+
+              {/* Blue Verified Badge */}
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: '#38bdf8',
+                  color: '#05070d',
+                }}
+                title="Verified Creator"
+              >
+                <Check size={8} strokeWidth={3} />
+              </span>
+
               {license && (
                 <span
                   className="wp-overlay-tag-chip"
@@ -296,30 +339,23 @@ export default function WallpaperCard({
             )}
           </div>
 
-          {/* Action Cluster in Bottom-Right: Preview on hover + Floating Apply */}
+          {/* Action Cluster in Bottom-Right: Sovereign Apply Button */}
           <div className="wp-overlay-actions-row" onClick={(e) => e.stopPropagation()}>
-            {onPreview && (
-              <button
-                className="wp-pill-preview"
-                onClick={() => onPreview(wallpaper)}
-                title="Quick preview"
-              >
-                <Eye size={11} /> Preview
-              </button>
-            )}
-
             {isLive ? (
-              <div className="wp-live-badge" title="Currently running on desktop">
-                <span className="wp-live-dot" /> Active
+              <div className="wp-pill-apply-btn active" title="Currently running on desktop">
+                <Check size={10} strokeWidth={2.5} />
+                <span>Active</span>
               </div>
             ) : (
               <button
-                className="wp-pill-apply"
+                type="button"
+                className="wp-pill-apply-btn"
                 onClick={() => onApply && onApply(wallpaper)}
                 disabled={isApplying}
                 title="Apply to desktop"
               >
-                <Play size={10} fill="currentColor" /> {isApplying ? '…' : 'Apply'}
+                <Play size={10} fill="currentColor" />
+                <span>{isApplying ? '…' : 'Apply'}</span>
               </button>
             )}
           </div>

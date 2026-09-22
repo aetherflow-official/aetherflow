@@ -20,6 +20,8 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
 
   const wallpaperOpacity    = useStore(s => s.wallpaperOpacity)
   const wallpaperBrightness = useStore(s => s.wallpaperBrightness)
+  const wallpaperContrast   = useStore(s => s.wallpaperContrast) ?? 1.0
+  const wallpaperSaturation = useStore(s => s.wallpaperSaturation) ?? 1.1
   const wallpaperSpeed      = useStore(s => s.wallpaperSpeed)
   const audioVolume         = useStore(s => s.audioVolume)
   const audioMuted          = useStore(s => s.audioMuted)
@@ -34,6 +36,8 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
     muted: config.muted !== undefined ? config.muted : audioMuted,
     opacity: wallpaperOpacity,
     brightness: wallpaperBrightness,
+    contrast: wallpaperContrast,
+    saturation: wallpaperSaturation,
     fps: fps ?? 60,
     preview,   // audio-spectrum uses this to skip mic request in thumbnail mode
   }
@@ -168,7 +172,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
         borderRadius: 8,
         display: 'block',
         opacity: wallpaperOpacity,
-        filter: `brightness(${wallpaperBrightness})`,
+        filter: `brightness(${wallpaperBrightness}) contrast(${wallpaperContrast}) saturate(${wallpaperSaturation})`,
       }
     : {
         position: 'fixed',
@@ -177,7 +181,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
         height: '100%',
         zIndex: -1,
         opacity: wallpaperOpacity,
-        filter: `brightness(${wallpaperBrightness})`,
+        filter: `brightness(${wallpaperBrightness}) contrast(${wallpaperContrast}) saturate(${wallpaperSaturation})`,
         pointerEvents: 'none',
       }
 

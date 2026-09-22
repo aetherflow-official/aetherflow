@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom'
 import {
   Play, Pause, Zap, MonitorPlay, Square, Monitor, Plus, Search,
   Video, Image as ImageIcon, Trash2, Check, Sparkles, Filter, X, Pin, PinOff, Pencil, ArrowRight, Globe, Eye,
-  Volume2, VolumeX, SlidersHorizontal, Heart
+  Volume2, VolumeX, SlidersHorizontal, Heart, LayoutGrid, List, ChevronDown, Flame
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
 import WallpaperPlayer from '../components/WallpaperPlayer/index.jsx'
 import WallpaperThumbnail from '../components/WallpaperThumbnail/index.jsx'
 import WallpaperCard from '../components/WallpaperCard/index.jsx'
+import WallpaperSettingsPanel from '../components/Home/WallpaperSettingsPanel.jsx'
 import { AddWallpaperModal, RenameWallpaperModal, AddWebStreamModal } from '../components/Modals/WallpaperModals.jsx'
 import {
   applyWallpaperToDesktop,
@@ -517,7 +518,9 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [applying, setApplying]               = useState(false)
   const [searchQuery, setSearchQuery]         = useState('')
-  const [filterCategory, setFilterCategory]   = useState('all') // 'all' | 'liked' | 'builtin' | 'custom' | 'stream'
+  const [filterCategory, setFilterCategory]   = useState('all')
+  const [sortBy, setSortBy]                   = useState('trending') // 'trending' | 'recent' | 'name' | 'liked'
+  const [viewMode, setViewMode]               = useState('grid') // 'grid' | 'list'
   const [hoveredId, setHoveredId]             = useState(null)
 
   // Modals state
@@ -755,11 +758,23 @@ export default function HomePage() {
   }, [installed, homeWallpaperIds, customNames])
 
   const filteredWallpapers = useMemo(() => {
-    return homeWallpapers.filter(w => {
+    const list = homeWallpapers.filter(w => {
       if (filterCategory === 'liked' && !(likedWallpaperIds || []).includes(w.id)) return false
+      if (filterCategory === 'pinned' && !(homeWallpaperIds || []).includes(w.id)) return false
+      if (filterCategory === 'procedural' && (w.engine === 'video-player' || w.engine === 'image-player' || w.config?.videoPath || w.config?.imagePath || w.config?.streamUrl)) return false
       if (filterCategory === 'builtin' && w.isCustom) return false
       if (filterCategory === 'custom' && (!w.isCustom || w.config?.streamUrl)) return false
       if (filterCategory === 'stream' && !w.config?.streamUrl) return false
+      if (filterCategory === '4k') {
+        const is4k = w.name?.toLowerCase().includes('4k') || w.name?.toLowerCase().includes('uhd') || w.tags?.some(t => t.toLowerCase().includes('4k') || t.toLowerCase().includes('uhd'))
+        if (!is4k) return false
+      }
+      if (['nature', 'anime', 'abstract', 'games', 'minimal'].includes(filterCategory)) {
+        const cat = filterCategory.toLowerCase()
+        const matchTag = w.tags?.some(t => t.toLowerCase().includes(cat))
+        const matchName = w.name?.toLowerCase().includes(cat)
+        if (!matchTag && !matchName) return false
+      }
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
         const matchName = w.name.toLowerCase().includes(query)
@@ -768,7 +783,22 @@ export default function HomePage() {
       }
       return true
     })
-  }, [homeWallpapers, filterCategory, searchQuery, likedWallpaperIds])
+
+    if (sortBy === 'recent') {
+      return [...list].sort((a, b) => (b.installedAt || 0) - (a.installedAt || 0))
+    }
+    if (sortBy === 'name') {
+      return [...list].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    }
+    if (sortBy === 'liked') {
+      return [...list].sort((a, b) => {
+        const aLiked = (likedWallpaperIds || []).includes(a.id) ? 1 : 0
+        const bLiked = (likedWallpaperIds || []).includes(b.id) ? 1 : 0
+        return bLiked - aLiked
+      })
+    }
+    return list
+  }, [homeWallpapers, filterCategory, searchQuery, likedWallpaperIds, homeWallpaperIds, sortBy])
 
   // ── Select a wallpaper (for previewing & tuning sliders) ───────────────────
   function selectWallpaper(wallpaper) {
@@ -992,235 +1022,259 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Hero Wallpaper Stage for Selected / Active Wallpaper */}
+      {/* ── Sovereign Split Hero Deck: Live Stage (60%) + Wallpaper Settings (40%) ── */}
       {activeWallpaper ? (
-        <div className="wallpaper-stage-card">
-          {!isTopPreviewPaused && !isWindowHidden ? (
-            <WallpaperPlayer
-              key={activeWallpaper.id || activeWallpaper.name}
-              engineId={activeWallpaper.engine || activeWallpaper.id}
-              config={activeWallpaper.config}
-              preview
-            />
-          ) : (
+        <div className="sovereign-hero-container">
+          {/* Left: Active Live Stage Hero Card */}
+          <div className="sovereign-hero-stage">
+            {!isTopPreviewPaused && !isWindowHidden ? (
+              <WallpaperPlayer
+                key={activeWallpaper.id || activeWallpaper.name}
+                engineId={activeWallpaper.engine || activeWallpaper.id}
+                config={activeWallpaper.config}
+                preview
+              />
+            ) : (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: '#05070d',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <WallpaperThumbnail
+                  wallpaper={activeWallpaper}
+                  isHovered={false}
+                  mode="always"
+                />
+              </div>
+            )}
+
+            {/* Gradient Scrim Overlay */}
             <div
               style={{
                 position: 'absolute',
                 inset: 0,
-                background: '#05070d',
+                background: 'linear-gradient(to top, rgba(5, 8, 15, 0.95) 0%, rgba(5, 8, 15, 0.45) 45%, rgba(0, 0, 0, 0.15) 100%)',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                zIndex: 10,
+                pointerEvents: 'auto',
               }}
             >
-              <WallpaperThumbnail
-                wallpaper={activeWallpaper}
-                isHovered={false}
-                mode="always"
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 14,
-                  right: 14,
-                  background: 'rgba(10, 14, 24, 0.85)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  padding: '4px 10px',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  color: 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  zIndex: 4,
-                  boxShadow: 'var(--surface-bevel)',
-                }}
-              >
-                <Pause size={10} />
-                <span>PREVIEW PAUSED (ZERO RAM / GPU)</span>
-              </div>
-            </div>
-          )}
+              {/* Top Badges */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {selectedIsLive ? (
+                    <div
+                      className="wp-badge-pill"
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.22)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.45)',
+                        gap: 6,
+                        padding: '4px 10px',
+                        fontSize: 10,
+                      }}
+                    >
+                      <div className="status-dot-live" style={{ width: 6, height: 6 }} />
+                      <span>LIVE ON {activeScreensForSelected.join(', ').toUpperCase()}</span>
+                    </div>
+                  ) : (
+                    <div
+                      className="wp-badge-pill"
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.65)',
+                        color: 'var(--text-main)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: 10,
+                      }}
+                    >
+                      SELECTED PREVIEW
+                    </div>
+                  )}
 
-          {/* Scrim Overlay & Control Surface */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(to top, rgba(7, 10, 18, 0.94) 0%, rgba(7, 10, 18, 0.4) 50%, rgba(0, 0, 0, 0.1) 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              padding: '16px 20px',
-              zIndex: 10,
-              pointerEvents: 'auto',
-            }}
-          >
-            {/* Top Badges */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {selectedIsLive ? (
                   <div
-                    className="badge"
+                    className="wp-badge-pill"
                     style={{
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      color: '#34d399',
-                      border: '1px solid rgba(16, 185, 129, 0.45)',
-                      boxShadow: '0 0 14px rgba(16, 185, 129, 0.2)',
-                      gap: 6,
-                      padding: '4px 10px',
-                      fontWeight: 600,
-                      letterSpacing: '0.04em',
-                      fontSize: 11,
-                    }}
-                  >
-                    <div className="status-dot-live" />
-                    <span>LIVE ON {activeScreensForSelected.join(', ').toUpperCase()}</span>
-                  </div>
-                ) : (
-                  <div
-                    className="badge"
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.6)',
-                      backdropFilter: 'blur(8px)',
+                      background: 'rgba(10, 14, 24, 0.75)',
+                      color: 'var(--text-muted)',
                       border: '1px solid var(--border-subtle)',
-                      letterSpacing: '0.04em',
-                      fontWeight: 600,
-                      fontSize: 11,
-                      color: 'var(--text-main)',
+                      fontSize: 10,
                     }}
                   >
-                    SELECTED PREVIEW
+                    {activeWallpaper.engine === 'image-player' || (!activeWallpaper.config?.videoPath && activeWallpaper.config?.imagePath)
+                      ? 'IMAGE WALLPAPER'
+                      : activeWallpaper.config?.streamUrl
+                      ? 'STREAM WALLPAPER'
+                      : activeWallpaper.isCustom
+                      ? 'VIDEO WALLPAPER'
+                      : 'CANVAS 2D'}
                   </div>
-                )}
-                {activeWallpaper.config?.streamUrl ? (
-                  <div
-                    className="badge"
-                    style={{
-                      background: 'rgba(239, 68, 68, 0.2)',
-                      color: '#f87171',
-                      borderColor: 'rgba(239, 68, 68, 0.4)',
-                      fontSize: 11,
-                    }}
-                  >
-                    {activeWallpaper.config?.youtubeId ? 'YOUTUBE STREAM' : 'WEB STREAM'}
-                  </div>
-                ) : activeWallpaper.isCustom ? (
-                  <div className="badge badge-brand" style={{ fontSize: 11 }}>
-                    {activeWallpaper.engine === 'image-player' ? 'PICTURE' : 'VIDEO WALLPAPER'}
-                  </div>
-                ) : (
-                  <div
-                    className="badge"
-                    style={{
-                      background: 'rgba(168, 85, 247, 0.2)',
-                      color: '#c084fc',
-                      borderColor: 'rgba(168, 85, 247, 0.4)',
-                      fontSize: 11,
-                    }}
-                  >
-                    CANVAS 2D
-                  </div>
-                )}
-              </div>
-
-              {/* Pause/Resume Preview Toggle */}
-              <button
-                className="btn btn-ghost"
-                style={{
-                  height: 32,
-                  padding: '0 10px',
-                  fontSize: 11,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  background: isTopPreviewPaused ? 'rgba(59, 130, 246, 0.2)' : 'rgba(10, 14, 22, 0.75)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid var(--border-subtle)',
-                  color: isTopPreviewPaused ? 'var(--color-brand)' : 'var(--text-muted)',
-                  borderRadius: 6,
-                }}
-                onClick={() => {
-                  setIsTopPreviewPaused(p => !p)
-                  tauriInvoke('trim_memory').catch(() => {})
-                }}
-                title={isTopPreviewPaused ? 'Resume live animation' : 'Pause animation to save GPU/RAM'}
-              >
-                {isTopPreviewPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} />}
-                <span>{isTopPreviewPaused ? 'Resume' : 'Pause'}</span>
-              </button>
-            </div>
-
-            {/* Bottom Metadata & Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16 }}>
-              <div>
-                <div className="font-bold text-lg flex items-center gap-2" style={{ color: '#fff' }}>
-                  <span style={{ letterSpacing: '-0.2px' }}>
-                    {(customNames || {})[activeWallpaper?.id] || activeWallpaper?.name}
-                  </span>
-                  <button
-                    className="btn-icon"
-                    style={{ padding: 3, color: 'rgba(255,255,255,0.7)' }}
-                    title="Rename Wallpaper"
-                    onClick={() => setRenameModal({ isOpen: true, id: activeWallpaper.id, currentName: activeWallpaper.name })}
-                  >
-                    <Pencil size={12} />
-                  </button>
                 </div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                  {activeWallpaper.communityMeta?.author
-                    ? `by ${activeWallpaper.communityMeta.author}`
-                    : activeWallpaper.isCustom
-                    ? (activeWallpaper.engine === 'image-player' ? 'Custom High-Res Picture' : 'Custom Video')
-                    : `Built-in Canvas Engine · ${activeWallpaper.id}`}
-                </div>
-              </div>
 
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {isWallpaperRunning && (
-                  <button
-                    className="btn"
-                    style={{
-                      background: 'rgba(239,68,68,0.18)',
-                      color: '#fca5a5',
-                      border: '1px solid rgba(239,68,68,0.35)',
-                      height: 34,
-                      padding: '0 12px',
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                    onClick={handleStop}
-                  >
-                    <Square size={12} fill="#fca5a5" style={{ marginRight: 6 }} /> Stop
-                  </button>
-                )}
+                {/* Pause/Resume Preview Toggle */}
                 <button
-                  className="btn btn-primary"
-                  onClick={() => handleApply()}
-                  disabled={applying}
+                  type="button"
                   style={{
-                    opacity: applying ? 0.7 : 1,
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    background: 'rgba(10, 14, 24, 0.75)',
+                    border: '1px solid var(--border-subtle)',
+                    color: isTopPreviewPaused ? 'var(--color-brand)' : 'var(--text-muted)',
+                    fontSize: 11,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
-                    minWidth: 140,
-                    height: 34,
-                    fontSize: 12,
-                    justifyContent: 'center',
-                    borderRadius: 8,
-                    boxShadow: '0 0 16px var(--color-glow)',
+                    gap: 5,
+                    cursor: 'pointer',
                   }}
+                  onClick={() => setIsTopPreviewPaused(p => !p)}
+                  title={isTopPreviewPaused ? 'Resume preview' : 'Pause preview (saves GPU/RAM)'}
                 >
-                  <MonitorPlay size={14} />
-                  {applying ? 'Applying…' : selectedIsLive ? 'Re-apply' : 'Apply to Desktop'}
+                  {isTopPreviewPaused ? <Play size={11} fill="currentColor" /> : <Pause size={11} />}
+                  <span>{isTopPreviewPaused ? 'Resume' : 'Pause'}</span>
                 </button>
+              </div>
+
+              {/* Bottom Artwork Metadata & Control Actions */}
+              <div>
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{(customNames || {})[activeWallpaper?.id] || activeWallpaper?.name}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: 12, color: 'rgba(255, 255, 255, 0.75)' }}>
+                    <span>
+                      by {activeWallpaper?.author || activeWallpaper?.communityMeta?.author || (activeWallpaper?.isCustom ? 'Local User' : 'NordicVibes')}
+                    </span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 14,
+                        height: 14,
+                        borderRadius: '50%',
+                        background: '#38bdf8',
+                        color: '#05070d',
+                      }}
+                      title="Verified Creator"
+                    >
+                      <Check size={10} strokeWidth={3} />
+                    </span>
+                  </div>
+
+                  {/* Tags */}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {(activeWallpaper?.tags || ['nature', 'mountains', '4k', 'ambient', 'landscape']).slice(0, 5).map(tag => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontSize: 11,
+                          color: 'rgba(255, 255, 255, 0.65)',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleApply()}
+                      disabled={applying}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 16px',
+                        borderRadius: 8,
+                        background: 'var(--color-brand)',
+                        color: '#05070d',
+                        border: 'none',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 0 16px rgba(6, 182, 212, 0.4)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {isWallpaperRunning ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+                      <span>{isWallpaperRunning ? 'Pause' : 'Apply'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allList = homeWallpapers || []
+                        if (allList.length > 1) {
+                          const idx = allList.findIndex(w => w.id === activeWallpaper.id)
+                          const nextIdx = (idx + 1) % allList.length
+                          selectWallpaper(allList[nextIdx])
+                        }
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: 'var(--text-main)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <span>⇄ Change Wallpaper</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleLikeWallpaper(activeWallpaper.id)}
+                      className="btn-icon"
+                      style={{
+                        padding: 7,
+                        borderRadius: 8,
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: (likedWallpaperIds || []).includes(activeWallpaper.id) ? 'var(--color-rose)' : 'var(--text-main)',
+                      }}
+                      title="Like wallpaper"
+                    >
+                      <Heart size={14} fill={(likedWallpaperIds || []).includes(activeWallpaper.id) ? 'currentColor' : 'none'} />
+                    </button>
+                  </div>
+
+                  {/* Carousel indicators on bottom right */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ width: 18, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.9)' }} />
+                    <div style={{ width: 6, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.3)' }} />
+                    <div style={{ width: 6, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.3)' }} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Right: Wallpaper Settings Panel */}
+          <WallpaperSettingsPanel
+            monitors={monitors}
+            selectedMonitorLabel={selectedMonitorLabel}
+            onSelectMonitor={handleSelectMonitor}
+          />
         </div>
       ) : (
         <div
@@ -1239,254 +1293,6 @@ export default function HomePage() {
           <div className="text-xs text-muted" style={{ marginTop: 4 }}>
             Supports pictures (PNG, JPG, WebP) and videos (MP4, WebM, MKV)
           </div>
-        </div>
-      )}
-
-      {/* Property Controls: Compact Horizontal Engine Surface */}
-      {activeWallpaper && (
-        <div className="engine-params-surface">
-          <div className="engine-params-header">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal size={13} style={{ color: 'var(--color-brand)' }} />
-              <span className="font-semibold text-xs uppercase tracking-wider text-muted">Active Wallpaper Controls</span>
-            </div>
-            <div className="telemetry-chip">
-              <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>
-                {activeWallpaper.engine || activeWallpaper.id || 'native'}
-              </span>
-              <span style={{ opacity: 0.4 }}>•</span>
-              <span>{fpsCap > 0 && fpsCap < 240 ? `${fpsCap} FPS CAP` : 'UNLIMITED FPS'}</span>
-            </div>
-          </div>
-
-          {/* Multi-monitor selector if per-screen mode */}
-          {screenArrangement === 'per-screen' && monitors.length > 1 && (
-            <div style={{ marginBottom: 14, padding: 10, background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted" style={{ marginBottom: 8 }}>Target Monitor</div>
-              <div className="flex gap-2">
-                {monitors.map((m, i) => {
-                  const isSelected = selectedMonitorLabel === m.label
-                  const monWp = monitorWallpapers?.[m.label]
-                  return (
-                    <button
-                      key={m.label}
-                      className={`btn ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => handleSelectMonitor(m.label)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 10px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 3,
-                        alignItems: 'center',
-                        borderRadius: 6,
-                        border: isSelected ? '1px solid var(--color-brand)' : '1px solid var(--border-subtle)',
-                        fontSize: 11,
-                      }}
-                    >
-                      <Monitor size={14} />
-                      <span style={{ fontWeight: 600 }}>{m.displayName || `Display ${m.displayNumber || i + 1}`}</span>
-                      {monWp && (
-                        <span style={{ fontSize: 9.5, opacity: 0.8, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {monWp.name}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }}>
-            {/* Opacity */}
-            <div>
-              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
-                <span>Opacity</span>
-                <span className="text-brand font-mono">{Math.round(wallpaperOpacity * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                className="slider"
-                min={0.1} max={1} step={0.05}
-                value={wallpaperOpacity}
-                draggable={false}
-                onDragStart={e => e.preventDefault()}
-                style={{ touchAction: 'none' }}
-                onChange={e => handleOpacity(parseFloat(e.target.value))}
-              />
-            </div>
-
-            {/* Brightness */}
-            <div>
-              <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
-                <span>Brightness</span>
-                <span className="text-brand font-mono">{Math.round(wallpaperBrightness * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                className="slider"
-                min={0.1} max={1.5} step={0.05}
-                value={wallpaperBrightness}
-                draggable={false}
-                onDragStart={e => e.preventDefault()}
-                style={{ touchAction: 'none' }}
-                onChange={e => handleBrightness(parseFloat(e.target.value))}
-              />
-            </div>
-
-            {/* Speed or Picture Fit */}
-            {isCurrentWallpaperImage ? (
-              <div>
-                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
-                  <span>Choose Fit</span>
-                  <span className="text-brand font-mono capitalize">
-                    {activeWallpaper.config?.fit === 'cover' ? 'fill' : (activeWallpaper.config?.fit === 'contain' ? 'fit' : (activeWallpaper.config?.fit || 'fill'))}
-                  </span>
-                </div>
-                <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
-                  {[
-                    { id: 'fill', label: 'Fill' },
-                    { id: 'fit', label: 'Fit' },
-                    { id: 'stretch', label: 'Stretch' },
-                    { id: 'center', label: 'Center' },
-                    { id: 'tile', label: 'Tile' },
-                  ].map(({ id, label }) => {
-                    const currentFit = (activeWallpaper.config?.fit || 'fill').toLowerCase()
-                    const isActive = currentFit === id || (id === 'fill' && currentFit === 'cover') || (id === 'fit' && currentFit === 'contain')
-                    return (
-                      <button
-                        key={id}
-                        className={`btn ${isActive ? 'btn-primary' : 'btn-ghost'}`}
-                        style={{ flex: 1, minWidth: 44, padding: '4px 6px', fontSize: 10.5 }}
-                        onClick={() => handleFit(id)}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {['fit', 'contain', 'center'].includes((activeWallpaper.config?.fit || '').toLowerCase()) && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span className="text-xs text-muted">Matte Background</span>
-                    <div className="flex items-center gap-1.5">
-                      {['#000000', '#0a0e17', '#18181b', '#2d3748', '#ffffff'].map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => handleBackgroundColor(c)}
-                          style={{
-                            width: 16,
-                            height: 16,
-                            borderRadius: '50%',
-                            background: c,
-                            border: (activeWallpaper.config?.backgroundColor || '#000000') === c
-                              ? '2px solid var(--color-brand)'
-                              : '1px solid rgba(255,255,255,0.2)',
-                            cursor: 'pointer',
-                            padding: 0,
-                          }}
-                          title={c}
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        value={activeWallpaper.config?.backgroundColor || '#000000'}
-                        onChange={e => handleBackgroundColor(e.target.value)}
-                        style={{
-                          width: 20,
-                          height: 20,
-                          padding: 0,
-                          borderRadius: 4,
-                          border: '1px solid var(--border-main)',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                        }}
-                        title="Custom matte color"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div className="flex justify-between text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
-                  <span>Speed</span>
-                  <span className="text-brand font-mono">{parseFloat(wallpaperSpeed).toFixed(1)}×</span>
-                </div>
-                <input
-                  type="range"
-                  className="slider"
-                  min={0.1} max={3} step={0.1}
-                  value={wallpaperSpeed}
-                  draggable={false}
-                  onDragStart={e => e.preventDefault()}
-                  style={{ touchAction: 'none' }}
-                  onChange={e => handleSpeed(parseFloat(e.target.value))}
-                />
-              </div>
-            )}
-
-            {/* Volume */}
-            <div>
-              <div className="flex justify-between items-center text-xs text-muted" style={{ marginBottom: 6, userSelect: 'none' }}>
-                <span className="flex items-center gap-1.5">
-                  <button
-                    className="btn-icon"
-                    style={{
-                      padding: 2,
-                      color: currentWallpaperAudio.muted ? 'var(--color-rose)' : 'var(--color-brand)',
-                    }}
-                    onClick={handleWallpaperMuteToggle}
-                    title={currentWallpaperAudio.muted ? 'Unmute wallpaper' : 'Mute wallpaper'}
-                  >
-                    {currentWallpaperAudio.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                  </button>
-                  <span>Volume</span>
-                </span>
-                <span className="text-brand font-mono">
-                  {currentWallpaperAudio.muted ? 'Muted' : `${currentWallpaperAudio.volume}%`}
-                </span>
-              </div>
-              <input
-                type="range"
-                className="slider"
-                min={0} max={100} step={1}
-                value={currentWallpaperAudio.muted ? 0 : currentWallpaperAudio.volume}
-                draggable={false}
-                onDragStart={e => e.preventDefault()}
-                style={{ touchAction: 'none' }}
-                onChange={e => {
-                  const v = parseInt(e.target.value, 10)
-                  handleWallpaperVolumeChange(v)
-                }}
-              />
-            </div>
-          </div>
-
-          {isCurrentWallpaperImage && activeWallpaper?.config?.imagePath && (
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-              <div className="text-xs text-muted">
-                Also set this picture as your Windows desktop system wallpaper (persists even when app closes)
-              </div>
-              <button
-                className={`btn ${winWallpaperSet ? 'btn-success' : 'btn-ghost'}`}
-                style={{ fontSize: 11, padding: '4px 12px' }}
-                onClick={handleSetWindowsWallpaper}
-              >
-                {winWallpaperSet ? (
-                  <>
-                    <Check size={12} style={{ marginRight: 4 }} /> Set as System Wallpaper!
-                  </>
-                ) : (
-                  <>
-                    <ImageIcon size={12} style={{ marginRight: 4 }} /> Set as Windows Wallpaper
-                  </>
-                )}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -1536,47 +1342,77 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Category Filters & Thumbnail Mode Selector */}
-        <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
-          <div className="flex items-center gap-1.5" style={{ flexWrap: 'wrap' }}>
+        {/* Category Filters, Search & View Controls */}
+        <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'nowrap', marginBottom: 6 }}>
+          {/* Scrollable Filter Chips */}
+          <div className="aether-filter-scroll" style={{ flex: 1, minWidth: 0 }}>
             {[
-              { id: 'all', label: 'All Favorites', count: homeWallpapers.length },
+              { id: 'all', label: 'All', count: homeWallpapers.length },
               { id: 'liked', label: 'Liked', count: homeWallpapers.filter(w => (likedWallpaperIds || []).includes(w.id)).length, icon: Heart },
-              { id: 'builtin', label: 'Built-in Canvas', count: homeWallpapers.filter(w => !w.isCustom).length },
+              { id: 'pinned', label: 'Pinned', count: homeWallpapers.filter(w => (homeWallpaperIds || []).includes(w.id)).length, icon: Pin },
+              { id: 'procedural', label: 'Procedural', count: homeWallpapers.filter(w => w.engine !== 'video-player' && w.engine !== 'image-player' && !w.config?.videoPath && !w.config?.imagePath && !w.config?.streamUrl).length, icon: Sparkles },
+              { id: 'builtin', label: 'Built-in', count: homeWallpapers.filter(w => !w.isCustom).length },
               { id: 'custom', label: 'Custom Media', count: homeWallpapers.filter(w => w.isCustom && !w.config?.streamUrl).length },
-              { id: 'stream', label: 'Web Streams', count: homeWallpapers.filter(w => w.config?.streamUrl).length },
+              { id: 'stream', label: 'Web Streams', count: homeWallpapers.filter(w => w.config?.streamUrl).length, icon: Globe },
+              { id: '4k', label: '4K+' },
+              { id: 'nature', label: 'Nature' },
+              { id: 'anime', label: 'Anime' },
+              { id: 'abstract', label: 'Abstract' },
+              { id: 'games', label: 'Games' },
+              { id: 'minimal', label: 'Minimal' },
             ].map(cat => {
               const isActive = filterCategory === cat.id
+              const isLikedChip = cat.id === 'liked'
               return (
                 <button
                   key={cat.id}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '4px 10px',
-                    fontSize: 11.5,
-                    fontWeight: isActive ? 600 : 500,
-                    borderRadius: 6,
-                    background: isActive ? 'var(--bg-card-hover)' : 'transparent',
-                    color: isActive ? (cat.id === 'liked' ? 'var(--color-rose)' : 'var(--color-brand)') : 'var(--text-muted)',
-                    border: isActive ? (cat.id === 'liked' ? '1px solid var(--color-rose)' : '1px solid var(--color-brand)') : '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={`aether-filter-chip ${isActive ? (isLikedChip ? 'active-liked' : 'active') : ''}`}
                   onClick={() => setFilterCategory(cat.id)}
                 >
                   {cat.icon && <cat.icon size={11} fill={isActive ? 'currentColor' : 'none'} />}
                   <span>{cat.label}</span>
-                  <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
+                  {typeof cat.count === 'number' && (
+                    <span style={{ opacity: 0.65, fontSize: 10, fontFamily: 'var(--font-mono)' }}>{cat.count}</span>
+                  )}
                 </button>
               )
             })}
           </div>
+
+          {/* Right Controls: Sort dropdown and Grid/List switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              className="aether-sort-select"
+            >
+              <option value="trending">Trending ▾</option>
+              <option value="recent">Recently Added</option>
+              <option value="name">Name (A-Z)</option>
+              <option value="liked">Most Liked</option>
+            </select>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <button
+                className={`aether-view-switch-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                onClick={() => setViewMode('grid')}
+                title="Grid View"
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                className={`aether-view-switch-btn ${viewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setViewMode('list')}
+                title="List View"
+              >
+                <List size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Pinned Wallpaper Grid */}
+      {/* Pinned Wallpaper Grid or List */}
       {homeWallpapers.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)', marginBottom: 36, border: '1.5px dashed var(--border-main)', background: 'transparent' }}>
           <Pin size={28} className="text-brand" style={{ margin: '0 auto 12px', opacity: 0.7 }} />
@@ -1597,6 +1433,80 @@ export default function HomePage() {
           <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={() => { setSearchQuery(''); setFilterCategory('all'); }}>
             Reset Filters
           </button>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 36 }}>
+          {filteredWallpapers.map(wallpaper => {
+            const isSelected    = activeWallpaper?.id === wallpaper.id
+            const activeScreens = getWallpaperActiveScreens(wallpaper)
+            const isLive        = activeScreens.length > 0
+            const isLiked       = (likedWallpaperIds || []).includes(wallpaper.id)
+            const isPinned      = homeWallpaperIds.includes(wallpaper.id)
+
+            return (
+              <div
+                key={wallpaper.id}
+                className={`aether-wallpaper-list-row ${isLive ? 'is-live' : ''}`}
+                style={{
+                  border: isSelected ? '1px solid var(--color-brand)' : undefined,
+                  cursor: 'pointer',
+                }}
+                onClick={() => selectWallpaper(wallpaper)}
+              >
+                <div style={{ width: 108, height: 62, borderRadius: 6, overflow: 'hidden', flexShrink: 0, position: 'relative', background: '#080c14' }}>
+                  <WallpaperThumbnail wallpaper={wallpaper} isHovered={false} mode={thumbnailMode} />
+                  {isLive && (
+                    <div style={{ position: 'absolute', top: 5, left: 5, width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {wallpaper.name}
+                    </span>
+                    {isLive && (
+                      <span className="telemetry-chip" style={{ fontSize: 9.5, padding: '1px 6px', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <span>{wallpaper.communityMeta?.author ? `by ${wallpaper.communityMeta.author}` : (wallpaper.isCustom ? 'Custom Media' : 'Built-in Canvas')}</span>
+                    <span>•</span>
+                    <span style={{ textTransform: 'capitalize' }}>{wallpaper.engine || 'Engine'}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    className="btn-icon"
+                    style={{ width: 30, height: 30, color: isLiked ? 'var(--color-rose)' : 'var(--text-muted)' }}
+                    onClick={(e) => { e.stopPropagation(); toggleLikeWallpaper(wallpaper.id) }}
+                    title="Like"
+                  >
+                    <Heart size={14} fill={isLiked ? 'currentColor' : 'none'} />
+                  </button>
+                  <button
+                    className="btn-icon"
+                    style={{ width: 30, height: 30, color: isPinned ? 'var(--color-brand)' : 'var(--text-muted)' }}
+                    onClick={(e) => { e.stopPropagation(); unpinFromHome(wallpaper.id) }}
+                    title="Pin/Unpin"
+                  >
+                    <Pin size={14} fill={isPinned ? 'currentColor' : 'none'} />
+                  </button>
+                  <button
+                    className={`wp-pill-apply-btn ${isLive ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      selectWallpaper(wallpaper)
+                      handleApply(wallpaper)
+                    }}
+                  >
+                    <Play size={10} fill="currentColor" /> {isLive ? 'Live' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18, marginBottom: 36 }}>
@@ -1623,7 +1533,8 @@ export default function HomePage() {
                   selectWallpaper(wp)
                   handleApply(wp)
                 }}
-                onPreview={(wp) => setPreviewWallpaper(wp)}
+                onPreview={(wp) => selectWallpaper(wp)}
+                onModalPreview={(wp) => setPreviewWallpaper(wp)}
                 onToggleLike={(id) => toggleLikeWallpaper(id)}
                 onTogglePin={(id) => unpinFromHome(id)}
                 onRename={(id, name) => setRenameModal({ isOpen: true, id, currentName: name })}

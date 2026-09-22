@@ -113,6 +113,8 @@ export const useStore = create(
       currentDesktopWallpaper: null,  // { id, name, engine, config } — actually running on desktop
       wallpaperOpacity: 1,
       wallpaperBrightness: 0.85,
+      wallpaperContrast: 1.0,
+      wallpaperSaturation: 1.1,
       wallpaperSpeed: 1,              // Global speed multiplier
 
       // Multi-Monitor & Audio
@@ -235,6 +237,8 @@ export const useStore = create(
       setWallpaperRunning: (v) => set({ isWallpaperRunning: v }),
       setWallpaperOpacity: (v) => set({ wallpaperOpacity: v }),
       setWallpaperBrightness: (v) => set({ wallpaperBrightness: v }),
+      setWallpaperContrast: (v) => set({ wallpaperContrast: v }),
+      setWallpaperSaturation: (v) => set({ wallpaperSaturation: v }),
       setWallpaperSpeed: (v) => set({ wallpaperSpeed: v }),
       updateWallpaperConfig: (updates) => set((s) => {
         const activeWpId = s.activeWallpaper?.id
