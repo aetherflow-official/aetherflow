@@ -557,6 +557,7 @@ export default function HomePage() {
 
   const screenArrangement     = useStore(s => s.screenArrangement)
   const monitorWallpapers     = useStore(s => s.monitorWallpapers)
+  const isWindowHidden        = useStore(s => s.isWindowHidden)
 
   const [monitors, setMonitors] = useState([])
   const [selectedMonitorLabel, setSelectedMonitorLabel] = useState(null)
@@ -994,7 +995,7 @@ export default function HomePage() {
       {/* Hero Wallpaper Stage for Selected / Active Wallpaper */}
       {activeWallpaper ? (
         <div className="wallpaper-stage-card">
-          {!isTopPreviewPaused ? (
+          {!isTopPreviewPaused && !isWindowHidden ? (
             <WallpaperPlayer
               key={activeWallpaper.id || activeWallpaper.name}
               engineId={activeWallpaper.engine || activeWallpaper.id}

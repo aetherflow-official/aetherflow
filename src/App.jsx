@@ -465,6 +465,19 @@ export default function App() {
       })
       if (uOp) unlistens.push(uOp)
 
+      // 4d. Window Lifecycle: Hidden to tray / Restored
+      const uWinHidden = await safeListen('aether:window-hidden', () => {
+        console.log('[Lifecycle] Main window hidden to tray — suspending UI render loops')
+        useStore.getState().setIsWindowHidden?.(true)
+      })
+      if (uWinHidden) unlistens.push(uWinHidden)
+
+      const uWinVisible = await safeListen('aether:window-visible', () => {
+        console.log('[Lifecycle] Main window restored — resuming UI render loops')
+        useStore.getState().setIsWindowHidden?.(false)
+      })
+      if (uWinVisible) unlistens.push(uWinVisible)
+
       // 5. File Explorer Context Menu: Set as AetherFlow Wallpaper
       const u5 = await safeListen('aether:cli:apply-file', async (event) => {
         const filePath = event?.payload?.filePath

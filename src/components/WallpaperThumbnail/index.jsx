@@ -4,7 +4,7 @@ import {
   Video, Image as ImageIcon, Globe, Terminal, Sparkles,
   Waves, Compass, Flame, CloudRain, Activity, Code
 } from 'lucide-react'
-import { safeConvertFileSrc, tauriInvoke } from '../../lib/wallpaperActions.js'
+import { safeConvertFileSrc, tauriInvoke, getOrCreateMediaThumbnail } from '../../lib/wallpaperActions.js'
 import { useStore } from '../../store/useStore.js'
 import { parseYouTubeId } from '../../engines/web-stream.js'
 import { previewManager } from '../../lib/previewManager.js'
@@ -103,64 +103,66 @@ export function extractYouTubeId(url) {
 /**
  * Resolves the best available static thumbnail URL for any wallpaper.
  */
-export function resolveWallpaperThumbnail(wallpaper) {
+export function resolveWallpaperThumbnail(wallpaper, skipThumbnail = false) {
   if (!wallpaper) return null
 
   // 1. Explicit preview, thumbnail, poster, or artwork URL/path across all supported data shapes
-  const explicitCandidate =
-    wallpaper.preview ||
-    wallpaper.thumbnail ||
-    wallpaper.poster ||
-    wallpaper.posterPath ||
-    wallpaper.thumbnailPath ||
-    wallpaper.previewUrl ||
-    wallpaper.thumbnailUrl ||
-    wallpaper.cover ||
-    wallpaper.coverUrl ||
-    wallpaper.coverPath ||
-    wallpaper.image ||
-    wallpaper.imageUrl ||
-    wallpaper.config?.preview ||
-    wallpaper.config?.thumbnail ||
-    wallpaper.config?.poster ||
-    wallpaper.config?.posterPath ||
-    wallpaper.config?.thumbnailPath ||
-    wallpaper.config?.previewUrl ||
-    wallpaper.config?.thumbnailUrl ||
-    wallpaper.config?.cover ||
-    wallpaper.config?.coverUrl ||
-    wallpaper.config?.coverPath ||
-    wallpaper.config?.image ||
-    wallpaper.defaultConfig?.preview ||
-    wallpaper.defaultConfig?.thumbnail ||
-    wallpaper.defaultConfig?.poster ||
-    wallpaper.defaultConfig?.posterPath ||
-    wallpaper.defaultConfig?.cover ||
-    wallpaper.communityMeta?.preview ||
-    wallpaper.communityMeta?.thumbnail ||
-    wallpaper.communityMeta?.poster ||
-    wallpaper.communityMeta?.cover ||
-    (typeof wallpaper.communityMeta?.source === 'string' && /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(wallpaper.communityMeta.source) ? wallpaper.communityMeta.source : null)
+  if (!skipThumbnail) {
+    const explicitCandidate =
+      wallpaper.preview ||
+      wallpaper.thumbnail ||
+      wallpaper.poster ||
+      wallpaper.posterPath ||
+      wallpaper.thumbnailPath ||
+      wallpaper.previewUrl ||
+      wallpaper.thumbnailUrl ||
+      wallpaper.cover ||
+      wallpaper.coverUrl ||
+      wallpaper.coverPath ||
+      wallpaper.image ||
+      wallpaper.imageUrl ||
+      wallpaper.config?.preview ||
+      wallpaper.config?.thumbnail ||
+      wallpaper.config?.poster ||
+      wallpaper.config?.posterPath ||
+      wallpaper.config?.thumbnailPath ||
+      wallpaper.config?.previewUrl ||
+      wallpaper.config?.thumbnailUrl ||
+      wallpaper.config?.cover ||
+      wallpaper.config?.coverUrl ||
+      wallpaper.config?.coverPath ||
+      wallpaper.config?.image ||
+      wallpaper.defaultConfig?.preview ||
+      wallpaper.defaultConfig?.thumbnail ||
+      wallpaper.defaultConfig?.poster ||
+      wallpaper.defaultConfig?.posterPath ||
+      wallpaper.defaultConfig?.cover ||
+      wallpaper.communityMeta?.preview ||
+      wallpaper.communityMeta?.thumbnail ||
+      wallpaper.communityMeta?.poster ||
+      wallpaper.communityMeta?.cover ||
+      (typeof wallpaper.communityMeta?.source === 'string' && /\.(png|jpe?g|webp|bmp|gif|svg)$/i.test(wallpaper.communityMeta.source) ? wallpaper.communityMeta.source : null)
 
-  if (explicitCandidate) {
-    let candidateStr = ''
-    if (typeof explicitCandidate === 'string') {
-      candidateStr = explicitCandidate.trim()
-    } else if (typeof explicitCandidate === 'object' && explicitCandidate !== null) {
-      candidateStr = (explicitCandidate.url || explicitCandidate.src || explicitCandidate.path || '').trim()
-    }
-
-    if (candidateStr) {
-      if (
-        candidateStr.startsWith('http://') ||
-        candidateStr.startsWith('https://') ||
-        candidateStr.startsWith('data:') ||
-        candidateStr.startsWith('blob:') ||
-        candidateStr.startsWith('/')
-      ) {
-        return candidateStr
+    if (explicitCandidate) {
+      let candidateStr = ''
+      if (typeof explicitCandidate === 'string') {
+        candidateStr = explicitCandidate.trim()
+      } else if (typeof explicitCandidate === 'object' && explicitCandidate !== null) {
+        candidateStr = (explicitCandidate.url || explicitCandidate.src || explicitCandidate.path || '').trim()
       }
-      return safeConvertFileSrc(candidateStr)
+
+      if (candidateStr) {
+        if (
+          candidateStr.startsWith('http://') ||
+          candidateStr.startsWith('https://') ||
+          candidateStr.startsWith('data:') ||
+          candidateStr.startsWith('blob:') ||
+          candidateStr.startsWith('/')
+        ) {
+          return candidateStr
+        }
+        return safeConvertFileSrc(candidateStr)
+      }
     }
   }
 
@@ -311,7 +313,39 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
 
   const [activePreview, setActivePreview] = useState(previewManager.getState())
   const [imgLoadError, setImgLoadError] = useState(false)
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const [generatedThumb, setGeneratedThumb] = useState(null)
   const containerRef = useRef(null)
+
+  // Reset errors whenever wallpaper identity changes
+  useEffect(() => {
+    setImgLoadError(false)
+    setThumbFailed(false)
+    setGeneratedThumb(null)
+  }, [wallpaper?.id, wallpaper?.thumbnail])
+
+  // On-demand thumbnail generation for local images missing a thumbnail
+  useEffect(() => {
+    let isCancelled = false
+    const isLocalImage = isImage && imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('data:')
+    const hasThumb = Boolean(wallpaper?.thumbnail || generatedThumb)
+
+    if (isLocalImage && !hasThumb && wallpaper?.id) {
+      getOrCreateMediaThumbnail(wallpaper.id, imgPath, 'image')
+        .then(thumbPath => {
+          if (!isCancelled && thumbPath) {
+            setGeneratedThumb(thumbPath)
+          }
+        })
+        .catch(err => {
+          console.warn(`[WallpaperThumbnail] On-demand thumbnail failed for ${wallpaper.id}:`, err)
+        })
+    }
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isImage, wallpaper?.id, wallpaper?.thumbnail, generatedThumb, imgPath])
 
   // Subscribe to previewManager singleton
   useEffect(() => {
@@ -362,8 +396,29 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
   const accentColor = isYouTube ? '#ef4444' : theme.color
   const badgeText = isYouTube ? 'YOUTUBE' : theme.badge
 
-  // Resolve genuine static thumbnail (images, streams, YouTube, canvas SVGs, supplied covers)
-  const staticThumbUrl = resolveWallpaperThumbnail(wallpaper)
+  // Determine static thumbnail URL to display:
+  // Priority 1: dedicated thumbnail (wallpaper.thumbnail or on-demand generatedThumb)
+  // Priority 2: fallback to resolveWallpaperThumbnail (original source image or remote stream/SVG)
+  const effectiveThumbnail = (!thumbFailed && (wallpaper?.thumbnail || generatedThumb))
+    ? (wallpaper?.thumbnail || generatedThumb)
+    : null
+
+  // If a dedicated thumbnail exists, use it. Otherwise fall back to resolveWallpaperThumbnail (original source image or remote stream/SVG)
+  const staticThumbUrl = effectiveThumbnail
+    ? safeConvertFileSrc(effectiveThumbnail)
+    : resolveWallpaperThumbnail(wallpaper, thumbFailed)
+
+  const handleImageError = () => {
+    if (effectiveThumbnail && !thumbFailed) {
+      // Downsampled thumbnail failed to decode; gracefully fall back to original image
+      console.warn(`[WallpaperThumbnail] Thumbnail decode failed for ${wallpaper?.id} (${effectiveThumbnail}), falling back to source asset`)
+      setThumbFailed(true)
+    } else {
+      // Original asset also failed (e.g. file deleted from disk)
+      console.warn(`[WallpaperThumbnail] Image load failed permanently for ${wallpaper?.id}`)
+      setImgLoadError(true)
+    }
+  }
 
   // STATIC THUMBNAIL: Visible at rest whenever genuine artwork/thumbnail exists (lightweight <img>, zero video decoders)
   let staticMedia = null
@@ -376,7 +431,7 @@ export default function WallpaperThumbnail({ wallpaper, isHovered = false, mode 
         decoding="async"
         width="320"
         height="180"
-        onError={() => setImgLoadError(true)}
+        onError={handleImageError}
         style={{
           position: 'absolute',
           inset: 0,

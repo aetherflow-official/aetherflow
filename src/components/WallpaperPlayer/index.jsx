@@ -24,6 +24,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
   const audioVolume         = useStore(s => s.audioVolume)
   const audioMuted          = useStore(s => s.audioMuted)
   const fps                 = useStore(s => s.fps)
+  const isWindowHidden      = useStore(s => s.isWindowHidden)
 
   // ── Merge global speed + preview flag into per-engine config ──────────────
   const mergedConfig = {
@@ -119,12 +120,14 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
 
     const updatePlayState = () => {
       if (!engineRef.current) return
-      if (isVisible && isIntersecting) {
+      if (isVisible && isIntersecting && !isWindowHidden) {
         try { engineRef.current.resume?.() } catch (e) {}
       } else {
         try { engineRef.current.pause?.() } catch (e) {}
       }
     }
+
+    updatePlayState()
 
     const handleVisibilityChange = () => {
       isVisible = !document.hidden
@@ -148,7 +151,7 @@ export default function WallpaperPlayer({ engineId, config = {}, preview = false
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (observer) observer.disconnect()
     }
-  }, [])
+  }, [isWindowHidden])
 
   // ── Live-update config without remounting ──────────────────────────────────
   useEffect(() => {

@@ -125,6 +125,10 @@ export const useStore = create(
       youtubeBackend: 'mpv',
       setYoutubeBackend: (backend) => set({ youtubeBackend: backend }),
 
+      // UI Lifecycle State (Window Hidden / Tray Suspension)
+      isWindowHidden: false,
+      setIsWindowHidden: (isWindowHidden) => set({ isWindowHidden }),
+
       // ── Screensaver Settings (Lively v2.1 Enhancements) ───────────────────
       screensaverEnabled: false,
       screensaverTimeoutMins: 5,

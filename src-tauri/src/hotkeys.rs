@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{LazyLock, Mutex};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 pub static HOTKEY_MAPPINGS: LazyLock<Mutex<HashMap<String, String>>> =
@@ -47,18 +47,7 @@ pub fn dispatch_action(app: &AppHandle, action: &str) {
             let _ = crate::trigger_screensaver(app.clone(), Some(true));
         }
         "openApp" => {
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.unminimize();
-                let _ = win.show();
-                let _ = win.set_focus();
-            }
-            #[cfg(windows)]
-            if let Some(main_h) = crate::get_main_hwnd() {
-                unsafe {
-                    windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(main_h, 9);
-                    windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(main_h);
-                }
-            }
+            crate::show_main_ui(app);
         }
         _ => {}
     }

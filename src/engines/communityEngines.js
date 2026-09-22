@@ -1776,14 +1776,25 @@ export function createIsometricCity(canvas, options = {}) {
 
 // ─── 27. NEON EQUALIZER (Retro & Audio) ───────────────────────────────────────
 export function createNeonEqualizer(canvas, options = {}) {
-  const { color = '#00f2fe', speedMultiplier = 1 } = options
+  const { color = '#00f2fe', speedMultiplier = 1, fps = 60 } = options
   const ctx = canvas.getContext('2d')
   let animId = null
   let t = 0
+  let isPaused = false
+  let lastTime = performance.now()
+  const targetFps = options.fps || fps || 60
+  const frameInterval = 1000 / targetFps
 
   function resize() { setupCanvas(canvas) }
 
-  function frame() {
+  function frame(now) {
+    if (isPaused) return
+    animId = requestAnimationFrame(frame)
+
+    const delta = now - lastTime
+    if (delta < frameInterval) return
+    lastTime = now - (delta % frameInterval)
+
     t += 0.05 * (options.speedMultiplier ?? speedMultiplier)
     const cx = canvas.width / 2
     const cy = canvas.height / 2
@@ -1797,35 +1808,55 @@ export function createNeonEqualizer(canvas, options = {}) {
     ctx.shadowColor = options.color || color
     ctx.shadowBlur = 12
 
+    // Batch all 48 radial bars into a single path to execute 1 Gaussian blur pass instead of 48
+    ctx.beginPath()
     for (let i = 0; i < BARS; i++) {
       const angle = (i / BARS) * Math.PI * 2
       const barH = 20 + Math.abs(Math.sin(t + i * 0.3) * Math.cos(t * 0.7 + i * 0.2)) * 80
       const r1 = 80
       const r2 = r1 + barH
 
-      ctx.beginPath()
       ctx.moveTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1)
       ctx.lineTo(cx + Math.cos(angle) * r2, cy + Math.sin(angle) * r2)
-      ctx.stroke()
     }
+    ctx.stroke()
     ctx.shadowBlur = 0
-
-    animId = requestAnimationFrame(frame)
   }
 
   function start() {
+    isPaused = false
     resize()
     window.addEventListener('resize', resize)
+    lastTime = performance.now()
+    animId = requestAnimationFrame(frame)
+  }
+
+  function pause() {
+    isPaused = true
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!isPaused) return
+    isPaused = false
+    lastTime = performance.now()
     animId = requestAnimationFrame(frame)
   }
 
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    isPaused = true
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
     window.removeEventListener('resize', resize)
   }
 
   function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  return { start, stop, pause, resume, updateOptions }
 }
 
 // ─── 28. PIXEL STAR NIGHT (Retro & Gaming) ────────────────────────────────────

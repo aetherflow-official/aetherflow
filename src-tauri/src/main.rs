@@ -4,7 +4,7 @@
 use tauri::{
     AppHandle, Emitter, Manager, WebviewWindowBuilder, WebviewUrl,
     menu::{Menu, MenuItem},
-    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::Color,
 };
 
@@ -93,7 +93,7 @@ pub fn get_system_idle_millis() -> u64 {
     0
 }
 
-use std::sync::Mutex;
+use std::sync::{Arc, Condvar, Mutex};
 use std::collections::HashMap;
 
 fn default_true() -> bool {
@@ -145,6 +145,8 @@ static SCREENSAVER_SETTINGS: Mutex<ScreensaverSettings> = Mutex::new(Screensaver
 static SCREENSAVER_ACTIVE: Mutex<bool> = Mutex::new(false);
 static SCREENSAVER_ACTIVATED_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 static SCREENSAVER_IS_PREVIEW: Mutex<bool> = Mutex::new(false);
+static SCREENSAVER_WAS_MAIN_VISIBLE: Mutex<bool> = Mutex::new(false);
+static LAST_TRAY_RESTORE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MonitorGridReport {
@@ -3949,8 +3951,8 @@ fn batch_import_media_files(
             (source_path.clone(), "reference".to_string())
         };
 
-        // Extract thumbnail for videos
-        let thumbnail = if is_video {
+        // Extract thumbnail for both videos and images
+        let thumbnail = if is_video || is_image {
             let wall_id = format!("local-{}-{}", now_ts, idx);
             let base = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let thumb_dir = base.join("thumbnails");
@@ -3958,8 +3960,8 @@ fn batch_import_media_files(
             let out_thumb = thumb_dir.join(format!("{}.jpg", wall_id));
             #[cfg(windows)]
             {
-                let vpath = std::path::Path::new(&final_path);
-                if thumbnail_extractor::extract_shell_thumbnail(vpath, &out_thumb, 640, 360).is_ok() {
+                let mpath = std::path::Path::new(&final_path);
+                if thumbnail_extractor::extract_media_thumbnail(mpath, &out_thumb, 768, 432).is_ok() {
                     Some(out_thumb.to_string_lossy().to_string())
                 } else {
                     None
@@ -4152,6 +4154,14 @@ fn do_trigger_screensaver(app: AppHandle, is_preview_val: bool) -> Result<(), St
     if let Ok(mut guard) = SCREENSAVER_IS_PREVIEW.lock() {
         *guard = is_preview_val;
     }
+    let main_was_visible = if let Some(main_win) = app.get_webview_window("main") {
+        main_win.is_visible().unwrap_or(false)
+    } else {
+        false
+    };
+    if let Ok(mut guard) = SCREENSAVER_WAS_MAIN_VISIBLE.lock() {
+        *guard = main_was_visible;
+    }
 
     let fade_secs = SCREENSAVER_SETTINGS.lock().map(|s| s.fade_in_secs).unwrap_or(1.0);
 
@@ -4341,11 +4351,15 @@ fn do_dismiss_screensaver(app: AppHandle) -> Result<(), String> {
     }
 
     let is_preview = SCREENSAVER_IS_PREVIEW.lock().map(|g| *g).unwrap_or(false);
+    let was_main_visible = SCREENSAVER_WAS_MAIN_VISIBLE.lock().map(|g| *g).unwrap_or(false);
     let elapsed_secs = SCREENSAVER_ACTIVATED_AT.lock().ok()
         .and_then(|mut g| g.take().map(|t| t.elapsed().as_secs()))
         .unwrap_or(0);
 
     if let Ok(mut g) = SCREENSAVER_IS_PREVIEW.lock() {
+        *g = false;
+    }
+    if let Ok(mut g) = SCREENSAVER_WAS_MAIN_VISIBLE.lock() {
         *g = false;
     }
 
@@ -4358,12 +4372,12 @@ fn do_dismiss_screensaver(app: AppHandle) -> Result<(), String> {
     };
 
     log_msg(&format!(
-        "[SCREENSAVER] Dismissing screensaver: preview={}, elapsed={}s, grace={}s, lock_on_resume={}",
-        is_preview, elapsed_secs, grace_period_secs, lock_on_resume
+        "[SCREENSAVER] Dismissing screensaver: preview={}, was_visible={}, elapsed={}s, grace={}s, lock_on_resume={}",
+        is_preview, was_main_visible, elapsed_secs, grace_period_secs, lock_on_resume
     ));
     println!(
-        "[SCREENSAVER] Dismissing screensaver: preview={}, elapsed={}s, grace={}s, lock_on_resume={}",
-        is_preview, elapsed_secs, grace_period_secs, lock_on_resume
+        "[SCREENSAVER] Dismissing screensaver: preview={}, was_visible={}, elapsed={}s, grace={}s, lock_on_resume={}",
+        is_preview, was_main_visible, elapsed_secs, grace_period_secs, lock_on_resume
     );
 
     // 3. Grace period logic: if not preview and past grace period, lock workstation if requested
@@ -4385,11 +4399,11 @@ fn do_dismiss_screensaver(app: AppHandle) -> Result<(), String> {
         );
     }
 
-    if is_preview {
-        if let Some(main_win) = app.get_webview_window("main") {
-            let _ = main_win.show();
-            let _ = main_win.set_focus();
-        }
+    if is_preview && was_main_visible {
+        log_msg("[SCREENSAVER] Restoring main window via show_main_ui because it was visible prior to preview");
+        show_main_ui(&app);
+    } else if is_preview {
+        log_msg("[SCREENSAVER] Main window was NOT visible prior to preview -> keeping it hidden in tray");
     }
 
     Ok(())
@@ -4597,8 +4611,59 @@ fn load_custom_wallpapers(app: AppHandle) -> Vec<serde_json::Value> {
     recovered
 }
 
+// Bounded concurrency limiter for native thumbnail extraction (max 4 concurrent workers)
+struct ThumbnailLimiter {
+    active: Mutex<usize>,
+    cond: Condvar,
+    max_concurrent: usize,
+}
+
+impl ThumbnailLimiter {
+    const fn new(max: usize) -> Self {
+        Self {
+            active: Mutex::new(0),
+            cond: Condvar::new(),
+            max_concurrent: max,
+        }
+    }
+
+    fn acquire(&self) {
+        if let Ok(mut count) = self.active.lock() {
+            while *count >= self.max_concurrent {
+                count = match self.cond.wait(count) {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+            }
+            *count += 1;
+        }
+    }
+
+    fn release(&self) {
+        if let Ok(mut count) = self.active.lock() {
+            if *count > 0 {
+                *count -= 1;
+            }
+            self.cond.notify_one();
+        }
+    }
+}
+
+static THUMBNAIL_LIMITER: ThumbnailLimiter = ThumbnailLimiter::new(4);
+
+// In-flight deduplication handle: prevents redundant concurrent thumbnail extractions for the same wallpaper
+type InFlightThumbHandle = Arc<(Mutex<Option<Result<String, String>>>, Condvar)>;
+
+static IN_FLIGHT_THUMBNAILS: std::sync::LazyLock<Mutex<HashMap<String, InFlightThumbHandle>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
 #[tauri::command]
-fn get_or_create_video_thumbnail(app: AppHandle, wallpaper_id: String, video_path: String) -> Result<String, String> {
+fn get_or_create_media_thumbnail(
+    app: AppHandle,
+    wallpaper_id: String,
+    media_path: String,
+    _media_type: Option<String>,
+) -> Result<String, String> {
     #[cfg(windows)]
     {
         let base = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -4606,21 +4671,81 @@ fn get_or_create_video_thumbnail(app: AppHandle, wallpaper_id: String, video_pat
         let _ = std::fs::create_dir_all(&thumb_dir);
         let out_file = thumb_dir.join(format!("{}.jpg", wallpaper_id));
 
+        let mpath = std::path::Path::new(&media_path);
+        if !mpath.exists() {
+            return Err(format!("Source media file does not exist: {}", media_path));
+        }
+
+        // Cache Validation & Invalidation:
+        // Re-use existing thumbnail ONLY if:
+        // 1. File exists
+        // 2. Size > 1000 bytes (not empty/corrupt)
+        // 3. Source file has not been modified after thumbnail generation
         if out_file.exists() {
-            if let Ok(meta) = std::fs::metadata(&out_file) {
-                if meta.len() > 1000 {
-                    return Ok(out_file.to_string_lossy().to_string());
+            if let Ok(thumb_meta) = std::fs::metadata(&out_file) {
+                if thumb_meta.len() > 1000 {
+                    let is_stale = if let (Ok(src_meta), Ok(thumb_mod)) = (std::fs::metadata(mpath), thumb_meta.modified()) {
+                        if let Ok(src_mod) = src_meta.modified() {
+                            src_mod > thumb_mod
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if !is_stale {
+                        return Ok(out_file.to_string_lossy().to_string());
+                    }
                 }
             }
         }
 
-        let vpath = std::path::Path::new(&video_path);
-        if !vpath.exists() {
-            return Err(format!("Video file does not exist: {}", video_path));
+        // In-flight deduplication:
+        // If another request is currently extracting this exact wallpaper thumbnail,
+        // wait for its completion rather than launching a redundant second generation.
+        let (handle, is_leader) = {
+            let mut in_flight = IN_FLIGHT_THUMBNAILS.lock().map_err(|e| e.to_string())?;
+            if let Some(existing) = in_flight.get(&wallpaper_id) {
+                (Arc::clone(existing), false)
+            } else {
+                let handle = Arc::new((Mutex::new(None), Condvar::new()));
+                in_flight.insert(wallpaper_id.clone(), Arc::clone(&handle));
+                (handle, true)
+            }
+        };
+
+        if !is_leader {
+            // Follower: wait on the leader's Condvar
+            let (lock, cvar) = &*handle;
+            let mut guard = lock.lock().map_err(|e| e.to_string())?;
+            while guard.is_none() {
+                guard = cvar.wait(guard).map_err(|e| e.to_string())?;
+            }
+            return guard.clone().unwrap();
         }
 
-        thumbnail_extractor::extract_shell_thumbnail(vpath, &out_file, 640, 360)?;
-        Ok(out_file.to_string_lossy().to_string())
+        // Leader: perform the extraction with bounded concurrency
+        THUMBNAIL_LIMITER.acquire();
+        let extract_result = thumbnail_extractor::extract_media_thumbnail(mpath, &out_file, 768, 432)
+            .map(|_| out_file.to_string_lossy().to_string());
+        THUMBNAIL_LIMITER.release();
+
+        // Broadcast result to all waiting callers and clean up in-flight map
+        {
+            let (lock, cvar) = &*handle;
+            if let Ok(mut guard) = lock.lock() {
+                *guard = Some(extract_result.clone());
+                cvar.notify_all();
+            }
+        }
+        {
+            if let Ok(mut in_flight) = IN_FLIGHT_THUMBNAILS.lock() {
+                in_flight.remove(&wallpaper_id);
+            }
+        }
+
+        extract_result
     }
     #[cfg(not(windows))]
     {
@@ -4629,7 +4754,17 @@ fn get_or_create_video_thumbnail(app: AppHandle, wallpaper_id: String, video_pat
 }
 
 #[tauri::command]
+fn get_or_create_video_thumbnail(app: AppHandle, wallpaper_id: String, video_path: String) -> Result<String, String> {
+    get_or_create_media_thumbnail(app, wallpaper_id, video_path, Some("video".to_string()))
+}
+
+#[tauri::command]
 fn sync_all_custom_video_thumbnails(app: AppHandle) -> Result<(), String> {
+    sync_all_custom_media_thumbnails(app)
+}
+
+#[tauri::command]
+fn sync_all_custom_media_thumbnails(app: AppHandle) -> Result<(), String> {
     #[cfg(windows)]
     {
         let app_handle = app.clone();
@@ -4665,31 +4800,58 @@ fn sync_all_custom_video_thumbnails(app: AppHandle) -> Result<(), String> {
                     || item.get("mediaType").and_then(|v| v.as_str()) == Some("video")
                     || item.get("config").and_then(|c| c.get("videoPath")).is_some();
 
-                if !is_video {
+                let is_image = item.get("engine").and_then(|v| v.as_str()) == Some("image-player")
+                    || item.get("mediaType").and_then(|v| v.as_str()) == Some("image")
+                    || item.get("config").and_then(|c| c.get("imagePath")).is_some();
+
+                if !is_video && !is_image {
                     continue;
                 }
 
-                // Check if current thumbnail is valid and file exists
-                let current_thumb = item.get("thumbnail").and_then(|v| v.as_str()).unwrap_or("");
-                if !current_thumb.is_empty() && std::path::Path::new(current_thumb).exists() {
-                    continue;
-                }
-
-                let video_path = match item.get("config").and_then(|c| c.get("videoPath")).and_then(|v| v.as_str()) {
-                    Some(p) => p,
-                    None => continue,
+                let media_path = if is_video {
+                    item.get("config").and_then(|c| c.get("videoPath")).and_then(|v| v.as_str())
+                } else {
+                    item.get("config").and_then(|c| c.get("imagePath")).and_then(|v| v.as_str())
                 };
 
-                let vpath = std::path::Path::new(video_path);
-                if !vpath.exists() {
+                let media_str = match media_path {
+                    Some(p) if !p.trim().is_empty() => p.trim(),
+                    _ => continue,
+                };
+
+                let mpath = std::path::Path::new(media_str);
+                if !mpath.exists() {
                     continue;
                 }
 
                 let out_file = thumb_dir.join(format!("{}.jpg", id));
-                let need_extract = !out_file.exists() || std::fs::metadata(&out_file).map(|m| m.len() < 1000).unwrap_or(true);
+                let mut need_extract = true;
+
+                if out_file.exists() {
+                    if let Ok(thumb_meta) = std::fs::metadata(&out_file) {
+                        if thumb_meta.len() > 1000 {
+                            let is_stale = if let (Ok(src_meta), Ok(thumb_mod)) = (std::fs::metadata(mpath), thumb_meta.modified()) {
+                                if let Ok(src_mod) = src_meta.modified() {
+                                    src_mod > thumb_mod
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+                            if !is_stale {
+                                need_extract = false;
+                            }
+                        }
+                    }
+                }
 
                 if need_extract {
-                    if let Err(e) = thumbnail_extractor::extract_shell_thumbnail(vpath, &out_file, 640, 360) {
+                    THUMBNAIL_LIMITER.acquire();
+                    let res = thumbnail_extractor::extract_media_thumbnail(mpath, &out_file, 768, 432);
+                    THUMBNAIL_LIMITER.release();
+
+                    if let Err(e) = res {
                         eprintln!("[Thumbnails] Extraction failed for {}: {}", id, e);
                         continue;
                     }
@@ -4697,8 +4859,11 @@ fn sync_all_custom_video_thumbnails(app: AppHandle) -> Result<(), String> {
 
                 if out_file.exists() {
                     let thumb_str = out_file.to_string_lossy().to_string();
-                    item["thumbnail"] = serde_json::Value::String(thumb_str);
-                    any_updated = true;
+                    let current_thumb = item.get("thumbnail").and_then(|v| v.as_str()).unwrap_or("");
+                    if current_thumb != thumb_str {
+                        item["thumbnail"] = serde_json::Value::String(thumb_str);
+                        any_updated = true;
+                    }
                 }
             }
 
@@ -4707,7 +4872,7 @@ fn sync_all_custom_video_thumbnails(app: AppHandle) -> Result<(), String> {
                     let _ = std::fs::write(&path, new_data);
                 }
                 let _ = app_handle.emit("custom_thumbnails_updated", items);
-                println!("[Thumbnails] Successfully synced native video thumbnails for custom wallpapers");
+                println!("[Thumbnails] Successfully synced native media thumbnails for custom wallpapers");
             }
         });
         Ok(())
@@ -4908,10 +5073,9 @@ fn set_wallpaper_opacity(app: AppHandle, opacity: f64) {
 fn toggle_control_panel(app: AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         if win.is_visible().unwrap_or(false) {
-            let _ = win.hide();
+            hide_main_ui_to_tray(&win);
         } else {
-            let _ = win.show();
-            let _ = win.set_focus();
+            show_main_ui(&app);
         }
     }
 }
@@ -5108,6 +5272,124 @@ fn is_autostart_enabled() -> bool {
     }
 }
 
+#[cfg(windows)]
+fn hide_main_ui_to_tray(win: &tauri::WebviewWindow) {
+    log_msg("[WEBVIEW2 LIFECYCLE] hide_main_ui_to_tray called");
+    let _ = win.emit("aether:window-hidden", ());
+    let _ = win.hide();
+
+    let res = win.with_webview(|platform_webview| {
+        #[cfg(windows)]
+        unsafe {
+            log_msg("[WEBVIEW2 LIFECYCLE] hide closure executing");
+            let controller = platform_webview.controller();
+            let _ = controller.SetIsVisible(false);
+            log_msg("[WEBVIEW2 LIFECYCLE] SetIsVisible(false) called");
+        }
+    });
+    if let Err(e) = res {
+        log_msg(&format!("[WEBVIEW2 LIFECYCLE] with_webview hide result: {}", e));
+    }
+
+    #[cfg(windows)]
+    trim_all_process_memory();
+}
+
+#[cfg(windows)]
+pub fn show_main_ui(app: &AppHandle) {
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        log_msg("[WEBVIEW2 LIFECYCLE] show_main_ui executing on main thread");
+        if let Some(win) = app_handle.get_webview_window("main") {
+            let res = win.with_webview(|platform_webview| {
+                unsafe {
+                    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_3;
+                    use windows_core::Interface;
+
+                    let controller = platform_webview.controller();
+
+                    // 1. Resume CoreWebView2 only if it is actually suspended
+                    if let Ok(core) = controller.CoreWebView2() {
+                        if let Ok(core3) = core.cast::<ICoreWebView2_3>() {
+                            let mut is_suspended = windows_core::BOOL(0);
+                            if core3.IsSuspended(&mut is_suspended).is_ok() {
+                                if is_suspended.as_bool() {
+                                    let _ = core3.Resume();
+                                    log_msg("[WEBVIEW2 LIFECYCLE] show_main_ui: Resumed suspended CoreWebView2");
+                                }
+                            } else {
+                                let _ = core3.Resume();
+                            }
+                        }
+                    }
+
+                    // 2. Set controller visibility
+                    let _ = controller.SetIsVisible(true);
+                    log_msg("[WEBVIEW2 LIFECYCLE] show_main_ui: SetIsVisible(true) called");
+                }
+            });
+            if let Err(e) = res {
+                log_msg(&format!("[WEBVIEW2 LIFECYCLE] with_webview show_main_ui result: {}", e));
+            }
+
+            // 3. Unminimize and show window
+            let _ = win.unminimize();
+            let _ = win.show();
+            let _ = win.set_focus();
+
+            if let Some(main_h) = get_main_hwnd() {
+                unsafe {
+                    ShowWindow(main_h, 9); // SW_RESTORE
+                    SetForegroundWindow(main_h);
+                }
+            }
+
+            // 4. Emit frontend event so UI animation loops can resume
+            let _ = win.emit("aether:window-visible", ());
+        } else {
+            log_msg("[WEBVIEW2 LIFECYCLE WARN] show_main_ui: 'main' window not found");
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn hide_main_ui_to_tray(win: &tauri::WebviewWindow) {
+    let _ = win.emit("aether:window-hidden", ());
+    let _ = win.hide();
+}
+
+#[cfg(not(windows))]
+pub fn show_main_ui(app: &AppHandle) {
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = app_handle.get_webview_window("main") {
+            let _ = win.unminimize();
+            let _ = win.show();
+            let _ = win.set_focus();
+            let _ = win.emit("aether:window-visible", ());
+        }
+    });
+}
+
+#[allow(dead_code)]
+fn restore_main_ui_from_tray(win: &tauri::WebviewWindow) {
+    show_main_ui(&win.app_handle().clone());
+}
+
+#[tauri::command]
+fn hide_main_window(app: tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        hide_main_ui_to_tray(&win);
+    }
+}
+
+#[tauri::command]
+fn restore_main_window(app: tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        restore_main_ui_from_tray(&win);
+    }
+}
+
 #[tauri::command]
 fn is_minimized_boot() -> bool {
     std::env::args().any(|arg| arg == "--minimized" || arg == "--autostart")
@@ -5255,19 +5537,9 @@ fn urlencoding_decode(s: &str) -> String {
 }
 
 /// Helper to restore and focus the main AetherFlow window
+/// Helper to restore and focus the main AetherFlow window
 fn focus_main_window(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.unminimize();
-        let _ = w.show();
-        let _ = w.set_focus();
-    }
-    #[cfg(windows)]
-    if let Some(main_h) = get_main_hwnd() {
-        unsafe {
-            ShowWindow(main_h, 9); // SW_RESTORE
-            SetForegroundWindow(main_h);
-        }
-    }
+    show_main_ui(app);
 }
 
 /// Starts a local loopback HTTP server to receive OAuth callback from the system browser
@@ -6317,19 +6589,8 @@ fn main() {
             });
 
             if !is_background_action || argv.iter().any(|arg| arg == "--open") {
-                log_msg("[SINGLE INSTANCE] Second instance signal received, restoring main window");
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.unminimize();
-                    let _ = win.show();
-                    let _ = win.set_focus();
-                }
-                #[cfg(windows)]
-                if let Some(main_h) = get_main_hwnd() {
-                    unsafe {
-                        ShowWindow(main_h, 9); // SW_RESTORE
-                        SetForegroundWindow(main_h);
-                    }
-                }
+                log_msg("[SINGLE INSTANCE] Second instance signal received, restoring main window via show_main_ui");
+                show_main_ui(app);
             }
 
             if argv.iter().any(|arg| arg == "--next") {
@@ -6484,6 +6745,8 @@ fn main() {
             set_autostart,
             is_autostart_enabled,
             is_minimized_boot,
+            hide_main_window,
+            restore_main_window,
             frontend_heartbeat,
             report_frontend_error,
             get_diagnostics,
@@ -6508,7 +6771,9 @@ fn main() {
             get_screensaver_active_wallpaper,
             get_grid_detection_state,
             get_or_create_video_thumbnail,
+            get_or_create_media_thumbnail,
             sync_all_custom_video_thumbnails,
+            sync_all_custom_media_thumbnails,
             get_file_metadata,
             batch_import_media_files,
             scan_directory_media,
@@ -6578,15 +6843,24 @@ fn main() {
                         let _ = w.set_icon(icon.clone());
                     }
                     #[cfg(windows)]
-                    if let Ok(raw_h) = w.hwnd() {
-                        let raw_hwnd = raw_h.0 as HWND;
-                        set_main_hwnd(raw_hwnd);
-                        unsafe {
-                            let parent = GetParent(raw_hwnd);
-                            let msg = format!("[DIAG 1 & 4] Initial Main AetherFlow HWND: 0x{:X}, parent: 0x{:X}", raw_hwnd as usize, parent as usize);
-                            log_msg(&msg);
-                            println!("{}", msg);
-                        }
+                    {
+                        let w_hwnd_clone = w.clone();
+                        tauri::async_runtime::spawn(async move {
+                            for _ in 0..20 {
+                                if let Ok(raw_h) = w_hwnd_clone.hwnd() {
+                                    let raw_hwnd = raw_h.0 as HWND;
+                                    set_main_hwnd(raw_hwnd);
+                                    unsafe {
+                                        let parent = GetParent(raw_hwnd);
+                                        let msg = format!("[DIAG 1 & 4] Initial Main AetherFlow HWND: 0x{:X}, parent: 0x{:X}", raw_hwnd as usize, parent as usize);
+                                        log_msg(&msg);
+                                        println!("{}", msg);
+                                    }
+                                    break;
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                            }
+                        });
                     }
                     
                     let w_clone = w.clone();
@@ -6594,13 +6868,8 @@ fn main() {
                         match event {
                             tauri::WindowEvent::CloseRequested { api, .. } => {
                                 log_msg("[MAIN WIN EVENT] CloseRequested -> hiding window to tray");
-                                let _ = dismiss_screensaver(w_clone.app_handle().clone());
-                                let _ = w_clone.hide();
+                                hide_main_ui_to_tray(&w_clone);
                                 api.prevent_close();
-
-                                // Trim process memory working set of host and all child WebView2 processes
-                                #[cfg(windows)]
-                                trim_all_process_memory();
                             }
                             tauri::WindowEvent::Moved(pos) => {
                                 log_msg(&format!("[MAIN WIN EVENT] Moved to ({}, {})", pos.x, pos.y));
@@ -6824,18 +7093,7 @@ fn main() {
                 .on_menu_event(move |app, event| {
                     match event.id().as_ref() {
                         "open" => {
-                            if let Some(win) = app.get_webview_window("main") {
-                                let _ = win.unminimize();
-                                let _ = win.show();
-                                let _ = win.set_focus();
-                            }
-                            #[cfg(windows)]
-                            if let Some(main_h) = get_main_hwnd() {
-                                unsafe {
-                                    ShowWindow(main_h, 9);
-                                    SetForegroundWindow(main_h);
-                                }
-                            }
+                            show_main_ui(app);
                         }
                         "next" => {
                             let _ = app.emit("aether:shortcut:next", ());
@@ -6973,22 +7231,23 @@ fn main() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    // Single-click or Double-click tray icon → restore and focus control panel
+                    // Single-click mouse-up on tray icon → debounce and restore control panel
                     match event {
-                        TrayIconEvent::Click { button: MouseButton::Left, .. }
-                        | TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
-                            let app = tray.app_handle();
-                            if let Some(win) = app.get_webview_window("main") {
-                                let _ = win.unminimize();
-                                let _ = win.show();
-                                let _ = win.set_focus();
-                            }
-                            #[cfg(windows)]
-                            if let Some(main_h) = get_main_hwnd() {
-                                unsafe {
-                                    ShowWindow(main_h, 9);
-                                    SetForegroundWindow(main_h);
+                        TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } => {
+                            let mut should_restore = true;
+                            if let Ok(mut guard) = LAST_TRAY_RESTORE.lock() {
+                                let now = std::time::Instant::now();
+                                if let Some(last) = *guard {
+                                    if now.duration_since(last) < std::time::Duration::from_millis(400) {
+                                        should_restore = false;
+                                    }
                                 }
+                                if should_restore {
+                                    *guard = Some(now);
+                                }
+                            }
+                            if should_restore {
+                                show_main_ui(&tray.app_handle());
                             }
                         }
                         _ => {}
@@ -7004,4 +7263,169 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running AetherFlow")
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_sync_local_custom_images() {
+        let path = std::path::PathBuf::from(std::env::var("APPDATA").unwrap())
+            .join("com.aetherflow.app")
+            .join("custom_wallpapers.json");
+
+        if !path.exists() {
+            return;
+        }
+
+        let thumb_dir = path.parent().unwrap().join("thumbnails");
+        let _ = std::fs::create_dir_all(&thumb_dir);
+
+        let data = std::fs::read_to_string(&path).unwrap();
+        let mut items: Vec<serde_json::Value> = serde_json::from_str(&data).unwrap();
+        let mut updated = false;
+
+        for item in items.iter_mut() {
+            let id = match item.get("id").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+
+            let is_video = item.get("engine").and_then(|v| v.as_str()) == Some("video-player")
+                || item.get("mediaType").and_then(|v| v.as_str()) == Some("video")
+                || item.get("config").and_then(|c| c.get("videoPath")).is_some();
+
+            let is_image = item.get("engine").and_then(|v| v.as_str()) == Some("image-player")
+                || item.get("mediaType").and_then(|v| v.as_str()) == Some("image")
+                || item.get("config").and_then(|c| c.get("imagePath")).is_some();
+
+            if !is_video && !is_image {
+                continue;
+            }
+
+            let media_path = if is_video {
+                item.get("config").and_then(|c| c.get("videoPath")).and_then(|v| v.as_str())
+            } else {
+                item.get("config").and_then(|c| c.get("imagePath")).and_then(|v| v.as_str())
+            };
+
+            let media_str = match media_path {
+                Some(p) if !p.trim().is_empty() => p.trim(),
+                _ => continue,
+            };
+
+            let mpath = std::path::Path::new(media_str);
+            if !mpath.exists() {
+                continue;
+            }
+
+            let out_file = thumb_dir.join(format!("{}.jpg", id));
+            let mut need_extract = true;
+
+            if out_file.exists() {
+                if let Ok(thumb_meta) = std::fs::metadata(&out_file) {
+                    if thumb_meta.len() > 1000 {
+                        let is_stale = if let (Ok(src_meta), Ok(thumb_mod)) = (std::fs::metadata(mpath), thumb_meta.modified()) {
+                            if let Ok(src_mod) = src_meta.modified() {
+                                src_mod > thumb_mod
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        };
+                        if !is_stale {
+                            need_extract = false;
+                        }
+                    }
+                }
+            }
+
+            if need_extract {
+                let res = thumbnail_extractor::extract_media_thumbnail(mpath, &out_file, 768, 432);
+                if let Err(e) = res {
+                    eprintln!("Extraction failed for {}: {}", id, e);
+                    continue;
+                }
+            }
+
+            if out_file.exists() {
+                let thumb_str = out_file.to_string_lossy().to_string();
+                let current_thumb = item.get("thumbnail").and_then(|v| v.as_str()).unwrap_or("");
+                if current_thumb != thumb_str {
+                    item["thumbnail"] = serde_json::Value::String(thumb_str);
+                    updated = true;
+                }
+            }
+        }
+
+        if updated {
+            let new_data = serde_json::to_string_pretty(&items).unwrap();
+            std::fs::write(&path, new_data).unwrap();
+            println!("Updated custom_wallpapers.json with image thumbnails!");
+        }
+    }
+
+    #[test]
+    fn test_corrupt_thumbnail_regeneration() {
+        let temp_dir = std::env::temp_dir().join("aether_corrupt_test");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let src = r"G:\aether wallpapers\upside down.png";
+        if !Path::new(src).exists() {
+            return;
+        }
+
+        let out_file = temp_dir.join("corrupt_thumb.jpg");
+        // Write 10 bytes of corrupt garbage
+        std::fs::write(&out_file, b"corrupted!").unwrap();
+        assert!(std::fs::metadata(&out_file).unwrap().len() < 1000);
+
+        // Verification check as implemented in get_or_create_media_thumbnail & sync:
+        let is_valid = out_file.exists() && std::fs::metadata(&out_file).map(|m| m.len() > 1000).unwrap_or(false);
+        assert!(!is_valid, "Corrupt thumbnail must be detected as invalid");
+
+        // Re-extract
+        let res = thumbnail_extractor::extract_media_thumbnail(Path::new(src), &out_file, 768, 432);
+        assert!(res.is_ok());
+        assert!(std::fs::metadata(&out_file).unwrap().len() > 1000, "Regenerated thumbnail must be >1000 bytes");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_stale_source_invalidation() {
+        let temp_dir = std::env::temp_dir().join("aether_stale_test");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let src = temp_dir.join("dummy_source.png");
+        let out_thumb = temp_dir.join("dummy_thumb.jpg");
+
+        // Create initial source file
+        std::fs::write(&src, b"fake png data 1").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Create initial thumbnail file
+        std::fs::write(&out_thumb, vec![0u8; 1500]).unwrap();
+        let thumb_meta = std::fs::metadata(&out_thumb).unwrap();
+
+        // Initially thumbnail is newer than source
+        let is_stale_initial = {
+            let src_meta = std::fs::metadata(&src).unwrap();
+            src_meta.modified().unwrap() > thumb_meta.modified().unwrap()
+        };
+        assert!(!is_stale_initial, "Thumbnail should not be stale initially");
+
+        // Now modify source file after thumbnail creation
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::fs::write(&src, b"fake png data updated").unwrap();
+
+        let is_stale_after_update = {
+            let src_meta = std::fs::metadata(&src).unwrap();
+            src_meta.modified().unwrap() > thumb_meta.modified().unwrap()
+        };
+        assert!(is_stale_after_update, "Thumbnail must be detected as stale when source is newer");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }

@@ -287,6 +287,39 @@ export async function importWallpaperDialog() {
   return null
 }
 
+const inFlightMediaThumbnails = new Map()
+
+/**
+ * Deduplicated, bounded thumbnail request for any media item (image or video).
+ * Multiple simultaneous requests for the same wallpaper share the exact same Promise.
+ */
+export async function getOrCreateMediaThumbnail(wallpaperId, mediaPath, mediaType = 'image') {
+  if (!wallpaperId || !mediaPath) return null
+  const cacheKey = `${wallpaperId}:${mediaPath}`
+  if (inFlightMediaThumbnails.has(cacheKey)) {
+    return inFlightMediaThumbnails.get(cacheKey)
+  }
+
+  const promise = (async () => {
+    try {
+      const thumb = await tauriInvoke('get_or_create_media_thumbnail', {
+        wallpaperId,
+        mediaPath,
+        mediaType,
+      })
+      return thumb || null
+    } catch (err) {
+      console.warn(`[AetherFlow] get_or_create_media_thumbnail failed for ${wallpaperId}:`, err)
+      return null
+    } finally {
+      inFlightMediaThumbnails.delete(cacheKey)
+    }
+  })()
+
+  inFlightMediaThumbnails.set(cacheKey, promise)
+  return promise
+}
+
 /**
  * Adds a media file path (picture or video) into the user's installed library with optional custom name & home pinning.
  * Self-contained: Copies media to %APPDATA%\AetherFlow\library\ so deleting original files doesn't break wallpapers.
@@ -311,18 +344,17 @@ export async function addCustomMediaWallpaper(path, customName = null, pinToHome
 
   const itemId = 'local-' + Date.now()
   let thumbnail = null
-  if (!isImg) {
-    try {
-      const generatedThumb = await tauriInvoke('get_or_create_video_thumbnail', {
-        wallpaperId: itemId,
-        videoPath: finalPath,
-      })
-      if (generatedThumb) {
-        thumbnail = generatedThumb
-      }
-    } catch (thumbErr) {
-      console.warn('[AetherFlow] Native thumbnail generation failed on import:', thumbErr)
+  try {
+    const generatedThumb = await tauriInvoke('get_or_create_media_thumbnail', {
+      wallpaperId: itemId,
+      mediaPath: finalPath,
+      mediaType: isImg ? 'image' : 'video',
+    })
+    if (generatedThumb) {
+      thumbnail = generatedThumb
     }
+  } catch (thumbErr) {
+    console.warn('[AetherFlow] Native thumbnail generation failed on import:', thumbErr)
   }
 
   const item = isImg ? {
@@ -330,6 +362,7 @@ export async function addCustomMediaWallpaper(path, customName = null, pinToHome
     type: 'wallpaper',
     name: customName?.trim() || cleanName || filename,
     engine: 'image-player',
+    thumbnail,
     config: { imagePath: finalPath, fit: 'cover' },
     tags: ['custom', 'picture', 'image'],
     installedAt: new Date().toISOString(),
