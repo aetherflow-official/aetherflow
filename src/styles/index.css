@@ -2974,7 +2974,7 @@ input:checked ~ .toggle-thumb {
   border: 1px solid rgba(239, 68, 68, 0.45);
 }
 
-/* 7. Card Apply Transparent Action (No background, no borders, pure typography, always visible) */
+/* 7. Card Apply Transparent Action (No background, no borders, pure typography, only visible on hover) */
 .wp-pill-apply-btn {
   display: inline-flex;
   align-items: center;
@@ -2990,13 +2990,14 @@ input:checked ~ .toggle-thumb {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  opacity: 0.9;
-  pointer-events: auto;
-  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, color 0.15s ease, text-shadow 0.15s ease;
 }
 
 .wp-overlay-card:hover .wp-pill-apply-btn {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .wp-pill-apply-btn:hover {
@@ -3012,6 +3013,11 @@ input:checked ~ .toggle-thumb {
   box-shadow: none;
   color: #34d399;
   text-shadow: 0 0 8px rgba(52, 211, 153, 0.4), 0 1px 3px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wp-overlay-card:hover .wp-pill-apply-btn.active {
   opacity: 1;
   pointer-events: auto;
 }
