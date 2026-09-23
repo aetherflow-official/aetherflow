@@ -794,16 +794,13 @@ export default function HomePage() {
     }))
 
     const customs = (installed || [])
-      .filter(item => item && item.type === 'wallpaper')
-      .map(item => ({
-        ...item,
-        id: item.id,
-        name: names[item.id] || item.name,
-        engine: item.engine || 'video-player',
-        tags: item.tags || ['custom', 'video'],
-        config: item.config || {},
+      .filter(i => i && (i.type === 'wallpaper' || i.type === 'engine' || i.isCustom || Boolean(i.engine)))
+      .map((i, idx) => ({
+        ...i,
+        name: names[i.id] || i.name,
+        engine: i.engine || (i.mediaType === 'canvas' ? i.source?.replace('engine:', '') : 'video-player'),
         isCustom: true,
-        installedAt: item.installedAt,
+        installedAt: i.installedAt || (Date.now() - idx * 1000),
       }))
 
     const all = [...customs, ...builtins]
@@ -1187,7 +1184,7 @@ export default function HomePage() {
                 <WallpaperThumbnail
                   wallpaper={activeWallpaper}
                   isHovered={false}
-                  mode="always"
+                  mode="off"
                 />
               </div>
             )}

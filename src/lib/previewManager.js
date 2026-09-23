@@ -97,11 +97,13 @@ class PreviewManager {
    * Cancel preview for a specific wallpaper (or any pending preview if id omitted).
    */
   cancelPreview(id = null) {
-    if (this.pendingTimer) {
-      clearTimeout(this.pendingTimer)
-      this.pendingTimer = null
+    if (id === null || this.pendingId === id) {
+      if (this.pendingTimer) {
+        clearTimeout(this.pendingTimer)
+        this.pendingTimer = null
+      }
+      this.pendingId = null
     }
-    this.pendingId = null
 
     if (id === null || this.activeId === id) {
       this._teardownCurrent()

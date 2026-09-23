@@ -93,6 +93,7 @@ export default function WallpaperCard({
   onSelect,
   onApply,
   onPreview,
+  onModalPreview,
   onToggleLike,
   onTogglePin,
   onRename,
@@ -343,11 +344,11 @@ export default function WallpaperCard({
             )}
           </div>
 
-          {/* Action Cluster in Bottom-Right: Sovereign Apply Button */}
+          {/* Action Cluster in Bottom-Right: Transparent Apply Action */}
           <div className="wp-overlay-actions-row" onClick={(e) => e.stopPropagation()}>
             {isLive ? (
               <div className="wp-pill-apply-btn active" title="Currently running on desktop">
-                <Check size={10} strokeWidth={2.5} />
+                <Check size={11} strokeWidth={2.5} />
                 <span>Active</span>
               </div>
             ) : (
@@ -359,7 +360,7 @@ export default function WallpaperCard({
                 title="Apply to desktop"
               >
                 {typeInfo.type === 'image' ? (
-                  <ImageIcon size={10} />
+                  <ImageIcon size={11} />
                 ) : (
                   <Play size={10} fill="currentColor" />
                 )}
