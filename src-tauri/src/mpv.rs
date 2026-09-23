@@ -190,6 +190,20 @@ impl MpvProcess {
         }))
     }
 
+    pub fn set_contrast(&self, contrast: f64) -> Result<(), String> {
+        let mpv_val = ((contrast - 1.0) * 100.0).round().max(-100.0).min(100.0);
+        self.send_ipc_command(serde_json::json!({
+            "command": ["set_property", "contrast", mpv_val]
+        }))
+    }
+
+    pub fn set_saturation(&self, saturation: f64) -> Result<(), String> {
+        let mpv_val = ((saturation - 1.0) * 100.0).round().max(-100.0).min(100.0);
+        self.send_ipc_command(serde_json::json!({
+            "command": ["set_property", "saturation", mpv_val]
+        }))
+    }
+
     pub fn set_pause(&self, paused: bool) -> Result<(), String> {
         self.send_ipc_command(serde_json::json!({
             "command": ["set_property", "pause", paused]

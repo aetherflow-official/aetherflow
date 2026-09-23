@@ -551,6 +551,8 @@ export default function HomePage() {
   const setWallpaperOpacity   = useStore(s => s.setWallpaperOpacity)
   const wallpaperBrightness   = useStore(s => s.wallpaperBrightness)
   const setWallpaperBrightness = useStore(s => s.setWallpaperBrightness)
+  const wallpaperContrast     = useStore(s => s.wallpaperContrast) ?? 1.0
+  const wallpaperSaturation   = useStore(s => s.wallpaperSaturation) ?? 1.0
   const wallpaperSpeed        = useStore(s => s.wallpaperSpeed)
   const setWallpaperSpeed     = useStore(s => s.setWallpaperSpeed)
 
@@ -567,9 +569,13 @@ export default function HomePage() {
   const isWindowHidden        = useStore(s => s.isWindowHidden)
 
   const [monitors, setMonitors] = useState([])
-  const [selectedMonitorLabel, setSelectedMonitorLabel] = useState(null)
+  const [selectedMonitorLabel, setSelectedMonitorLabel] = useState('all')
   const [isTopPreviewPaused, setIsTopPreviewPaused] = useState(false)
   const volumeIpcTimerRef = useRef(null)
+
+  function handleSelectMonitor(label) {
+    setSelectedMonitorLabel(label)
+  }
 
   useEffect(() => {
     let unlistenMonitors
@@ -584,8 +590,9 @@ export default function HomePage() {
             })
             setMonitors(res)
             setSelectedMonitorLabel(prev => {
-              if (prev && res.some(m => m.label === prev)) return prev
-              return res[0].label
+              if (!prev || prev === 'all') return 'all'
+              if (res.some(m => m.label === prev)) return prev
+              return 'all'
             })
           }
         })
@@ -881,7 +888,7 @@ export default function HomePage() {
 
     setApplying(true)
     try {
-      const mon = screenArrangement === 'per-screen' ? selectedMonitorLabel : null
+      const mon = (selectedMonitorLabel && selectedMonitorLabel !== 'all') ? selectedMonitorLabel : null
       const targetAudio = wallpaperAudioSettings[wp.id] || {
         volume: wp.config?.volume ?? audioVolume ?? 50,
         muted: wp.config?.muted ?? audioMuted ?? false,
@@ -893,6 +900,8 @@ export default function HomePage() {
         muted: targetAudio.muted,
         opacity: wallpaperOpacity,
         brightness: wallpaperBrightness,
+        contrast: wallpaperContrast,
+        saturation: wallpaperSaturation,
       })
     } finally {
       setApplying(false)
@@ -901,7 +910,7 @@ export default function HomePage() {
 
   // ── Stop wallpaper ───────────────────────────────────────────────────────
   async function handleStop() {
-    const mon = screenArrangement === 'per-screen' ? selectedMonitorLabel : null
+    const mon = (selectedMonitorLabel && selectedMonitorLabel !== 'all') ? selectedMonitorLabel : null
     await stopDesktopWallpaper(mon)
   }
 
@@ -953,7 +962,7 @@ export default function HomePage() {
     if (isWallpaperRunning) {
       await tauriInvoke('update_wallpaper_config', {
         config: updatedConfig,
-        monitorLabel: selectedMonitorLabel || null,
+        monitorLabel: (selectedMonitorLabel && selectedMonitorLabel !== 'all') ? selectedMonitorLabel : null,
       })
     }
   }
@@ -965,7 +974,7 @@ export default function HomePage() {
     if (isWallpaperRunning) {
       await tauriInvoke('update_wallpaper_config', {
         config: updatedConfig,
-        monitorLabel: selectedMonitorLabel || null,
+        monitorLabel: (selectedMonitorLabel && selectedMonitorLabel !== 'all') ? selectedMonitorLabel : null,
       })
     }
   }
@@ -1321,7 +1330,13 @@ export default function HomePage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       type="button"
-                      onClick={() => handleApply()}
+                      onClick={() => {
+                        if (selectedIsLive) {
+                          handleStop()
+                        } else {
+                          handleApply()
+                        }
+                      }}
                       disabled={applying}
                       style={{
                         display: 'inline-flex',
@@ -1339,18 +1354,23 @@ export default function HomePage() {
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      {isWallpaperRunning ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
-                      <span>{isWallpaperRunning ? 'Pause' : 'Apply'}</span>
+                      {selectedIsLive ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+                      <span>{selectedIsLive ? 'Stop' : 'Apply'}</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => {
+                      disabled={applying}
+                      onClick={async () => {
                         const allList = homeWallpapers || []
-                        if (allList.length > 1) {
-                          const idx = allList.findIndex(w => w.id === activeWallpaper.id)
-                          const nextIdx = (idx + 1) % allList.length
-                          selectWallpaper(allList[nextIdx])
+                        if (allList.length > 0) {
+                          const idx = allList.findIndex(w => w.id === activeWallpaper?.id)
+                          const nextIdx = idx >= 0 ? (idx + 1) % allList.length : 0
+                          const nextWp = allList[nextIdx]
+                          if (nextWp) {
+                            selectWallpaper(nextWp)
+                            await handleApply(nextWp)
+                          }
                         }
                       }}
                       style={{
@@ -1364,7 +1384,8 @@ export default function HomePage() {
                         color: 'var(--text-main)',
                         fontSize: 12,
                         fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: applying ? 'not-allowed' : 'pointer',
+                        opacity: applying ? 0.7 : 1,
                         transition: 'all 0.15s ease',
                       }}
                     >
@@ -1389,10 +1410,31 @@ export default function HomePage() {
                   </div>
 
                   {/* Carousel indicators on bottom right */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 18, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.9)' }} />
-                    <div style={{ width: 6, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.3)' }} />
-                    <div style={{ width: 6, height: 4, borderRadius: 2, background: 'rgba(255, 255, 255, 0.3)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {(homeWallpapers || []).slice(0, 6).map((wp, i) => {
+                      const isCurrent = wp.id === activeWallpaper?.id
+                      return (
+                        <button
+                          key={wp.id || i}
+                          type="button"
+                          onClick={async () => {
+                            selectWallpaper(wp)
+                            await handleApply(wp)
+                          }}
+                          style={{
+                            width: isCurrent ? 20 : 6,
+                            height: 4,
+                            borderRadius: 2,
+                            background: isCurrent ? 'var(--color-brand)' : 'rgba(255, 255, 255, 0.3)',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                          title={`Switch to ${wp.name}`}
+                        />
+                      )
+                    })}
                   </div>
                 </div>
               </div>

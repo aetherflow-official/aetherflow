@@ -122,7 +122,8 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
   if (!wallpaper) return false
 
   const state = useStore.getState()
-  const targetLabel = options.targetMonitor ?? (state.screenArrangement === 'per-screen' ? options.selectedMonitorLabel : null)
+  const rawTarget = options.targetMonitor ?? (state.screenArrangement === 'per-screen' ? options.selectedMonitorLabel : null)
+  const targetLabel = (rawTarget && rawTarget !== 'all') ? rawTarget : null
   const txScope = targetLabel || '*'
   const myTxId = (monitorApplyTransactions.get(txScope) || 0) + 1
   monitorApplyTransactions.set(txScope, myTxId)
@@ -139,6 +140,8 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
   const opacity = options.opacity ?? state.wallpaperOpacity ?? 1
   const brightness = options.brightness ?? state.wallpaperBrightness ?? 0.85
   const fps = options.fps ?? state.fps ?? 60
+  const contrast = options.contrast ?? state.wallpaperContrast ?? 1.0
+  const saturation = options.saturation ?? state.wallpaperSaturation ?? 1.0
 
   try {
     const resolvedEngine = wallpaper.engine
@@ -164,6 +167,8 @@ export async function applyWallpaperToDesktop(wallpaper, options = {}) {
         volume,
         muted,
         fps,
+        contrast,
+        saturation,
         youtubeBackend: state.youtubeBackend || 'mpv',
       },
       opacity,

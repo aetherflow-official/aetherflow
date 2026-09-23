@@ -33,6 +33,8 @@ function WallpaperCanvas() {
   const [activeId,   setActiveId]   = useState(null)
   const [opacity,    setOpacity]    = useState(1)
   const [brightness, setBrightness] = useState(0.85)
+  const [contrast,   setContrast]   = useState(1)
+  const [saturation, setSaturation] = useState(1)
   const [fadeActive, setFadeActive] = useState(!isScreensaver)
   const [now, setNow] = useState(new Date())
 
@@ -284,6 +286,16 @@ function WallpaperCanvas() {
             cfg.isSecondary = true
             cfg.muted = true
           }
+          if (cfg.brightness !== undefined) setBrightness(cfg.brightness)
+          if (cfg.opacity !== undefined) setOpacity(cfg.opacity)
+          if (cfg.contrast !== undefined) setContrast(cfg.contrast)
+          if (cfg.saturation !== undefined) setSaturation(cfg.saturation)
+          const spd = cfg.speed ?? cfg.speedMultiplier
+          if (spd !== undefined) {
+            document.querySelectorAll('video').forEach(el => {
+              try { el.playbackRate = spd } catch (e) {}
+            })
+          }
           engineRef.current?.updateOptions?.(cfg)
         })
 
@@ -353,6 +365,26 @@ function WallpaperCanvas() {
           if (payload?.opacity !== undefined) setOpacity(payload.opacity)
         })
 
+        await registerEvent('set-contrast', (payload) => {
+          if (payload?.contrast !== undefined) setContrast(payload.contrast)
+        })
+
+        await registerEvent('set-saturation', (payload) => {
+          if (payload?.saturation !== undefined) setSaturation(payload.saturation)
+        })
+
+        await registerEvent('set-speed', (payload) => {
+          const spd = payload?.speed ?? payload?.speedMultiplier
+          if (spd !== undefined) {
+            document.querySelectorAll('video').forEach(el => {
+              try { el.playbackRate = spd } catch (e) {}
+            })
+            try {
+              engineRef.current?.updateOptions?.({ speed: spd, speedMultiplier: spd })
+            } catch (e) {}
+          }
+        })
+
         await registerEvent('set-fps', (payload) => {
           if (payload?.fps) {
             engineRef.current?.updateOptions?.({ fps: payload.fps })
@@ -378,6 +410,8 @@ function WallpaperCanvas() {
               bootEngine(activeState.engineId, activeState.config || {})
               if (activeState.brightness !== undefined) setBrightness(activeState.brightness)
               if (activeState.opacity !== undefined) setOpacity(activeState.opacity)
+              if (activeState.config?.contrast !== undefined) setContrast(activeState.config.contrast)
+              if (activeState.config?.saturation !== undefined) setSaturation(activeState.config.saturation)
             }
           }
         } catch (e) {
@@ -439,7 +473,7 @@ function WallpaperCanvas() {
           height: '100%',
           display: 'block',
           opacity: isScreensaver ? (fadeActive ? opacity : 0) : opacity,
-          filter: `brightness(${brightness})`,
+          filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`,
           transition: isScreensaver ? `opacity ${fadeInSecs}s cubic-bezier(0.16, 1, 0.3, 1)` : undefined,
           pointerEvents: 'none',
           background: 'transparent',

@@ -99,7 +99,7 @@ export default defineConfig({
     },
     watch: {
       // Watch for changes on Tauri side too
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/src-tauri/**', '**/packages/**'],
     },
   },
   // Optimise build for Tauri WebView2

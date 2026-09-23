@@ -25,6 +25,23 @@ export default function WallpaperSettingsPanel({
   const activeWallpaper         = useStore(s => s.activeWallpaper)
   const setWallpaperAudio       = useStore(s => s.setWallpaperAudio)
 
+  const ipcTimersRef = React.useRef({})
+
+  const debouncedInvoke = (key, fn, delay = 25) => {
+    if (ipcTimersRef.current[key]) {
+      clearTimeout(ipcTimersRef.current[key])
+    }
+    ipcTimersRef.current[key] = setTimeout(() => {
+      fn()
+      delete ipcTimersRef.current[key]
+    }, delay)
+  }
+
+  const getTargetMonitor = () => {
+    if (!selectedMonitorLabel || selectedMonitorLabel === 'all') return null
+    return selectedMonitorLabel
+  }
+
   // Reset to default balanced parameters
   const handleReset = () => {
     setWallpaperOpacity(1.0)
@@ -37,36 +54,102 @@ export default function WallpaperSettingsPanel({
       setWallpaperAudio(activeWallpaper.id, { volume: 50, muted: false })
     }
     if (isTauri()) {
-      tauriInvoke('set_mpv_brightness', { monitorLabel: selectedMonitorLabel, brightness: 1.0 }).catch(() => {})
-      tauriInvoke('set_mpv_speed', { monitorLabel: selectedMonitorLabel, speed: 1.0 }).catch(() => {})
-      tauriInvoke('set_mpv_volume', { monitorLabel: selectedMonitorLabel, volume: 50 }).catch(() => {})
+      const mon = getTargetMonitor()
+      tauriInvoke('set_wallpaper_opacity', { monitorLabel: mon, opacity: 1.0 }).catch(() => {})
+      tauriInvoke('set_wallpaper_brightness', { monitorLabel: mon, brightness: 1.0 }).catch(() => {})
+      tauriInvoke('set_wallpaper_contrast', { monitorLabel: mon, contrast: 1.0 }).catch(() => {})
+      tauriInvoke('set_wallpaper_saturation', { monitorLabel: mon, saturation: 1.0 }).catch(() => {})
+      tauriInvoke('set_wallpaper_speed', { monitorLabel: mon, speed: 1.0 }).catch(() => {})
+      tauriInvoke('set_mpv_brightness', { monitorLabel: mon, brightness: 1.0 }).catch(() => {})
+      tauriInvoke('set_mpv_speed', { monitorLabel: mon, speed: 1.0 }).catch(() => {})
+      tauriInvoke('set_mpv_volume', { monitorLabel: mon, volume: 50 }).catch(() => {})
+      tauriInvoke('set_mpv_mute', { monitorLabel: mon, muted: false }).catch(() => {})
+      tauriInvoke('update_wallpaper_config', {
+        config: {
+          opacity: 1.0,
+          brightness: 1.0,
+          contrast: 1.0,
+          saturation: 1.0,
+          speedMultiplier: 1.0,
+          speed: 1.0,
+          volume: 50,
+          muted: false,
+        },
+        monitorLabel: mon,
+      }).catch(() => {})
     }
   }
 
   // Live adjustments with debounced IPC
   const handleOpacityChange = (val) => {
     setWallpaperOpacity(val)
+    if (isTauri()) {
+      debouncedInvoke('opacity', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_wallpaper_opacity', { monitorLabel: mon, opacity: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { opacity: val },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
+    }
   }
 
   const handleBrightnessChange = (val) => {
     setWallpaperBrightness(val)
     if (isTauri()) {
-      tauriInvoke('set_mpv_brightness', { monitorLabel: selectedMonitorLabel, brightness: val }).catch(() => {})
+      debouncedInvoke('brightness', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_wallpaper_brightness', { monitorLabel: mon, brightness: val }).catch(() => {})
+        tauriInvoke('set_mpv_brightness', { monitorLabel: mon, brightness: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { brightness: val },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
     }
   }
 
   const handleContrastChange = (val) => {
     setWallpaperContrast(val)
+    if (isTauri()) {
+      debouncedInvoke('contrast', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_wallpaper_contrast', { monitorLabel: mon, contrast: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { contrast: val },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
+    }
   }
 
   const handleSaturationChange = (val) => {
     setWallpaperSaturation(val)
+    if (isTauri()) {
+      debouncedInvoke('saturation', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_wallpaper_saturation', { monitorLabel: mon, saturation: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { saturation: val },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
+    }
   }
 
   const handleSpeedChange = (val) => {
     setWallpaperSpeed(val)
     if (isTauri()) {
-      tauriInvoke('set_mpv_speed', { monitorLabel: selectedMonitorLabel, speed: val }).catch(() => {})
+      debouncedInvoke('speed', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_wallpaper_speed', { monitorLabel: mon, speed: val }).catch(() => {})
+        tauriInvoke('set_mpv_speed', { monitorLabel: mon, speed: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { speedMultiplier: val, speed: val },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
     }
   }
 
@@ -76,56 +159,79 @@ export default function WallpaperSettingsPanel({
       setWallpaperAudio(activeWallpaper.id, { volume: val, muted: false })
     }
     if (isTauri()) {
-      tauriInvoke('set_mpv_volume', { monitorLabel: selectedMonitorLabel, volume: val }).catch(() => {})
+      debouncedInvoke('volume', () => {
+        const mon = getTargetMonitor()
+        tauriInvoke('set_mpv_volume', { monitorLabel: mon, volume: val }).catch(() => {})
+        tauriInvoke('update_wallpaper_config', {
+          config: { volume: val, muted: false },
+          monitorLabel: mon,
+        }).catch(() => {})
+      }, 20)
+    }
+  }
+
+  const handleToggleAudioMuted = () => {
+    const nextMuted = !audioMuted
+    toggleAudioMuted()
+    if (activeWallpaper) {
+      setWallpaperAudio(activeWallpaper.id, { volume: audioVolume, muted: nextMuted })
+    }
+    if (isTauri()) {
+      const mon = getTargetMonitor()
+      tauriInvoke('set_mpv_mute', { monitorLabel: mon, muted: nextMuted }).catch(() => {})
+      tauriInvoke('update_wallpaper_config', {
+        config: { muted: nextMuted },
+        monitorLabel: mon,
+      }).catch(() => {})
     }
   }
 
   return (
     <div className="sovereign-settings-panel">
       {/* ── Header: Title, Display Selector & Reset ───────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'nowrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
           <SlidersHorizontal size={14} style={{ color: 'var(--color-brand)' }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.2px' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
             Wallpaper Settings
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {/* Display Dropdown */}
-          <div style={{ position: 'relative', minWidth: 130 }}>
+          <div style={{ position: 'relative', width: 116, maxWidth: 120 }}>
             <select
-              value={selectedMonitorLabel || ''}
+              value={selectedMonitorLabel || 'all'}
               onChange={e => onSelectMonitor && onSelectMonitor(e.target.value)}
               style={{
                 width: '100%',
-                height: 26,
-                padding: '0 22px 0 8px',
+                height: 25,
+                padding: '0 20px 0 7px',
                 borderRadius: 6,
                 background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid var(--border-subtle)',
                 color: 'var(--text-main)',
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: 500,
                 outline: 'none',
                 cursor: 'pointer',
                 appearance: 'none',
                 WebkitAppearance: 'none',
+                textOverflow: 'ellipsis',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
               }}
             >
-              {monitors.length > 0 ? (
-                monitors.map((m, idx) => (
-                  <option key={m.label} value={m.label} style={{ background: '#0d111a', color: '#fff' }}>
-                    {m.displayName || `Screen ${idx + 1}`} {m.isPrimary ? '(Primary)' : ''}
-                  </option>
-                ))
-              ) : (
-                <option value="" style={{ background: '#0d111a', color: '#fff' }}>
-                  Screen 1 (Primary)
+              <option value="all" style={{ background: '#0d111a', color: '#fff' }}>
+                All Displays
+              </option>
+              {monitors.map((m, idx) => (
+                <option key={m.label} value={m.label} style={{ background: '#0d111a', color: '#fff' }}>
+                  {m.displayName || `Screen ${idx + 1}`} {m.isPrimary ? '(Primary)' : ''}
                 </option>
-              )}
+              ))}
             </select>
-            <div style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5, fontSize: 8 }}>
+            <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5, fontSize: 8 }}>
               ▼
             </div>
           </div>
@@ -137,12 +243,13 @@ export default function WallpaperSettingsPanel({
               background: 'none',
               border: 'none',
               color: 'var(--text-muted)',
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: 500,
               cursor: 'pointer',
-              padding: '2px 6px',
+              padding: '2px 5px',
               borderRadius: 4,
               transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap',
             }}
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-main)' }}
             onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
@@ -158,7 +265,7 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Opacity */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ color: 'var(--text-muted)' }}>Opacity</span>
             <span style={{ color: 'var(--color-brand)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600 }}>
               {Math.round(wallpaperOpacity * 100)}%
@@ -177,7 +284,7 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Brightness */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ color: 'var(--text-muted)' }}>Brightness</span>
             <span style={{ color: 'var(--color-brand)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600 }}>
               {Math.round(wallpaperBrightness * 100)}%
@@ -196,7 +303,7 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Contrast */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ color: 'var(--text-muted)' }}>Contrast</span>
             <span style={{ color: 'var(--color-brand)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600 }}>
               {Math.round(wallpaperContrast * 100)}%
@@ -215,7 +322,7 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Saturation */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ color: 'var(--text-muted)' }}>Saturation</span>
             <span style={{ color: 'var(--color-brand)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600 }}>
               {Math.round(wallpaperSaturation * 100)}%
@@ -234,7 +341,7 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Speed */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ color: 'var(--text-muted)' }}>Speed</span>
             <span style={{ color: 'var(--color-brand)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600 }}>
               {parseFloat(wallpaperSpeed).toFixed(1)}x
@@ -253,11 +360,11 @@ export default function WallpaperSettingsPanel({
 
         {/* Slider: Volume */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginBottom: 3, userSelect: 'none' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginBottom: 2, userSelect: 'none' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)' }}>
               <button
                 type="button"
-                onClick={toggleAudioMuted}
+                onClick={handleToggleAudioMuted}
                 style={{ background: 'none', border: 'none', padding: 0, color: audioMuted ? 'var(--color-rose)' : 'var(--color-brand)', cursor: 'pointer', display: 'flex' }}
                 title={audioMuted ? 'Unmute' : 'Mute'}
               >

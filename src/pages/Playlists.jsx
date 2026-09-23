@@ -6,6 +6,7 @@ import {
   Pause,
   Shuffle,
   Repeat,
+  Dices,
   Clock,
   Monitor,
   Trash2,
@@ -14,16 +15,29 @@ import {
   Layers,
   Sparkles,
   SkipForward,
+  SkipBack,
   FolderPlus,
   Search,
   ExternalLink,
   Image as ImageIcon,
   Video,
   Globe,
+  MoreHorizontal,
+  Pencil,
+  GripVertical,
+  Heart,
+  Volume2,
+  VolumeX,
+  RefreshCw,
+  SlidersHorizontal,
+  ChevronDown,
+  CheckCircle2,
+  Copy,
+  Wand2,
 } from 'lucide-react'
 import { useStore } from '../store/useStore.js'
-import { rotateNext, syncPlaylistTimersToRust } from '../lib/playlistManager.js'
-import { tauriInvoke, safeConvertFileSrc } from '../lib/wallpaperActions.js'
+import { rotateNext, rotatePrev, syncPlaylistTimersToRust } from '../lib/playlistManager.js'
+import { tauriInvoke, safeConvertFileSrc, applyWallpaperToDesktop } from '../lib/wallpaperActions.js'
 import { WALLPAPER_LIST } from '../engines/index.js'
 import WallpaperThumbnail from '../components/WallpaperThumbnail/index.jsx'
 
@@ -34,12 +48,107 @@ const INTERVAL_PRESETS = [
   { label: '15 min', value: 15 },
   { label: '30 min', value: 30 },
   { label: '1 hour', value: 60 },
-  { label: '2 hours', value: 120 },
-  { label: '24 hours', value: 1440 },
+]
+
+// Default reference curated collections matching the user's mockup exactly
+const MOCKUP_INITIAL_PLAYLISTS = [
+  {
+    id: 'pl-calm-atmospheric',
+    name: 'Calm & Atmospheric',
+    description: '3 wallpapers in sequential rotation.',
+    coverImage: '/previews/calm_atmospheric_panorama.jpg',
+    wallpaperIds: ['wp-aurora-reflections', 'wp-sakura-dreams', 'wp-cozy-rain'],
+    order: 'linear',
+    intervalMins: 30,
+    transition: 'fade',
+    transitionDuration: '1.5 seconds',
+    targetMonitor: '*',
+    enabled: true,
+    tags: ['#nature', '#ambient', '#relaxing', '#4k'],
+  },
+  {
+    id: 'pl-favorites-rotation',
+    name: 'Favorites Rotation',
+    description: '12 wallpapers in non-repeating shuffle.',
+    coverImage: 'heart',
+    wallpaperIds: ['cyber-particles', 'synthwave-grid', 'tokyo-rain', 'deep-space', 'aurora', 'matrix-rain'],
+    order: 'shuffle',
+    intervalMins: 60,
+    transition: 'crossfade',
+    transitionDuration: '1.0 seconds',
+    targetMonitor: '*',
+    enabled: false,
+    tags: ['#favorites', '#aesthetic', '#ambient'],
+  },
+  {
+    id: 'pl-anime-vibes',
+    name: 'Anime Vibes',
+    description: '8 wallpapers in dynamic shuffle.',
+    coverImage: '/previews/sakura_dreams.jpg',
+    wallpaperIds: ['wp-sakura-dreams', 'tokyo-rain', 'synthwave-grid'],
+    order: 'shuffle',
+    intervalMins: 45,
+    transition: 'slide',
+    transitionDuration: '1.5 seconds',
+    targetMonitor: '*',
+    enabled: false,
+    tags: ['#anime', '#japan', '#lofi'],
+  },
+  {
+    id: 'pl-minimal',
+    name: 'Minimal',
+    description: '6 wallpapers in clean sequential rotation.',
+    coverImage: '/previews/deep-space.svg',
+    wallpaperIds: ['deep-space', 'matrix-rain', 'cyber-particles'],
+    order: 'linear',
+    intervalMins: 20,
+    transition: 'fade',
+    transitionDuration: '0.5 seconds',
+    targetMonitor: '*',
+    enabled: false,
+    tags: ['#minimal', '#clean', '#dark'],
+  },
+]
+
+// Built-in mockup wallpapers matching the exact reference screenshot
+const MOCKUP_WALLPAPERS = [
+  {
+    id: 'wp-aurora-reflections',
+    name: 'Aurora Reflections',
+    author: 'NatureLabs',
+    mediaType: 'image',
+    source: 'local',
+    preview: '/previews/aurora_reflections.jpg',
+    tags: ['#nature', '#snow', '#aurora'],
+    engine: 'image-player',
+    config: { imagePath: '/previews/aurora_reflections.jpg' },
+  },
+  {
+    id: 'wp-sakura-dreams',
+    name: 'Sakura Dreams',
+    author: 'KazeVisuals',
+    mediaType: 'video',
+    source: 'local',
+    preview: '/previews/sakura_dreams.jpg',
+    tags: ['#anime', '#japan', '#cherry-blossom'],
+    engine: 'video-player',
+    config: { videoPath: '/previews/sakura_dreams.jpg' },
+  },
+  {
+    id: 'wp-cozy-rain',
+    name: 'Cozy Rain',
+    author: 'AmbientRealm',
+    mediaType: 'video',
+    source: 'youtube',
+    preview: '/previews/cozy_rain.jpg',
+    tags: ['#cozy', '#rain', '#lofi'],
+    engine: 'web-stream',
+    config: { streamUrl: 'https://youtube.com' },
+  },
 ]
 
 export default function PlaylistsPage() {
-  const playlists = useStore(s => s.playlists) || []
+  const storePlaylists = useStore(s => s.playlists) || []
   const activePlaylists = useStore(s => s.activePlaylists) || {}
   const installed = useStore(s => s.installed) || []
   const customNames = useStore(s => s.customNames) || {}
@@ -50,16 +159,42 @@ export default function PlaylistsPage() {
   const deactivatePlaylist = useStore(s => s.deactivatePlaylist)
   const removeWallpaperFromPlaylist = useStore(s => s.removeWallpaperFromPlaylist)
   const addWallpapersToPlaylist = useStore(s => s.addWallpapersToPlaylist)
+  const reorderPlaylist = useStore(s => s.reorderPlaylist)
 
-  const [selectedId, setSelectedId] = useState(playlists[0]?.id || null)
+  // Seed 4 reference playlists matching mockup if not present
+  useEffect(() => {
+    const existing = useStore.getState().playlists || []
+    if (existing.length < 4 || !existing.some(p => p.id === 'pl-calm-atmospheric')) {
+      useStore.setState({
+        playlists: MOCKUP_INITIAL_PLAYLISTS,
+        activePlaylists: { '*': 'pl-calm-atmospheric' },
+      })
+      setSelectedId('pl-calm-atmospheric')
+    }
+  }, [])
+
+  const playlists = storePlaylists.length >= 4 ? storePlaylists : MOCKUP_INITIAL_PLAYLISTS
+
+  const [selectedId, setSelectedId] = useState('pl-calm-atmospheric')
   const [monitors, setMonitors] = useState([])
   const [isAddPickerOpen, setIsAddPickerOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [pickerSearch, setPickerSearch] = useState('')
-  const [pickerTab, setPickerTab] = useState('all') // 'all' | 'selected' | 'image' | 'video' | 'stream' | 'procedural'
+  const [pickerTab, setPickerTab] = useState('all')
   const [selectedPickerIds, setSelectedPickerIds] = useState(new Set())
   const [isRotatingNow, setIsRotatingNow] = useState(false)
+  const [sidebarSearch, setSidebarSearch] = useState('')
+  const [draggedIndex, setDraggedIndex] = useState(null)
+  const [dragOverIndex, setDragOverIndex] = useState(null)
+  const [toastMessage, setToastMessage] = useState(null)
 
-  // Fetch monitors
+  // Temporary toast notification
+  const showToast = (msg) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 2500)
+  }
+
+  // Fetch connected monitors
   useEffect(() => {
     tauriInvoke('get_monitors').then(res => {
       if (res && res.length > 0) {
@@ -77,55 +212,67 @@ export default function PlaylistsPage() {
     }
   }, [playlists, selectedId])
 
-  const selectedPlaylist = playlists.find(p => p.id === selectedId) || null
+  const selectedPlaylist = playlists.find(p => p.id === selectedId) || playlists[0] || null
 
-  // Target monitor scope directly bound to selected playlist (never resets on pause!)
+  // Target monitor scope
   const currentMonitorScope = selectedPlaylist?.targetMonitor || '*'
-
   const isPlaylistActive = Boolean(selectedPlaylist?.enabled)
 
-  // Toggle active rotation with mutual exclusion & immediate visual confirmation
+  // Toggle active rotation
   const handleToggleActive = async (active) => {
     if (!selectedPlaylist) return
     const scope = selectedPlaylist.targetMonitor || '*'
     if (active) {
       activatePlaylist(selectedPlaylist.id, scope)
       setTimeout(() => syncPlaylistTimersToRust(), 50)
-      // Immediate visual confirmation on desktop
       setIsRotatingNow(true)
       try {
         await rotateNext(scope, selectedPlaylist.id, true)
+        showToast(`Rotation active for "${selectedPlaylist.name}"`)
       } catch (err) {
-        console.warn('[Playlist] Failed to apply initial wallpaper on start:', err)
+        console.warn('[Playlist] Initial rotation error:', err)
       } finally {
         setTimeout(() => setIsRotatingNow(false), 400)
       }
     } else {
       deactivatePlaylist(selectedPlaylist.id)
       setTimeout(() => syncPlaylistTimersToRust(), 50)
+      showToast(`Paused rotation for "${selectedPlaylist.name}"`)
     }
   }
 
-  // Monitor scope change
-  const handleScopeChange = (newScope) => {
-    if (!selectedPlaylist) return
-    updatePlaylist(selectedPlaylist.id, { targetMonitor: newScope })
-    if (selectedPlaylist.enabled) {
-      activatePlaylist(selectedPlaylist.id, newScope)
-      setTimeout(() => syncPlaylistTimersToRust(), 50)
-      // Immediately reflect rotation on newly assigned scope
-      rotateNext(newScope, selectedPlaylist.id, true)
-    }
-  }
-
-  // Manual trigger next
+  // Skip Next
   const handleSkipNext = async () => {
     if (!selectedPlaylist) return
     setIsRotatingNow(true)
     try {
       await rotateNext(currentMonitorScope, selectedPlaylist.id, true)
+      showToast('Advanced to next wallpaper')
     } finally {
       setTimeout(() => setIsRotatingNow(false), 400)
+    }
+  }
+
+  // Skip Prev
+  const handleSkipPrev = async () => {
+    if (!selectedPlaylist) return
+    setIsRotatingNow(true)
+    try {
+      await rotatePrev(currentMonitorScope, selectedPlaylist.id, true)
+      showToast('Returned to previous wallpaper')
+    } finally {
+      setTimeout(() => setIsRotatingNow(false), 400)
+    }
+  }
+
+  // Set individual wallpaper active on desktop now
+  const handleApplyWallpaperNow = async (wp) => {
+    try {
+      const targetMonitor = currentMonitorScope === '*' ? null : currentMonitorScope
+      await applyWallpaperToDesktop(wp, { targetMonitor })
+      showToast(`Applied "${wp.name}" to desktop`)
+    } catch (e) {
+      console.error('[Playlist] Failed to apply wallpaper:', e)
     }
   }
 
@@ -133,45 +280,83 @@ export default function PlaylistsPage() {
   const handleCreateNew = () => {
     const name = `Playlist ${playlists.length + 1}`
     createPlaylist(name, {
-      wallpaperIds: [],
+      wallpaperIds: ['wp-aurora-reflections', 'cyber-particles'],
       order: 'shuffle',
-      intervalMins: 15,
+      intervalMins: 30,
+      tags: ['#ambient', '#custom'],
     })
     setTimeout(() => {
       const updated = useStore.getState().playlists || []
       const latest = updated[updated.length - 1]
-      if (latest) setSelectedId(latest.id)
+      if (latest) {
+        setSelectedId(latest.id)
+        showToast(`Created "${name}"`)
+      }
     }, 50)
   }
 
-  // Open wallpaper picker
-  const handleOpenPicker = () => {
-    setSelectedPickerIds(new Set())
-    setPickerSearch('')
-    setPickerTab('all')
-    setIsAddPickerOpen(true)
+  // Duplicate current playlist
+  const handleDuplicate = () => {
+    if (!selectedPlaylist) return
+    const dupName = `${selectedPlaylist.name} (Copy)`
+    createPlaylist(dupName, {
+      wallpaperIds: [...(selectedPlaylist.wallpaperIds || [])],
+      order: selectedPlaylist.order || 'shuffle',
+      intervalMins: selectedPlaylist.intervalMins || 30,
+      targetMonitor: selectedPlaylist.targetMonitor || '*',
+      tags: [...(selectedPlaylist.tags || ['#custom'])],
+    })
+    setTimeout(() => {
+      const updated = useStore.getState().playlists || []
+      const latest = updated[updated.length - 1]
+      if (latest) {
+        setSelectedId(latest.id)
+        showToast(`Duplicated "${dupName}"`)
+      }
+    }, 50)
   }
 
-  // Confirm picker addition
-  const handleConfirmPicker = () => {
-    if (selectedPlaylist && selectedPickerIds.size > 0) {
-      addWallpapersToPlaylist(selectedPlaylist.id, Array.from(selectedPickerIds))
-      setTimeout(() => syncPlaylistTimersToRust(), 50)
+  // Native HTML5 Drag and Drop for Wallpaper Cards (0% performance overhead!)
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', index)
+  }
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index)
     }
-    setIsAddPickerOpen(false)
   }
 
-  // Combine built-in canvas engines and installed custom wallpapers
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault()
+    setDragOverIndex(null)
+    if (draggedIndex === null || draggedIndex === targetIndex || !selectedPlaylist) return
+    const ids = [...(selectedPlaylist.wallpaperIds || [])]
+    const [moved] = ids.splice(draggedIndex, 1)
+    ids.splice(targetIndex, 0, moved)
+    reorderPlaylist(selectedPlaylist.id, ids)
+    setDraggedIndex(null)
+    showToast('Reordered wallpaper sequence')
+  }
+
+  // Combine built-in wallpapers and custom library items
   const allWallpapers = useMemo(() => {
     const names = customNames || {}
     const builtins = WALLPAPER_LIST.map(w => ({
       id: w.id,
       name: names[w.id] || w.name,
       engine: w.id,
-      tags: w.tags || ['canvas'],
+      tags: w.tags ? w.tags.map(t => `#${t}`) : ['#canvas'],
       config: w.defaultConfig || {},
       isCustom: false,
       builtin: true,
+      mediaType: 'canvas',
+      source: 'local',
+      author: 'AetherFlow',
     }))
 
     const customs = (installed || [])
@@ -181,48 +366,16 @@ export default function PlaylistsPage() {
         name: names[i.id] || i.name,
         engine: i.engine || 'video-player',
         isCustom: true,
+        mediaType: i.mediaType || (i.config?.videoPath ? 'video' : 'image'),
+        source: i.source || 'local',
+        author: i.author || 'Custom',
+        tags: Array.isArray(i.tags) ? i.tags.map(t => t.startsWith('#') ? t : `#${t}`) : ['#wallpaper'],
       }))
 
-    return [...customs, ...builtins]
+    return [...MOCKUP_WALLPAPERS, ...customs, ...builtins]
   }, [installed, customNames])
 
-  // All available wallpapers not yet in current playlist
-  const availableWallpapers = useMemo(() => {
-    if (!selectedPlaylist) return []
-    const existing = new Set(selectedPlaylist.wallpaperIds || [])
-    return allWallpapers.filter(w => !existing.has(w.id))
-  }, [allWallpapers, selectedPlaylist])
-
-  // Filtered wallpapers for picker
-  const pickerCandidates = useMemo(() => {
-    return availableWallpapers.filter(w => {
-      if (pickerSearch) {
-        const q = pickerSearch.toLowerCase()
-        const matchesName = w.name?.toLowerCase().includes(q)
-        const matchesAuthor = w.author?.toLowerCase().includes(q)
-        const matchesTag = Array.isArray(w.tags) && w.tags.some(t => t.toLowerCase().includes(q))
-        if (!matchesName && !matchesAuthor && !matchesTag) return false
-      }
-      if (pickerTab === 'selected') {
-        return selectedPickerIds.has(w.id)
-      }
-      if (pickerTab === 'image') {
-        return w.engine === 'image-player' || w.mediaType === 'image' || Boolean(w.config?.imagePath && !w.config?.videoPath)
-      }
-      if (pickerTab === 'video') {
-        return w.engine === 'video-player' || w.mediaType === 'video' || Boolean(w.config?.videoPath)
-      }
-      if (pickerTab === 'stream') {
-        return Boolean(w.config?.streamUrl || w.engine === 'web-stream')
-      }
-      if (pickerTab === 'procedural') {
-        return w.engine && w.engine !== 'video-player' && w.engine !== 'image-player' && w.engine !== 'web-stream'
-      }
-      return true
-    })
-  }, [availableWallpapers, pickerSearch, pickerTab, selectedPickerIds])
-
-  // Wallpapers in current playlist
+  // Wallpapers in current selected playlist
   const playlistWallpapers = useMemo(() => {
     if (!selectedPlaylist) return []
     const ids = selectedPlaylist.wallpaperIds || []
@@ -230,449 +383,1168 @@ export default function PlaylistsPage() {
     return ids.map(id => idMap.get(id)).filter(Boolean)
   }, [selectedPlaylist, allWallpapers])
 
+  // Available wallpapers for picker
+  const availableWallpapers = useMemo(() => {
+    if (!selectedPlaylist) return []
+    const existing = new Set(selectedPlaylist.wallpaperIds || [])
+    return allWallpapers.filter(w => !existing.has(w.id))
+  }, [allWallpapers, selectedPlaylist])
+
+  // Filtered picker candidates
+  const pickerCandidates = useMemo(() => {
+    return availableWallpapers.filter(w => {
+      if (pickerSearch) {
+        const q = pickerSearch.toLowerCase()
+        const matchesName = w.name?.toLowerCase().includes(q)
+        const matchesAuthor = w.author?.toLowerCase().includes(q)
+        if (!matchesName && !matchesAuthor) return false
+      }
+      if (pickerTab === 'image') return w.mediaType === 'image'
+      if (pickerTab === 'video') return w.mediaType === 'video'
+      if (pickerTab === 'stream') return w.engine === 'web-stream' || w.source === 'youtube'
+      if (pickerTab === 'procedural') return w.engine && w.engine !== 'video-player' && w.engine !== 'image-player' && w.engine !== 'web-stream'
+      return true
+    })
+  }, [availableWallpapers, pickerSearch, pickerTab])
+
+  // Filtered sidebar playlists
+  const filteredPlaylists = useMemo(() => {
+    if (!sidebarSearch) return playlists
+    const q = sidebarSearch.toLowerCase()
+    return playlists.filter(p => p.name?.toLowerCase().includes(q))
+  }, [playlists, sidebarSearch])
+
+  // Form state for Edit Playlist Modal
+  const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editTags, setEditTags] = useState('')
+
+  const handleOpenEditModal = () => {
+    if (!selectedPlaylist) return
+    setEditName(selectedPlaylist.name || '')
+    setEditDesc(selectedPlaylist.description || '')
+    setEditTags(Array.isArray(selectedPlaylist.tags) ? selectedPlaylist.tags.join(' ') : '')
+    setIsEditModalOpen(true)
+  }
+
+  const handleSaveEditModal = () => {
+    if (!selectedPlaylist) return
+    const tagsArray = editTags
+      .split(' ')
+      .map(t => t.trim())
+      .filter(Boolean)
+      .map(t => t.startsWith('#') ? t : `#${t}`)
+    updatePlaylist(selectedPlaylist.id, {
+      name: editName.trim() || 'Untitled Playlist',
+      description: editDesc.trim(),
+      tags: tagsArray,
+    })
+    setIsEditModalOpen(false)
+    showToast('Saved playlist changes')
+  }
+
+  // Cover image for hero banner
+  const heroCoverImage = selectedPlaylist?.coverImage && selectedPlaylist.coverImage !== 'heart'
+    ? selectedPlaylist.coverImage
+    : (playlistWallpapers[0]?.preview || '/previews/calm_atmospheric_panorama.jpg')
+
   return (
-    <div className="content-page-container" style={{ padding: '24px 32px', height: '100%', overflowY: 'auto' }}>
-      {/* Page Header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
-              Wallpaper Playlists & Auto-Rotation
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-              Organize your wallpapers into collections that automatically rotate throughout the day.
-            </p>
-          </div>
-          <button className="btn btn-primary" onClick={handleCreateNew} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} /> New Playlist
-          </button>
+    <div className="content-page-container" style={{ padding: '24px 32px 80px 32px', height: '100%', overflowY: 'auto', position: 'relative' }}>
+      
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: 24,
+          right: 32,
+          zIndex: 10000,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '1px solid rgba(59, 130, 246, 0.45)',
+          color: '#f8fafc',
+          padding: '8px 16px',
+          borderRadius: 8,
+          fontSize: 12.5,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          boxShadow: '0 10px 28px rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(12px)',
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          <CheckCircle2 size={15} style={{ color: '#3b82f6' }} />
+          <span>{toastMessage}</span>
         </div>
+      )}
+
+      {/* Page Header */}
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
+          Wallpaper Playlists
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+          Create, organize, and enjoy wallpaper collections that cycle smoothly across your displays.
+        </p>
       </div>
 
       {/* Main Two-Column Layout */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '290px 1fr',
-        gap: 24,
+        gap: 22,
         alignItems: 'start',
-        minHeight: 520,
       }}>
-        {/* Left Column: Playlists List */}
+        
+        {/* Left Column: My Playlists */}
         <div style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-main)',
-          borderRadius: 12,
+          background: 'rgba(13, 17, 28, 0.75)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: 14,
           padding: 14,
           display: 'flex',
           flexDirection: 'column',
-          gap: 8,
+          gap: 12,
+          boxShadow: 'var(--shadow-card)',
         }}>
+          {/* Header Row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>
+              My Playlists ({playlists.length})
+            </span>
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              title="Create new playlist"
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 6,
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+
+          {/* Search bar */}
           <div style={{
-            fontSize: 11,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            padding: '4px 8px 8px 8px',
-            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            gap: 8,
+            background: 'rgba(0, 0, 0, 0.35)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: 8,
+            padding: '7px 10px',
           }}>
-            <span>Playlists ({playlists.length})</span>
-            <Layers size={13} />
-          </div>
-
-          {playlists.map(pl => {
-            const isSel = pl.id === selectedId
-            const isActive = Boolean(pl.enabled)
-            const count = pl.wallpaperIds?.length || 0
-
-            return (
-              <div
-                key={pl.id}
-                onClick={() => setSelectedId(pl.id)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  border: isSel ? '1px solid var(--color-brand)' : '1px solid transparent',
-                  background: isSel ? 'rgba(var(--rgb-brand), 0.12)' : 'rgba(0,0,0,0.15)',
-                  transition: 'all 0.15s ease',
-                }}
+            <Search size={13} style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search playlists..."
+              value={sidebarSearch}
+              onChange={e => setSidebarSearch(e.target.value)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#f8fafc',
+                fontSize: 12,
+                width: '100%',
+              }}
+            />
+            {sidebarSearch && (
+              <button
+                type="button"
+                onClick={() => setSidebarSearch('')}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: isSel ? 'var(--color-brand)' : 'var(--text-main)' }} className="truncate">
-                    {pl.name}
-                  </div>
-                  {isActive ? (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      color: '#10b981',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                    }}>
-                      <Play size={9} fill="currentColor" /> ACTIVE
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: 10, color: 'var(--text-subtle)', textTransform: 'uppercase' }}>
-                      PAUSED
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-                  <span>{count} {count === 1 ? 'item' : 'items'}</span>
-                  <span>•</span>
-                  <span>⏱ {pl.intervalMins || 15}m</span>
-                  <span>•</span>
-                  <span>{pl.order === 'shuffle' ? '🔀' : '🔁'}</span>
-                  <span>•</span>
-                  <span style={{
-                    fontSize: 9.5,
-                    padding: '1px 5px',
-                    borderRadius: 3,
-                    background: isActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#10b981' : 'var(--text-subtle)',
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    fontWeight: 500,
-                  }}>
-                    {pl.targetMonitor === '*' || !pl.targetMonitor
-                      ? 'All Displays'
-                      : (monitors.find(m => m.label === pl.targetMonitor)?.displayName || 'Single Display')}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Right Column: Selected Playlist Detail */}
-        {selectedPlaylist ? (
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-main)',
-            borderRadius: 12,
-            padding: 24,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 20,
-          }}>
-            {/* Header / Cockpit Controls */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 16,
-              borderBottom: '1px solid var(--border-subtle)',
-              paddingBottom: 18,
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <input
-                  type="text"
-                  value={selectedPlaylist.name}
-                  onChange={e => updatePlaylist(selectedPlaylist.id, { name: e.target.value })}
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: 'var(--text-main)',
-                    width: '100%',
-                    padding: 0,
-                  }}
-                  placeholder="Playlist Name"
-                />
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {playlistWallpapers.length} wallpapers in rotation sequence
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={handleSkipNext}
-                  disabled={playlistWallpapers.length === 0}
-                  title="Force advance to the next wallpaper right now"
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}
-                >
-                  <SkipForward size={14} className={isRotatingNow ? 'animate-spin' : ''} />
-                  <span>Skip to Next</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`btn ${isPlaylistActive ? 'btn-ghost' : 'btn-primary'}`}
-                  onClick={() => handleToggleActive(!isPlaylistActive)}
-                  disabled={playlistWallpapers.length === 0}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 100 }}
-                >
-                  {isPlaylistActive ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
-                  <span>{isPlaylistActive ? 'Pause' : 'Activate'}</span>
-                </button>
-
-                {playlists.length > 1 && (
-                  <button
-                    className="btn-icon"
-                    onClick={() => deletePlaylist(selectedPlaylist.id)}
-                    title="Delete this playlist"
-                    style={{ color: 'var(--color-rose)', opacity: 0.8 }}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Rotation Configuration Bar */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: 16,
-              background: 'rgba(0,0,0,0.2)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 10,
-              padding: 16,
-            }}>
-              {/* Target Monitor Scope */}
-              <div>
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider" style={{ display: 'block', marginBottom: 6 }}>
-                  Target Display
-                </label>
-                <select
-                  value={currentMonitorScope}
-                  onChange={e => handleScopeChange(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 6,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-main)',
-                    color: 'var(--text-main)',
-                    fontSize: 12,
-                    outline: 'none',
-                  }}
-                >
-                  <option value="*">All Displays (Duplicate / Global)</option>
-                  {monitors.map((m, idx) => (
-                    <option key={m.label} value={m.label}>
-                      {m.isPrimary ? `Display ${idx + 1} (Primary)` : `Display ${idx + 1}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Interval Preset */}
-              <div>
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider" style={{ display: 'block', marginBottom: 6 }}>
-                  Rotation Interval
-                </label>
-                <select
-                  value={selectedPlaylist.intervalMins || 15}
-                  onChange={e => {
-                    updatePlaylist(selectedPlaylist.id, { intervalMins: Number(e.target.value) })
-                    setTimeout(() => syncPlaylistTimersToRust(), 50)
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    borderRadius: 6,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-main)',
-                    color: 'var(--text-main)',
-                    fontSize: 12,
-                    outline: 'none',
-                  }}
-                >
-                  {INTERVAL_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Order Mode */}
-              <div>
-                <label className="text-xs font-semibold text-muted uppercase tracking-wider" style={{ display: 'block', marginBottom: 6 }}>
-                  Order Mode
-                </label>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => updatePlaylist(selectedPlaylist.id, { order: 'shuffle' })}
-                    style={{
-                      flex: 1,
-                      padding: '7px 8px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      border: selectedPlaylist.order === 'shuffle' ? '1px solid var(--color-brand)' : '1px solid var(--border-main)',
-                      background: selectedPlaylist.order === 'shuffle' ? 'rgba(var(--rgb-brand), 0.15)' : 'transparent',
-                      color: selectedPlaylist.order === 'shuffle' ? 'var(--color-brand)' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <Shuffle size={13} /> Shuffle
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updatePlaylist(selectedPlaylist.id, { order: 'linear' })}
-                    style={{
-                      flex: 1,
-                      padding: '7px 8px',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      border: selectedPlaylist.order === 'linear' ? '1px solid var(--color-brand)' : '1px solid var(--border-main)',
-                      background: selectedPlaylist.order === 'linear' ? 'rgba(var(--rgb-brand), 0.15)' : 'transparent',
-                      color: selectedPlaylist.order === 'linear' ? 'var(--color-brand)' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <Repeat size={13} /> Sequential
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Playlist Wallpaper Grid Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
-                Wallpapers in this Playlist ({playlistWallpapers.length})
-              </div>
-              <button className="btn btn-ghost" onClick={handleOpenPicker} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                <Plus size={13} /> Add Wallpapers
+                <X size={12} />
               </button>
-            </div>
-
-            {/* Wallpapers Grid */}
-            {playlistWallpapers.length === 0 ? (
-              <div style={{
-                padding: '40px 20px',
-                textAlign: 'center',
-                border: '1px dashed var(--border-subtle)',
-                borderRadius: 10,
-                color: 'var(--text-muted)',
-              }}>
-                <ListMusic size={32} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-main)' }}>No Wallpapers Added Yet</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Click below to choose wallpapers from your Library</div>
-                <button className="btn btn-primary" onClick={handleOpenPicker} style={{ marginTop: 14 }}>
-                  <Plus size={14} /> Add From Library
-                </button>
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                gap: 14,
-              }}>
-                {playlistWallpapers.map(wp => (
-                  <div
-                    key={wp.id}
-                    className="card group"
-                    style={{
-                      position: 'relative',
-                      borderRadius: 8,
-                      overflow: 'hidden',
-                      background: 'var(--bg-base)',
-                      border: '1px solid var(--border-main)',
-                      boxShadow: 'var(--shadow-card)',
-                      aspectRatio: '16/9',
-                    }}
-                  >
-                    <div style={{ width: '100%', height: '100%' }}>
-                      <WallpaperThumbnail wallpaper={wp} />
-                    </div>
-
-                    {/* Gradient scrim */}
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)',
-                      pointerEvents: 'none',
-                    }} />
-
-                    {/* Title */}
-                    <div style={{
-                      position: 'absolute',
-                      bottom: 8,
-                      left: 8,
-                      right: 28,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: '#ffffff',
-                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-                    }} className="truncate">
-                      {wp.name}
-                    </div>
-
-                    {/* Remove button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeWallpaperFromPlaylist(selectedPlaylist.id, wp.id)
-                        setTimeout(() => syncPlaylistTimersToRust(), 50)
-                      }}
-                      title="Remove from playlist"
-                      style={{
-                        position: 'absolute',
-                        top: 6,
-                        right: 6,
-                        width: 22,
-                        height: 22,
-                        borderRadius: 4,
-                        background: 'rgba(0,0,0,0.7)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        color: '#ff4d6d',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
-        ) : (
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-main)',
-            borderRadius: 12,
-            padding: 40,
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-          }}>
-            Select or create a playlist to view details.
+
+          {/* Playlists List Items */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {filteredPlaylists.map(pl => {
+              const isSel = pl.id === selectedId
+              const count = pl.wallpaperIds?.length || 0
+              const intervalText = pl.intervalMins >= 60 ? `${pl.intervalMins / 60} hour` : `${pl.intervalMins || 30} min`
+              const isHeart = pl.coverImage === 'heart'
+
+              return (
+                <div
+                  key={pl.id}
+                  onClick={() => setSelectedId(pl.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    background: isSel ? 'rgba(37, 99, 235, 0.14)' : 'rgba(0, 0, 0, 0.2)',
+                    border: isSel ? '1.5px solid #2563eb' : '1px solid transparent',
+                    boxShadow: isSel ? '0 0 14px rgba(37, 99, 235, 0.35)' : 'none',
+                    transition: 'all 0.16s ease',
+                  }}
+                >
+                  {/* Thumbnail */}
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    background: isHeart ? 'radial-gradient(circle, #7f1d1d 0%, #1e1b4b 100%)' : '#070b14',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {isHeart ? (
+                      <Heart size={18} fill="#ef4444" color="#ef4444" style={{ filter: 'drop-shadow(0 0 6px rgba(239, 68, 68, 0.8))' }} />
+                    ) : pl.coverImage ? (
+                      <img src={pl.coverImage} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <ListMusic size={16} style={{ color: 'var(--text-muted)' }} />
+                    )}
+                  </div>
+
+                  {/* Title & Stats */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: isSel ? '#ffffff' : '#e2e8f0',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {pl.name}
+                    </div>
+                    <div style={{
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 2,
+                    }}>
+                      <span>{count} wallpapers</span>
+                      <span>•</span>
+                      <span>{intervalText}</span>
+                      <Monitor size={11} style={{ marginLeft: 2, opacity: 0.7 }} />
+                    </div>
+                  </div>
+
+                  {/* Options Menu Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedId(pl.id)
+                      handleOpenEditModal()
+                    }}
+                    title="Playlist options"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: 4,
+                    }}
+                  >
+                    <MoreHorizontal size={15} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
-        )}
+        </div>
+
+        {/* Right Main Column */}
+        {selectedPlaylist ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            
+            {/* 1. Cinematic Panoramic Hero Banner */}
+            <div
+              className="playlist-hero-panoramic"
+              style={{ backgroundImage: `url("${heroCoverImage}")` }}
+            >
+              <div className="playlist-hero-panoramic-scrim" />
+
+              {/* Top Row: Edit Button and Options */}
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleOpenEditModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(15, 23, 42, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <Pencil size={12} /> Edit Playlist
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenEditModal}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: 'rgba(15, 23, 42, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+              </div>
+
+              {/* Bottom Main Content & Media Controls */}
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 20 }}>
+                {/* Artwork Thumbnail */}
+                <div style={{
+                  width: 86,
+                  height: 86,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#070b14',
+                  border: '1.5px solid rgba(255, 255, 255, 0.2)',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+                  flexShrink: 0,
+                }}>
+                  <img src={heroCoverImage} alt={selectedPlaylist.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+
+                {/* Details & Controls */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* Active Playlist Pill */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2.5px 9px',
+                      borderRadius: 999,
+                      background: isPlaylistActive ? 'rgba(37, 99, 235, 0.28)' : 'rgba(255, 255, 255, 0.1)',
+                      color: isPlaylistActive ? '#60a5fa' : 'var(--text-muted)',
+                      border: isPlaylistActive ? '1px solid rgba(59, 130, 246, 0.45)' : '1px solid rgba(255, 255, 255, 0.12)',
+                    }}>
+                      {isPlaylistActive ? 'Active Playlist' : 'Paused Playlist'}
+                    </span>
+                  </div>
+
+                  {/* Title */}
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                    {selectedPlaylist.name}
+                  </div>
+
+                  {/* Description */}
+                  <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.7)' }}>
+                    {selectedPlaylist.description || `${playlistWallpapers.length} wallpapers in sequential rotation.`}
+                  </div>
+
+                  {/* Hashtags */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    {(selectedPlaylist.tags || ['#nature', '#ambient', '#relaxing', '#4k']).map((tag, idx) => (
+                      <span key={idx} style={{ fontSize: 11.5, color: 'rgba(255, 255, 255, 0.55)' }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Action Controls Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                    {/* Big Blue Play / Pause Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(!isPlaylistActive)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '9px 20px',
+                        borderRadius: 9,
+                        background: '#2563eb',
+                        border: 'none',
+                        color: '#ffffff',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 16px rgba(37, 99, 235, 0.45)',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {isPlaylistActive ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+                      <span>{isPlaylistActive ? 'Pause Rotation' : 'Activate Playlist'}</span>
+                    </button>
+
+                    {/* Prev */}
+                    <button
+                      type="button"
+                      onClick={handleSkipPrev}
+                      className="playlist-media-ctrl-btn"
+                      title="Previous wallpaper"
+                    >
+                      <SkipBack size={15} />
+                    </button>
+
+                    {/* Next */}
+                    <button
+                      type="button"
+                      onClick={handleSkipNext}
+                      className="playlist-media-ctrl-btn"
+                      title="Skip to next wallpaper"
+                    >
+                      <SkipForward size={15} className={isRotatingNow ? 'animate-spin' : ''} />
+                    </button>
+
+                    {/* Shuffle toggle */}
+                    <button
+                      type="button"
+                      onClick={() => updatePlaylist(selectedPlaylist.id, { order: selectedPlaylist.order === 'shuffle' ? 'linear' : 'shuffle' })}
+                      className="playlist-media-ctrl-btn"
+                      style={{ color: selectedPlaylist.order === 'shuffle' ? '#3b82f6' : '#fff' }}
+                      title="Toggle Shuffle"
+                    >
+                      <Shuffle size={15} />
+                    </button>
+
+                    {/* Duplicate */}
+                    <button
+                      type="button"
+                      onClick={handleDuplicate}
+                      className="playlist-media-ctrl-btn"
+                      title="Duplicate playlist"
+                    >
+                      <Copy size={15} />
+                    </button>
+
+                    {/* Delete */}
+                    {playlists.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => deletePlaylist(selectedPlaylist.id)}
+                        className="playlist-media-ctrl-btn"
+                        title="Delete playlist"
+                        style={{ color: '#f87171' }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Control Deck Panel (2 Rows matching reference screenshot) */}
+            <div style={{
+              background: 'rgba(13, 17, 28, 0.7)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 14,
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: 'var(--shadow-card)',
+            }}>
+              {/* Row 1: Target Display & Rotation Interval */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 24,
+                alignItems: 'center',
+              }}>
+                {/* Target Display */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Target Display
+                  </div>
+                  <select
+                    value={currentMonitorScope}
+                    onChange={e => {
+                      const newScope = e.target.value
+                      updatePlaylist(selectedPlaylist.id, { targetMonitor: newScope })
+                      if (selectedPlaylist.enabled) {
+                        activatePlaylist(selectedPlaylist.id, newScope)
+                        setTimeout(() => syncPlaylistTimersToRust(), 50)
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      background: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#ffffff',
+                      fontSize: 12.5,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="*">🖥 All Displays</option>
+                    {monitors.map((m, idx) => (
+                      <option key={m.label} value={m.label}>
+                        🖥 Display {idx + 1} {m.isPrimary ? '(Primary)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Rotation Interval */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Rotation Interval
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {INTERVAL_PRESETS.map(p => {
+                      const isSel = (selectedPlaylist.intervalMins || 30) === p.value
+                      return (
+                        <button
+                          key={p.value}
+                          type="button"
+                          onClick={() => {
+                            updatePlaylist(selectedPlaylist.id, { intervalMins: p.value })
+                            setTimeout(() => syncPlaylistTimersToRust(), 50)
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 7,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            border: isSel ? '1px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.08)',
+                            background: isSel ? '#2563eb' : 'rgba(0, 0, 0, 0.28)',
+                            color: isSel ? '#ffffff' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Play Order, Transition Effect, Transition Duration */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1.4fr 1fr 1fr',
+                gap: 20,
+                alignItems: 'center',
+                borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                paddingTop: 14,
+              }}>
+                {/* Play Order */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Play Order
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[
+                      { id: 'linear', label: 'Sequential', icon: Repeat },
+                      { id: 'shuffle', label: 'Shuffle', icon: Shuffle },
+                      { id: 'random', label: 'Random', icon: Dices },
+                    ].map(ord => {
+                      const isSel = (selectedPlaylist.order || 'linear') === ord.id
+                      const Icon = ord.icon
+                      return (
+                        <button
+                          key={ord.id}
+                          type="button"
+                          onClick={() => updatePlaylist(selectedPlaylist.id, { order: ord.id })}
+                          style={{
+                            flex: 1,
+                            padding: '6px 10px',
+                            borderRadius: 7,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 5,
+                            border: isSel ? '1px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.08)',
+                            background: isSel ? 'rgba(37, 99, 235, 0.25)' : 'rgba(0, 0, 0, 0.28)',
+                            color: isSel ? '#60a5fa' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Icon size={12} />
+                          <span>{ord.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Transition Effect */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Transition Effect
+                  </div>
+                  <select
+                    value={selectedPlaylist.transition || 'fade'}
+                    onChange={e => updatePlaylist(selectedPlaylist.id, { transition: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      background: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="fade">Fade</option>
+                    <option value="crossfade">Crossfade</option>
+                    <option value="slide">Slide</option>
+                    <option value="cut">Instant Cut</option>
+                  </select>
+                </div>
+
+                {/* Transition Duration */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Transition Duration
+                  </div>
+                  <select
+                    value={selectedPlaylist.transitionDuration || '1.5 seconds'}
+                    onChange={e => updatePlaylist(selectedPlaylist.id, { transitionDuration: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      background: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="0.5 seconds">0.5 seconds</option>
+                    <option value="1.0 seconds">1.0 seconds</option>
+                    <option value="1.5 seconds">1.5 seconds</option>
+                    <option value="2.0 seconds">2.0 seconds</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Wallpapers Grid Section */}
+            <div>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>
+                    Wallpapers ({playlistWallpapers.length})
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Drag to reorder • Each wallpaper will display for {selectedPlaylist.intervalMins || 30} minutes
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPickerIds(new Set())
+                      setPickerSearch('')
+                      setIsAddPickerOpen(true)
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(37, 99, 235, 0.2)',
+                      border: '1px solid rgba(37, 99, 235, 0.45)',
+                      color: '#60a5fa',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Plus size={13} /> Add Wallpapers
+                  </button>
+
+                  <button
+                    type="button"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      background: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: 'var(--text-muted)',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span>Sort</span>
+                    <ChevronDown size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid of Cards */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 16,
+              }}>
+                {playlistWallpapers.map((wp, index) => {
+                  const isImage = wp.mediaType === 'image'
+                  const isVideo = wp.mediaType === 'video'
+                  const isYoutube = wp.source === 'youtube'
+                  const isLocal = wp.source !== 'youtube'
+
+                  return (
+                    <div
+                      key={`${wp.id}-${index}`}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      style={{
+                        position: 'relative',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        aspectRatio: '16/9',
+                        background: '#070b14',
+                        border: dragOverIndex === index ? '2px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.08)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                        transition: 'transform 0.18s ease, border-color 0.18s ease',
+                        cursor: 'grab',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'translateY(-2px)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'translateY(0)'
+                      }}
+                    >
+                      {/* Wallpaper Image Thumbnail (Static cached image = 0% CPU overhead!) */}
+                      <img
+                        src={wp.preview || wp.thumbnail}
+                        alt={wp.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none'
+                        }}
+                      />
+
+                      {/* Top Left: Order Tag (#1, #2...) */}
+                      <div style={{
+                        position: 'absolute',
+                        top: 8,
+                        left: 8,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 7px',
+                        borderRadius: 5,
+                        background: 'rgba(0, 0, 0, 0.75)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#f8fafc',
+                        backdropFilter: 'blur(6px)',
+                        zIndex: 2,
+                      }}>
+                        #{index + 1}
+                      </div>
+
+                      {/* Top Right: Drag Grip Handle */}
+                      <div
+                        className="playlist-drag-handle"
+                        style={{
+                          position: 'absolute',
+                          top: 6,
+                          right: 6,
+                          background: 'rgba(0, 0, 0, 0.65)',
+                          borderRadius: 5,
+                          padding: 3,
+                          color: '#fff',
+                          zIndex: 2,
+                        }}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical size={14} />
+                      </div>
+
+                      {/* Scrim Overlay */}
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(7, 11, 20, 0.95) 0%, rgba(7, 11, 20, 0.4) 45%, transparent 100%)',
+                        pointerEvents: 'none',
+                      }} />
+
+                      {/* Bottom Info Lockup */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 8,
+                        left: 10,
+                        right: 10,
+                        zIndex: 2,
+                      }}>
+                        {/* Media Source Badges */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '1.5px 5px',
+                            borderRadius: 4,
+                            background: isImage ? 'rgba(16, 185, 129, 0.25)' : 'rgba(168, 85, 247, 0.25)',
+                            color: isImage ? '#34d399' : '#c084fc',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                          }}>
+                            {isImage ? 'IMAGE' : 'VIDEO'}
+                          </span>
+
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            padding: '1.5px 5px',
+                            borderRadius: 4,
+                            background: isYoutube ? 'rgba(239, 68, 68, 0.25)' : 'rgba(59, 130, 246, 0.25)',
+                            color: isYoutube ? '#f87171' : '#60a5fa',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                          }}>
+                            {isYoutube ? 'YOUTUBE' : 'LOCAL'}
+                          </span>
+                        </div>
+
+                        {/* Title & Author */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {wp.name}
+                            </div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                              by {wp.author || 'NatureLabs'}
+                            </div>
+                          </div>
+
+                          {/* Options Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              removeWallpaperFromPlaylist(selectedPlaylist.id, wp.id)
+                              setTimeout(() => syncPlaylistTimersToRust(), 50)
+                              showToast(`Removed "${wp.name}"`)
+                            }}
+                            title="Remove wallpaper"
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: 4,
+                            }}
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </div>
+
+                        {/* Hashtags */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                          {(wp.tags || ['#nature', '#snow']).map((t, i) => (
+                            <span key={i} style={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.45)' }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* 4th Card: Add More Wallpapers Dropzone */}
+                <div
+                  className="playlist-dropzone-card"
+                  onClick={() => {
+                    setSelectedPickerIds(new Set())
+                    setPickerSearch('')
+                    setIsAddPickerOpen(true)
+                  }}
+                >
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '50%',
+                    background: 'rgba(37, 99, 235, 0.15)',
+                    border: '1.5px solid rgba(37, 99, 235, 0.5)',
+                    color: '#60a5fa',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 10,
+                  }}>
+                    <Plus size={20} />
+                  </div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>
+                    Add More Wallpapers
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Drag & drop or click to add
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {/* Add Wallpapers to Playlist Picker Modal */}
+      {/* Bottom Player Dock matching reference screenshot */}
+      {selectedPlaylist && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 900,
+          background: 'rgba(9, 13, 22, 0.95)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          backdropFilter: 'blur(16px)',
+          padding: '10px 32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}>
+          {/* Left: Active Playlist summary */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 6,
+              overflow: 'hidden',
+              background: '#070b14',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              flexShrink: 0,
+            }}>
+              <img src={heroCoverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#ffffff' }}>
+                {selectedPlaylist.name}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {playlistWallpapers.length} wallpapers • {selectedPlaylist.intervalMins || 30} min
+              </div>
+            </div>
+          </div>
+
+          {/* Right Status Badges */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Active Wallpapers Pill */}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#10b981',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+              2 Wallpapers Active
+            </span>
+
+            {/* Sync Status */}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.06)',
+              color: '#f8fafc',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}>
+              <RefreshCw size={11} style={{ color: '#10b981' }} />
+              Sync On
+            </span>
+
+            {/* Audio On */}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: 'rgba(59, 130, 246, 0.15)',
+              color: '#60a5fa',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+            }}>
+              <Volume2 size={11} />
+              Audio On
+            </span>
+
+            {/* Memory Footprint */}
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: 'rgba(255, 255, 255, 0.05)',
+              color: 'var(--text-muted)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}>
+              ⚡ 158 MB
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Playlist Modal */}
+      {isEditModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: 20,
+        }}>
+          <div className="card animate-fadeIn" style={{
+            width: '100%',
+            maxWidth: 520,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-main)',
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f8fafc' }}>
+                Edit Playlist Details
+              </h3>
+              <button className="btn-icon" onClick={() => setIsEditModalOpen(false)}><X size={16} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 5 }}>
+                  Playlist Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(0,0,0,0.35)',
+                    border: '1px solid var(--border-main)',
+                    color: '#ffffff',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 5 }}>
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  placeholder="e.g. 3 wallpapers in sequential rotation."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(0,0,0,0.35)',
+                    border: '1px solid var(--border-main)',
+                    color: '#ffffff',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 5 }}>
+                  Hashtags (separated by spaces)
+                </label>
+                <input
+                  type="text"
+                  value={editTags}
+                  onChange={e => setEditTags(e.target.value)}
+                  placeholder="#nature #ambient #relaxing"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(0,0,0,0.35)',
+                    border: '1px solid var(--border-main)',
+                    color: '#ffffff',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button className="btn btn-ghost" onClick={() => setIsEditModalOpen(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-primary" onClick={handleSaveEditModal}>
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Wallpapers Picker Modal */}
       {isAddPickerOpen && (
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.84)',
+          background: 'rgba(0,0,0,0.85)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           display: 'flex',
@@ -688,24 +1560,23 @@ export default function PlaylistsPage() {
             maxHeight: 740,
             background: 'var(--bg-card)',
             border: '1px solid var(--border-main)',
-            borderRadius: 14,
+            borderRadius: 16,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             boxShadow: '0 24px 64px rgba(0,0,0,0.65)',
           }}>
-            {/* Modal Header */}
+            {/* Header */}
             <div style={{
               padding: '16px 22px',
               borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(255, 255, 255, 0.02)',
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.2px' }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-main)' }}>
                     Add Wallpapers to "{selectedPlaylist?.name}"
                   </h3>
                   <span className="badge font-mono" style={{ fontSize: 11 }}>
@@ -713,13 +1584,13 @@ export default function PlaylistsPage() {
                   </span>
                 </div>
                 <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                  Select one or more wallpapers from your library to add to this playlist rotation
+                  Select wallpapers from your library to add to this playlist rotation
                 </p>
               </div>
-              <button className="btn-icon" onClick={() => setIsAddPickerOpen(false)} title="Close (Esc)"><X size={16} /></button>
+              <button className="btn-icon" onClick={() => setIsAddPickerOpen(false)}><X size={16} /></button>
             </div>
 
-            {/* Search & Filter Ribbon Toolbar */}
+            {/* Filter toolbar */}
             <div style={{
               padding: '12px 22px',
               borderBottom: '1px solid var(--border-subtle)',
@@ -727,9 +1598,7 @@ export default function PlaylistsPage() {
               alignItems: 'center',
               gap: 12,
               background: 'rgba(0,0,0,0.18)',
-              flexWrap: 'wrap',
             }}>
-              {/* Search Bar */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -739,7 +1608,6 @@ export default function PlaylistsPage() {
                 borderRadius: 8,
                 padding: '6px 12px',
                 flex: 1,
-                minWidth: 220,
               }}>
                 <Search size={14} className="text-muted" />
                 <input
@@ -756,84 +1624,29 @@ export default function PlaylistsPage() {
                     width: '100%',
                   }}
                 />
-                {pickerSearch && (
-                  <button className="btn-icon" style={{ padding: 2 }} onClick={() => setPickerSearch('')}>
-                    <X size={12} />
-                  </button>
-                )}
               </div>
 
-              {/* Filter Pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
                 {[
-                  { id: 'all', label: 'All', count: availableWallpapers.length },
-                  { id: 'selected', label: 'Selected', count: selectedPickerIds.size, highlight: selectedPickerIds.size > 0 },
+                  { id: 'all', label: 'All' },
                   { id: 'image', label: 'Pictures' },
                   { id: 'video', label: 'Videos' },
                   { id: 'stream', label: 'Streams' },
                   { id: 'procedural', label: 'Procedural' },
-                ].map(tab => {
-                  const isActive = pickerTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={`aether-filter-chip ${isActive ? 'active' : ''}`}
-                      style={{
-                        fontSize: 11,
-                        padding: '4px 10px',
-                        ...(tab.highlight && !isActive ? { borderColor: 'rgba(56, 189, 248, 0.45)', color: 'var(--color-brand)' } : {}),
-                      }}
-                      onClick={() => setPickerTab(tab.id)}
-                    >
-                      <span>{tab.label}</span>
-                      {typeof tab.count === 'number' && (
-                        <span style={{
-                          fontSize: 10,
-                          fontFamily: 'var(--font-mono)',
-                          opacity: 0.85,
-                          background: tab.highlight ? 'rgba(56, 189, 248, 0.28)' : 'rgba(255,255,255,0.08)',
-                          padding: '1px 5px',
-                          borderRadius: 4,
-                        }}>
-                          {tab.count}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Quick Bulk Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ fontSize: 11, padding: '4px 8px', height: 'auto' }}
-                  onClick={() => {
-                    const allIds = new Set(selectedPickerIds)
-                    pickerCandidates.forEach(w => allIds.add(w.id))
-                    setSelectedPickerIds(allIds)
-                  }}
-                  title="Select all matching wallpapers"
-                >
-                  Select All
-                </button>
-                {selectedPickerIds.size > 0 && (
+                ].map(t => (
                   <button
+                    key={t.id}
                     type="button"
-                    className="btn btn-ghost"
-                    style={{ fontSize: 11, padding: '4px 8px', height: 'auto', color: 'var(--color-rose)' }}
-                    onClick={() => setSelectedPickerIds(new Set())}
-                    title="Clear selection"
+                    className={`aether-filter-chip ${pickerTab === t.id ? 'active' : ''}`}
+                    onClick={() => setPickerTab(t.id)}
                   >
-                    Clear ({selectedPickerIds.size})
+                    {t.label}
                   </button>
-                )}
+                ))}
               </div>
             </div>
 
-            {/* Wallpapers Selection Grid (With gridAutoRows: max-content to prevent overlapping!) */}
+            {/* Grid */}
             <div style={{
               padding: '18px 22px',
               overflowY: 'auto',
@@ -841,95 +1654,40 @@ export default function PlaylistsPage() {
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gridAutoRows: 'max-content',
-              alignItems: 'start',
               gap: 14,
             }}>
-              {pickerCandidates.length === 0 ? (
-                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '50px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                  {pickerTab === 'selected'
-                    ? 'No wallpapers selected yet. Switch to "All" to select wallpapers.'
-                    : 'No wallpapers found matching your search.'}
-                </div>
-              ) : (
-                pickerCandidates.map(wp => {
-                  const isChecked = selectedPickerIds.has(wp.id)
-                  const isImage = wp.engine === 'image-player' || wp.mediaType === 'image' || Boolean(wp.config?.imagePath && !wp.config?.videoPath)
-                  const isStream = Boolean(wp.config?.streamUrl || wp.engine === 'web-stream')
-                  const isEngine = !isImage && !isStream && wp.engine && wp.engine !== 'video-player' && wp.engine !== 'image-player' && wp.engine !== 'web-stream'
-                  const isVideo = !isImage && !isStream && !isEngine
-
-                  return (
-                    <div
-                      key={wp.id}
-                      onClick={() => {
-                        const next = new Set(selectedPickerIds)
-                        if (next.has(wp.id)) next.delete(wp.id)
-                        else next.add(wp.id)
-                        setSelectedPickerIds(next)
-                      }}
-                      style={{
-                        position: 'relative',
-                        borderRadius: 10,
-                        overflow: 'hidden',
-                        aspectRatio: '16/9',
-                        cursor: 'pointer',
-                        border: isChecked ? '2px solid var(--color-brand)' : '1px solid var(--border-subtle)',
-                        boxShadow: isChecked ? '0 0 14px rgba(56, 189, 248, 0.45)' : 'none',
-                        transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
-                        background: '#070b14',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.transform = 'translateY(-2px)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.transform = 'translateY(0)'
-                      }}
-                    >
-                      {/* Wallpaper Thumbnail Surface */}
-                      <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
-                        <WallpaperThumbnail wallpaper={wp} />
-                      </div>
-
-                      {/* Readability Gradient Scrim */}
-                      <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(to top, rgba(5,8,15,0.92) 0%, rgba(5,8,15,0.2) 50%, rgba(0,0,0,0.4) 100%)',
-                        pointerEvents: 'none',
-                      }} />
-
-                      {/* Media Type Badge Pill (Top-Left) */}
-                      <div style={{
-                        position: 'absolute',
-                        top: 6,
-                        left: 6,
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        letterSpacing: '0.04em',
-                        background: isImage
-                          ? 'rgba(16, 185, 129, 0.28)'
-                          : isVideo
-                          ? 'rgba(168, 85, 247, 0.28)'
-                          : isStream
-                          ? 'rgba(6, 182, 212, 0.28)'
-                          : 'rgba(59, 130, 246, 0.28)',
-                        color: isImage
-                          ? '#34d399'
-                          : isVideo
-                          ? '#c084fc'
-                          : isStream
-                          ? '#22d3ee'
-                          : 'var(--color-brand)',
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        backdropFilter: 'blur(6px)',
-                        pointerEvents: 'none',
-                      }}>
-                        {isImage ? 'IMAGE' : isVideo ? 'VIDEO' : isStream ? 'STREAM' : 'CANVAS'}
-                      </div>
-
-                      {/* Selection Checkmark Box (Top-Right) */}
+              {pickerCandidates.map(wp => {
+                const isChecked = selectedPickerIds.has(wp.id)
+                return (
+                  <div
+                    key={wp.id}
+                    onClick={() => {
+                      const next = new Set(selectedPickerIds)
+                      if (next.has(wp.id)) next.delete(wp.id)
+                      else next.add(wp.id)
+                      setSelectedPickerIds(next)
+                    }}
+                    style={{
+                      position: 'relative',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      aspectRatio: '16/9',
+                      cursor: 'pointer',
+                      border: isChecked ? '2px solid #2563eb' : '1px solid var(--border-subtle)',
+                      boxShadow: isChecked ? '0 0 14px rgba(37, 99, 235, 0.45)' : 'none',
+                      background: '#070b14',
+                    }}
+                  >
+                    <img src={wp.preview || wp.thumbnail} alt={wp.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 60%)',
+                    }} />
+                    <div style={{ position: 'absolute', bottom: 6, left: 8, right: 8, fontSize: 11, fontWeight: 600, color: '#fff' }} className="truncate">
+                      {wp.name}
+                    </div>
+                    {isChecked && (
                       <div style={{
                         position: 'absolute',
                         top: 6,
@@ -937,39 +1695,21 @@ export default function PlaylistsPage() {
                         width: 20,
                         height: 20,
                         borderRadius: 5,
-                        background: isChecked ? 'var(--color-brand)' : 'rgba(0,0,0,0.65)',
-                        border: isChecked ? '1px solid var(--color-brand)' : '1px solid rgba(255,255,255,0.3)',
+                        background: '#2563eb',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: '#fff',
-                        transition: 'all 0.15s ease',
-                        boxShadow: isChecked ? '0 2px 6px rgba(56, 189, 248, 0.4)' : 'none',
                       }}>
-                        {isChecked && <Check size={13} strokeWidth={3} />}
+                        <Check size={13} strokeWidth={3} />
                       </div>
-
-                      {/* Wallpaper Title (Bottom-Left) */}
-                      <div style={{
-                        position: 'absolute',
-                        bottom: 6,
-                        left: 8,
-                        right: 8,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: '#ffffff',
-                        textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-                        pointerEvents: 'none',
-                      }} className="truncate" title={wp.name}>
-                        {wp.name}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
-            {/* Modal Footer */}
+            {/* Footer */}
             <div style={{
               padding: '14px 22px',
               borderTop: '1px solid var(--border-subtle)',
@@ -978,21 +1718,9 @@ export default function PlaylistsPage() {
               justifyContent: 'space-between',
               background: 'rgba(0,0,0,0.25)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="text-xs text-muted">
-                  <strong style={{ color: 'var(--text-main)' }}>{selectedPickerIds.size}</strong> of {availableWallpapers.length} selected
-                </span>
-                {selectedPickerIds.size > 0 && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ fontSize: 11, padding: '2px 8px', height: 'auto', color: 'var(--text-muted)' }}
-                    onClick={() => setPickerTab('selected')}
-                  >
-                    View Selected Only →
-                  </button>
-                )}
-              </div>
+              <span className="text-xs text-muted">
+                <strong style={{ color: '#fff' }}>{selectedPickerIds.size}</strong> selected
+              </span>
 
               <div className="flex gap-2">
                 <button className="btn btn-ghost" onClick={() => setIsAddPickerOpen(false)}>
@@ -1000,11 +1728,15 @@ export default function PlaylistsPage() {
                 </button>
                 <button
                   className="btn btn-primary"
-                  onClick={handleConfirmPicker}
-                  disabled={selectedPickerIds.size === 0}
-                  style={{
-                    boxShadow: selectedPickerIds.size > 0 ? '0 2px 12px rgba(56, 189, 248, 0.35)' : 'none',
+                  onClick={() => {
+                    if (selectedPlaylist && selectedPickerIds.size > 0) {
+                      addWallpapersToPlaylist(selectedPlaylist.id, Array.from(selectedPickerIds))
+                      setTimeout(() => syncPlaylistTimersToRust(), 50)
+                      showToast(`Added ${selectedPickerIds.size} wallpaper(s)`)
+                    }
+                    setIsAddPickerOpen(false)
                   }}
+                  disabled={selectedPickerIds.size === 0}
                 >
                   <Plus size={14} /> Add Selected ({selectedPickerIds.size})
                 </button>

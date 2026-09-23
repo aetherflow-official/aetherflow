@@ -326,6 +326,33 @@ fn is_monitor_currently_paused(label: &str) -> bool {
     false
 }
 
+pub fn normalize_mon_label(s: &str) -> String {
+    s.trim()
+        .trim_start_matches("wallpaper_")
+        .trim_start_matches('_')
+        .replace("\\\\.\\", "")
+        .replace("\\.", "")
+        .replace('\\', "")
+        .replace('.', "_")
+        .to_ascii_lowercase()
+}
+
+pub fn matches_monitor(target: &str, label: &str) -> bool {
+    let t = target.trim();
+    if t.is_empty() || t == "*" || t.eq_ignore_ascii_case("all") {
+        return true;
+    }
+    if t == label {
+        return true;
+    }
+    let norm_target = normalize_mon_label(t);
+    if norm_target == "*" || norm_target == "all" || norm_target.is_empty() {
+        return true;
+    }
+    let norm_label = normalize_mon_label(label);
+    norm_target == norm_label
+}
+
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ActiveWallpaperState {
@@ -2876,7 +2903,8 @@ async fn apply_wallpaper(
         let speed_val = config.get("speedMultiplier").and_then(|v| v.as_f64()).or_else(|| config.get("speed").and_then(|v| v.as_f64())).unwrap_or(1.0);
         let is_all = target == "*"
             || target == "wallpaper_*"
-            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*";
+            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*"
+            || target.eq_ignore_ascii_case("all");
         let is_duplicated = is_all;
         let mut audio_assigned = false;
         let target_audio_label = get_target_audio_monitor_label(&app);
@@ -2884,9 +2912,7 @@ async fn apply_wallpaper(
         for (idx, mon) in monitors.iter().enumerate() {
             if let Some(name) = mon.name() {
                 let label = get_monitor_label(name);
-                let matches_target = is_all
-                    || target == label
-                    || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
+                let matches_target = is_all || matches_monitor(&target, &label);
                 if !matches_target {
                     continue;
                 }
@@ -3109,10 +3135,10 @@ async fn apply_wallpaper(
             &format!("target='{}' engine='{}'", target, resolved_engine_id),
         );
         ensure_wallpaper_windows(&app);
-        // Canvas engine -> Route to WebView2 window
         let is_all = target == "*"
             || target == "wallpaper_*"
-            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*";
+            || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*"
+            || target.eq_ignore_ascii_case("all");
         // 1. Terminate any MPV instances
         if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref mut map) = *mpv_guard {
@@ -3120,8 +3146,15 @@ async fn apply_wallpaper(
                     for (_, mut proc) in map.drain() {
                         proc.terminate();
                     }
-                } else if let Some(mut proc) = map.remove(&target) {
-                    proc.terminate();
+                } else {
+                    map.retain(|lbl, proc| {
+                        if matches_monitor(&target, lbl) {
+                            proc.terminate();
+                            false
+                        } else {
+                            true
+                        }
+                    });
                 }
             }
         }
@@ -3135,9 +3168,7 @@ async fn apply_wallpaper(
         let windows = app.webview_windows();
         let mut audio_assigned = false;
         for (label, win) in windows {
-            let matches_target = is_all
-                || target == label
-                || target.trim_start_matches("wallpaper_").trim_start_matches('_').eq_ignore_ascii_case(label.trim_start_matches("wallpaper_").trim_start_matches('_'));
+            let matches_target = is_all || matches_monitor(&target, &label);
             if label.starts_with("wallpaper_") && matches_target {
                 #[cfg(windows)]
                 let mut pinned = true;
@@ -3178,11 +3209,11 @@ async fn apply_wallpaper(
                 let target_audio_label = get_target_audio_monitor_label(&app);
                 let is_target_audio = target_audio_label.as_deref() == Some(label.as_str())
                     || (!audio_assigned && target_audio_label.is_none());
-                let is_secondary = !is_target_audio && target == "*";
+                let is_secondary = !is_target_audio && is_all;
 
                 let screen_muted = if global_muted {
                     true
-                } else if target == "*" {
+                } else if is_all {
                     if is_target_audio && !audio_assigned {
                         audio_assigned = true;
                         false
@@ -3267,7 +3298,11 @@ async fn apply_wallpaper(
 #[tauri::command]
 fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     let target = monitor_label.unwrap_or_else(|| "*".to_string());
-    if target == "*" {
+    let is_all = target == "*"
+        || target == "wallpaper_*"
+        || target.trim_start_matches("wallpaper_").trim_start_matches('_') == "*"
+        || target.eq_ignore_ascii_case("all");
+    if is_all {
         invalidate_all_apply_tickets();
     } else {
         next_apply_ticket(&target);
@@ -3276,10 +3311,10 @@ fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
 
     if let Ok(mut guard) = ACTIVE_WALLPAPERS.lock() {
         if let Some(ref mut map) = *guard {
-            if target == "*" {
+            if is_all {
                 map.clear();
             } else {
-                map.remove(&target);
+                map.retain(|lbl, _| !matches_monitor(&target, lbl));
             }
         }
     }
@@ -3287,22 +3322,29 @@ fn stop_wallpaper(app: AppHandle, monitor_label: Option<String>) {
     // Terminate any MPV instances for target monitor(s)
     if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref mut map) = *mpv_guard {
-            if target == "*" {
+            if is_all {
                 for (_, mut proc) in map.drain() {
                     proc.terminate();
                 }
-            } else if let Some(mut proc) = map.remove(&target) {
-                proc.terminate();
+            } else {
+                map.retain(|lbl, proc| {
+                    if matches_monitor(&target, lbl) {
+                        proc.terminate();
+                        false
+                    } else {
+                        true
+                    }
+                });
             }
         }
     }
-    if target == "*" {
+    if is_all {
         mpv::kill_all_mpv_processes();
     }
 
     let windows = app.webview_windows();
     for (label, win) in windows {
-        if label.starts_with("wallpaper_") && (target == "*" || target == label) {
+        if label.starts_with("wallpaper_") && (is_all || matches_monitor(&target, &label)) {
             let payload = serde_json::json!({ "target": target.clone() });
             let _ = win.emit_to(label.as_str(), "aether:stop", payload.clone());
             let _ = win.emit_to(label.as_str(), "aura:stop", payload);
@@ -3335,7 +3377,7 @@ fn set_mpv_pause(monitor_label: Option<String>, paused: bool) {
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
             for (label, proc) in map {
-                if target == "*" || target == *label {
+                if matches_monitor(&target, label) {
                     let _ = proc.set_pause(paused);
                 }
             }
@@ -3349,7 +3391,7 @@ fn set_mpv_volume(monitor_label: Option<String>, volume: f64) {
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
             for (label, proc) in map {
-                if target == "*" || target == *label {
+                if matches_monitor(&target, label) {
                     let _ = proc.set_volume(volume);
                 }
             }
@@ -3377,7 +3419,7 @@ fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
     let target_audio_label = get_target_audio_monitor_label(&app);
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
-            if target == "*" {
+            if target == "*" || target.eq_ignore_ascii_case("all") {
                 if muted {
                     for (_label, proc) in map {
                         let _ = proc.set_mute(true);
@@ -3413,7 +3455,7 @@ fn set_mpv_mute(app: AppHandle, monitor_label: Option<String>, muted: bool) {
                 }
             } else {
                 for (label, proc) in map {
-                    if target == *label {
+                    if matches_monitor(&target, label) {
                         if !muted {
                             let mon_vol = get_target_mon_volume(label);
                             let _ = proc.set_volume(mon_vol);
@@ -4924,7 +4966,7 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
         if let Ok(mut mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref mut map) = *mpv_guard {
                 for (label, proc) in map.iter_mut() {
-                    if target == "*" || target == *label {
+                    if matches_monitor(&target, label) {
                         let _ = proc.load_file(new_vpath);
                     }
                 }
@@ -4935,7 +4977,7 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
         if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref map) = *mpv_guard {
                 for (label, proc) in map {
-                    if target == "*" || target == *label {
+                    if matches_monitor(&target, label) {
                         let _ = proc.set_pause(paused);
                     }
                 }
@@ -4946,7 +4988,7 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
         if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref map) = *mpv_guard {
                 for (label, proc) in map {
-                    if target == "*" || target == *label {
+                    if matches_monitor(&target, label) {
                         let _ = proc.set_speed(spd);
                     }
                 }
@@ -4957,8 +4999,30 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
         if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref map) = *mpv_guard {
                 for (label, proc) in map {
-                    if target == "*" || target == *label {
+                    if matches_monitor(&target, label) {
                         let _ = proc.set_brightness(br);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(ct) = config.get("contrast").and_then(|v| v.as_f64()) {
+        if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+            if let Some(ref map) = *mpv_guard {
+                for (label, proc) in map {
+                    if matches_monitor(&target, label) {
+                        let _ = proc.set_contrast(ct);
+                    }
+                }
+            }
+        }
+    }
+    if let Some(sat) = config.get("saturation").and_then(|v| v.as_f64()) {
+        if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+            if let Some(ref map) = *mpv_guard {
+                for (label, proc) in map {
+                    if matches_monitor(&target, label) {
+                        let _ = proc.set_saturation(sat);
                     }
                 }
             }
@@ -4969,7 +5033,7 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
         if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
             if let Some(ref map) = *mpv_guard {
                 for (label, proc) in map {
-                    if (target == "*" || target == *label) && proc.hwnd != 0 {
+                    if matches_monitor(&target, label) && proc.hwnd != 0 {
                         set_hwnd_opacity(proc.hwnd as HWND, op);
                     }
                 }
@@ -4986,7 +5050,7 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
     if let Ok(mut guard) = ACTIVE_WALLPAPERS.lock() {
         if let Some(ref mut map) = *guard {
             for (label, state) in map.iter_mut() {
-                if target == "*" || target == *label {
+                if matches_monitor(&target, label) {
                     if let (Some(target_obj), Some(upd_obj)) = (state.config.as_object_mut(), config.as_object()) {
                         for (k, v) in upd_obj {
                             target_obj.insert(k.clone(), v.clone());
@@ -5001,9 +5065,9 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
     let mut audio_assigned = false;
     let windows = app.webview_windows();
     for (label, win) in &windows {
-        if label.starts_with("wallpaper_") && (target == "*" || target == *label) {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
             let is_target_audio = target_audio_label.as_deref() == Some(label.as_str()) || (!audio_assigned && target_audio_label.is_none());
-            let is_secondary = !is_target_audio && target == "*";
+            let is_secondary = !is_target_audio && (target == "*" || target.eq_ignore_ascii_case("all"));
 
             let mut win_config = config.clone();
             if let Some(obj) = win_config.as_object_mut() {
@@ -5019,6 +5083,30 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
             let payload = serde_json::json!({ "config": win_config, "target": label.clone() });
             let _ = win.emit_to(label.as_str(), "aether:update-config", payload.clone());
             let _ = win.emit_to(label.as_str(), "aura:update-config", payload.clone());
+            let _ = app.emit("aether:update-config", payload.clone());
+            let _ = app.emit("aura:update-config", payload.clone());
+
+            if let Some(br_val) = config.get("brightness").and_then(|v| v.as_f64()) {
+                let _ = win.emit_to(label.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": br_val, "target": label.clone() }));
+                let _ = app.emit("aether:set-brightness", serde_json::json!({ "brightness": br_val, "target": label.clone() }));
+            }
+            if let Some(op_val) = config.get("opacity").and_then(|v| v.as_f64()) {
+                let _ = win.emit_to(label.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": op_val, "target": label.clone() }));
+                let _ = app.emit("aether:set-opacity", serde_json::json!({ "opacity": op_val, "target": label.clone() }));
+            }
+            if let Some(ct_val) = config.get("contrast").and_then(|v| v.as_f64()) {
+                let _ = win.emit_to(label.as_str(), "aether:set-contrast", serde_json::json!({ "contrast": ct_val, "target": label.clone() }));
+                let _ = app.emit("aether:set-contrast", serde_json::json!({ "contrast": ct_val, "target": label.clone() }));
+            }
+            if let Some(sat_val) = config.get("saturation").and_then(|v| v.as_f64()) {
+                let _ = win.emit_to(label.as_str(), "aether:set-saturation", serde_json::json!({ "saturation": sat_val, "target": label.clone() }));
+                let _ = app.emit("aether:set-saturation", serde_json::json!({ "saturation": sat_val, "target": label.clone() }));
+            }
+            if let Some(spd_val) = config.get("speedMultiplier").and_then(|v| v.as_f64()).or_else(|| config.get("speed").and_then(|v| v.as_f64())) {
+                let _ = win.emit_to(label.as_str(), "aether:set-speed", serde_json::json!({ "speed": spd_val, "speedMultiplier": spd_val, "target": label.clone() }));
+                let _ = win.emit_to(label.as_str(), "aura:set-speed", serde_json::json!({ "speed": spd_val, "speedMultiplier": spd_val, "target": label.clone() }));
+                let _ = app.emit("aether:set-speed", serde_json::json!({ "speed": spd_val, "speedMultiplier": spd_val, "target": label.clone() }));
+            }
             if let Some(fps_val) = config.get("fps").and_then(|v| v.as_f64()) {
                 let _ = win.emit_to(label.as_str(), "aether:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
                 let _ = win.emit_to(label.as_str(), "aura:set-fps", serde_json::json!({ "fps": fps_val, "target": label.clone() }));
@@ -5029,43 +5117,139 @@ fn update_wallpaper_config(app: AppHandle, config: serde_json::Value, monitor_la
 
 /// Update brightness on the live wallpaper (no engine restart needed).
 #[tauri::command]
-fn set_wallpaper_brightness(app: AppHandle, brightness: f64) {
+fn set_wallpaper_brightness(app: AppHandle, monitor_label: Option<String>, brightness: f64) {
+    let target = monitor_label.unwrap_or_else(|| "*".to_string());
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
-            for (_, proc) in map {
-                let _ = proc.set_brightness(brightness);
+            for (label, proc) in map {
+                if matches_monitor(&target, label) {
+                    let _ = proc.set_brightness(brightness);
+                }
             }
         }
     }
     let windows = app.webview_windows();
-    for (label, win) in windows {
-        if label.starts_with("wallpaper_") {
-            let _ = win.emit_to(label.as_str(), "aether:set-brightness", serde_json::json!({ "brightness": brightness }));
-            let _ = win.emit_to(label.as_str(), "aura:set-brightness", serde_json::json!({ "brightness": brightness }));
+    for (label, win) in &windows {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
+            let payload = serde_json::json!({ "brightness": brightness, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:set-brightness", payload.clone());
+            let _ = win.emit_to(label.as_str(), "aura:set-brightness", payload);
         }
     }
+    let _ = app.emit("aether:set-brightness", serde_json::json!({ "brightness": brightness, "target": target }));
+    let _ = app.emit("aura:set-brightness", serde_json::json!({ "brightness": brightness, "target": target }));
 }
 
 /// Update opacity on the live wallpaper (no engine restart needed).
 #[tauri::command]
-fn set_wallpaper_opacity(app: AppHandle, opacity: f64) {
+fn set_wallpaper_opacity(app: AppHandle, monitor_label: Option<String>, opacity: f64) {
+    let target = monitor_label.unwrap_or_else(|| "*".to_string());
     #[cfg(windows)]
     if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
         if let Some(ref map) = *mpv_guard {
-            for (_, proc) in map {
-                if proc.hwnd != 0 {
+            for (label, proc) in map {
+                if matches_monitor(&target, label) && proc.hwnd != 0 {
                     set_hwnd_opacity(proc.hwnd as HWND, opacity);
                 }
             }
         }
     }
     let windows = app.webview_windows();
-    for (label, win) in windows {
-        if label.starts_with("wallpaper_") {
-            let _ = win.emit_to(label.as_str(), "aether:set-opacity", serde_json::json!({ "opacity": opacity }));
-            let _ = win.emit_to(label.as_str(), "aura:set-opacity", serde_json::json!({ "opacity": opacity }));
+    for (label, win) in &windows {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
+            let payload = serde_json::json!({ "opacity": opacity, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:set-opacity", payload.clone());
+            let _ = win.emit_to(label.as_str(), "aura:set-opacity", payload);
         }
     }
+    let _ = app.emit("aether:set-opacity", serde_json::json!({ "opacity": opacity, "target": target }));
+    let _ = app.emit("aura:set-opacity", serde_json::json!({ "opacity": opacity, "target": target }));
+}
+
+/// Update contrast on the live wallpaper (no engine restart needed).
+#[tauri::command]
+fn set_wallpaper_contrast(app: AppHandle, monitor_label: Option<String>, contrast: f64) {
+    let target = monitor_label.unwrap_or_else(|| "*".to_string());
+    if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+        if let Some(ref map) = *mpv_guard {
+            for (label, proc) in map {
+                if matches_monitor(&target, label) {
+                    let _ = proc.set_contrast(contrast);
+                }
+            }
+        }
+    }
+    let windows = app.webview_windows();
+    for (label, win) in &windows {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
+            let payload = serde_json::json!({ "contrast": contrast, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:set-contrast", payload.clone());
+            let _ = win.emit_to(label.as_str(), "aura:set-contrast", payload);
+        }
+    }
+    let _ = app.emit("aether:set-contrast", serde_json::json!({ "contrast": contrast, "target": target }));
+    let _ = app.emit("aura:set-contrast", serde_json::json!({ "contrast": contrast, "target": target }));
+}
+
+/// Update saturation on the live wallpaper (no engine restart needed).
+#[tauri::command]
+fn set_wallpaper_saturation(app: AppHandle, monitor_label: Option<String>, saturation: f64) {
+    let target = monitor_label.unwrap_or_else(|| "*".to_string());
+    if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+        if let Some(ref map) = *mpv_guard {
+            for (label, proc) in map {
+                if matches_monitor(&target, label) {
+                    let _ = proc.set_saturation(saturation);
+                }
+            }
+        }
+    }
+    let windows = app.webview_windows();
+    for (label, win) in &windows {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
+            let payload = serde_json::json!({ "saturation": saturation, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:set-saturation", payload.clone());
+            let _ = win.emit_to(label.as_str(), "aura:set-saturation", payload);
+        }
+    }
+    let _ = app.emit("aether:set-saturation", serde_json::json!({ "saturation": saturation, "target": target }));
+    let _ = app.emit("aura:set-saturation", serde_json::json!({ "saturation": saturation, "target": target }));
+}
+
+/// Update speed on the live wallpaper (MPV + Webview, no engine restart needed).
+#[tauri::command]
+fn set_wallpaper_speed(app: AppHandle, monitor_label: Option<String>, speed: f64) {
+    let target = monitor_label.unwrap_or_else(|| "*".to_string());
+    if let Ok(mpv_guard) = MPV_PLAYERS.lock() {
+        if let Some(ref map) = *mpv_guard {
+            for (label, proc) in map {
+                if matches_monitor(&target, label) {
+                    let _ = proc.set_speed(speed);
+                }
+            }
+        }
+    }
+    let windows = app.webview_windows();
+    for (label, win) in &windows {
+        if label.starts_with("wallpaper_") && matches_monitor(&target, label) {
+            let payload = serde_json::json!({ "speed": speed, "speedMultiplier": speed, "target": label.clone() });
+            let _ = win.emit_to(label.as_str(), "aether:set-speed", payload.clone());
+            let _ = win.emit_to(label.as_str(), "aura:set-speed", payload);
+            let _ = win.emit_to(label.as_str(), "aether:update-config", serde_json::json!({ "config": { "speed": speed, "speedMultiplier": speed }, "target": label.clone() }));
+        }
+    }
+    let _ = app.emit("aether:set-speed", serde_json::json!({ "speed": speed, "speedMultiplier": speed, "target": target }));
+    let _ = app.emit("aura:set-speed", serde_json::json!({ "speed": speed, "speedMultiplier": speed, "target": target }));
+}
+
+#[tauri::command]
+fn set_mpv_brightness(app: AppHandle, monitor_label: Option<String>, brightness: f64) {
+    set_wallpaper_brightness(app, monitor_label, brightness);
+}
+
+#[tauri::command]
+fn set_mpv_speed(app: AppHandle, monitor_label: Option<String>, speed: f64) {
+    set_wallpaper_speed(app, monitor_label, speed);
 }
 
 /// Show or hide the main control panel window.
@@ -6731,6 +6915,9 @@ fn main() {
             update_wallpaper_config,
             set_wallpaper_brightness,
             set_wallpaper_opacity,
+            set_wallpaper_contrast,
+            set_wallpaper_saturation,
+            set_wallpaper_speed,
             toggle_control_panel,
             set_wallpaper_mode,
             get_system_info,
@@ -6741,6 +6928,8 @@ fn main() {
             set_mpv_pause,
             set_mpv_volume,
             set_mpv_mute,
+            set_mpv_brightness,
+            set_mpv_speed,
             sync_performance_settings,
             set_autostart,
             is_autostart_enabled,
@@ -7131,7 +7320,7 @@ fn main() {
                                 "br_30"  => 0.30,
                                 _        => 1.0,
                             };
-                            set_wallpaper_brightness(app.clone(), val);
+                            set_wallpaper_brightness(app.clone(), None, val);
                             update_wallpaper_config(app.clone(), serde_json::json!({ "brightness": val }), None);
                             let _ = app.emit("aether:tray:set-brightness", serde_json::json!({ "brightness": val }));
                         }
@@ -7145,6 +7334,7 @@ fn main() {
                                 "spd_50"  => 0.5,
                                 _         => 1.0,
                             };
+                            set_wallpaper_speed(app.clone(), None, val);
                             update_wallpaper_config(app.clone(), serde_json::json!({ "speedMultiplier": val, "speed": val }), None);
                             let _ = app.emit("aether:tray:set-speed", serde_json::json!({ "speed": val }));
                         }
@@ -7157,7 +7347,7 @@ fn main() {
                                 "op_30"  => 0.30,
                                 _        => 1.0,
                             };
-                            set_wallpaper_opacity(app.clone(), val);
+                            set_wallpaper_opacity(app.clone(), None, val);
                             update_wallpaper_config(app.clone(), serde_json::json!({ "opacity": val }), None);
                             let _ = app.emit("aether:tray:set-opacity", serde_json::json!({ "opacity": val }));
                         }
