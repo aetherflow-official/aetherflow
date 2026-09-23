@@ -2974,14 +2974,14 @@ input:checked ~ .toggle-thumb {
   border: 1px solid rgba(239, 68, 68, 0.45);
 }
 
-/* 7. Card Apply Transparent Action (No background, no borders, pure typography) */
+/* 7. Card Apply Transparent Action (No background, no borders, pure typography, always visible) */
 .wp-pill-apply-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.9);
   border: none;
   font-size: 11px;
   font-weight: 600;
@@ -2990,16 +2990,13 @@ input:checked ~ .toggle-thumb {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  opacity: 0;
-  transform: translateY(2px);
-  pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease, color 0.15s ease, text-shadow 0.15s ease;
+  opacity: 0.9;
+  pointer-events: auto;
+  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
 }
 
 .wp-overlay-card:hover .wp-pill-apply-btn {
   opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
 }
 
 .wp-pill-apply-btn:hover {
@@ -3017,7 +3014,6 @@ input:checked ~ .toggle-thumb {
   text-shadow: 0 0 8px rgba(52, 211, 153, 0.4), 0 1px 3px rgba(0, 0, 0, 0.9);
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
 }
 
 /* 8. Filter Ribbon & Sort Toolbar */
