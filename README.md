@@ -10,8 +10,12 @@
   </a>
   <img src="https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078d4?style=for-the-badge&logo=windows" alt="Platform" />
   <img src="https://img.shields.io/badge/Core-Tauri%202%20%2B%20Rust-orange?style=for-the-badge&logo=rust" alt="Tauri 2 + Rust" />
-  <img src="https://img.shields.io/badge/License-Proprietary%20Freeware-ffe600?style=for-the-badge" alt="Proprietary Freeware" />
-  <img src="https://img.shields.io/badge/Source-Closed%20Source-ff0055?style=for-the-badge" alt="Closed Source" />
+  <a href="https://buymeacoffee.com/yashpreet">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee" />
+  </a>
+  <a href="https://www.patreon.com/cw/AetherFlow_official">
+    <img src="https://img.shields.io/badge/Patreon-FF424D?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon" />
+  </a>
 </p>
 
 ---
@@ -23,6 +27,8 @@
 <p align="center">
   <a href="https://aetherflow-official.github.io/aetherflow/"><strong>🌐 Official Website</strong></a> •
   <a href="https://aetherflow-official.github.io/aetherflow/manual.html"><strong>📖 User Operating Manual</strong></a> •
+  <a href="https://buymeacoffee.com/yashpreet"><strong>☕ Buy Me a Coffee</strong></a> •
+  <a href="https://www.patreon.com/cw/AetherFlow_official"><strong>💖 Patreon</strong></a> •
   <a href="https://aetherflow-official.github.io/aetherflow/privacy.html"><strong>🔒 Privacy Policy</strong></a> •
   <a href="https://aetherflow-official.github.io/aetherflow/license.html"><strong>⚖️ License Terms (EULA)</strong></a> •
   <a href="https://github.com/aetherflow-official/aetherflow/issues"><strong>💬 Issues &amp; Support</strong></a>
@@ -163,6 +169,25 @@ AetherFlow operates under a strict **Zero-Telemetry Protocol**:
 - **Camera Access Disabled**: Chromium video-capture modules are permanently disabled (`--disable-video-capture`) at the engine level.
 
 Read the full [Privacy Policy](https://aetherflow-official.github.io/aetherflow/privacy.html) for complete details.
+
+---
+
+## 💖 Support AetherFlow Development
+
+AetherFlow is 100% free, zero-bloat, and ad-free. It is independently engineered and maintained. If AetherFlow brings your Windows desktop to life, consider supporting continued development, server infrastructure, and new procedural wallpaper engines:
+
+<p align="center">
+  <a href="https://buymeacoffee.com/yashpreet" target="_blank">
+    <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" />
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://www.patreon.com/cw/AetherFlow_official" target="_blank">
+    <img src="https://img.shields.io/badge/Patreon-Become%20A%20Backer-FF424D?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon" />
+  </a>
+</p>
+
+* **[Buy Me a Coffee](https://buymeacoffee.com/yashpreet)**: Perfect for one-time tips ($3 or $5) to fuel late-night coding sessions.
+* **[Patreon Backer](https://www.patreon.com/cw/AetherFlow_official)**: Monthly backing with beta access, engine voting, exclusive wallpaper packs, and backer credits.
 
 ---
 

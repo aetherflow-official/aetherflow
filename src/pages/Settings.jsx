@@ -878,6 +878,61 @@ export default function SettingsPage() {
         </SettingRow>
       </SettingSection>
 
+      {/* Section 5: Support AetherFlow */}
+      <SettingSection
+        title="Support AetherFlow Development"
+        badge="Community"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, padding: '12px 14px' }}>
+          <div style={{ maxWidth: 520 }}>
+            <div className="text-sm font-semibold" style={{ color: 'var(--text-main)', marginBottom: 4 }}>
+              100% Free, Zero Bloat &amp; Ad-Free
+            </div>
+            <div className="text-xs text-muted" style={{ lineHeight: 1.5 }}>
+              AetherFlow is independently built. If it brings your desktop to life, consider buying a coffee or becoming a backer to keep community servers and catalog hosting running!
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(255, 221, 0, 0.1)',
+                color: '#FFDD00',
+                border: '1px solid rgba(255, 221, 0, 0.3)',
+                cursor: 'pointer'
+              }}
+              onClick={() => openReleaseUrl('https://buymeacoffee.com/yashpreet')}
+            >
+              ☕ Buy Me a Coffee
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                fontSize: 12,
+                padding: '6px 14px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(255, 66, 77, 0.1)',
+                color: '#FF424D',
+                border: '1px solid rgba(255, 66, 77, 0.3)',
+                cursor: 'pointer'
+              }}
+              onClick={() => openReleaseUrl('https://www.patreon.com/cw/AetherFlow_official')}
+            >
+              💖 Patreon Backer
+            </button>
+          </div>
+        </div>
+      </SettingSection>
+
       {/* Footer credits */}
       <div className="text-xs text-muted" style={{ textAlign: 'center', marginTop: 32, paddingBottom: 16 }}>
         AetherFlow v{APP_VERSION} · Sovereign Desktop Visual Engine · Lightweight & Fast (~30MB RAM)
