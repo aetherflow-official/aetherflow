@@ -208,9 +208,15 @@ export function createAudioSpectrum(canvas, options = {}) {
       cancelAnimationFrame(animId)
       animId = null
     }
+    if (audioCtx && audioCtx.state === 'running') {
+      audioCtx.suspend().catch(() => {})
+    }
   }
 
   function resume() {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {})
+    }
     if (!animId) {
       lastFrame = performance.now()
       animId = requestAnimationFrame(frame)

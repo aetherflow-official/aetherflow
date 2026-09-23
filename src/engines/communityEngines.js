@@ -79,16 +79,33 @@ export function createStellarWarp(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
   function updateOptions(newOpts) {
     Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
   }
 
-  return { start, stop, updateOptions }
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 2. BLACK HOLE LENS (Space) ───────────────────────────────────────────────
@@ -155,13 +172,33 @@ export function createBlackHoleLens(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 3. SUPERNOVA BURST (Space) ───────────────────────────────────────────────
@@ -237,13 +274,33 @@ export function createSupernovaBurst(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 4. ORBITAL MECHANICS (Space) ─────────────────────────────────────────────
@@ -311,13 +368,33 @@ export function createOrbitalMechanics(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 5. SOLAR FLARE (Space) ───────────────────────────────────────────────────
@@ -380,13 +457,33 @@ export function createSolarFlare(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 6. CYBER HEX CIRCUIT (Cyberpunk) ─────────────────────────────────────────
@@ -467,13 +564,33 @@ export function createCyberHexCircuit(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 7. NEON WIREFRAME TUNNEL (Cyberpunk) ─────────────────────────────────────
@@ -530,13 +647,33 @@ export function createNeonWireframeTunnel(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 8. QUANTUM ENTANGLEMENT (Cyberpunk) ──────────────────────────────────────
@@ -614,13 +751,33 @@ export function createQuantumEntanglement(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 9. HOLOGRAPHIC CLOCK (Cyberpunk) ─────────────────────────────────────────
@@ -692,13 +849,33 @@ export function createHolographicClock(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 10. SONAR RADAR SWEEP (Cyberpunk) ────────────────────────────────────────
@@ -780,13 +957,33 @@ export function createSonarRadarSweep(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 11. NEURAL SYNAPSE (Cyberpunk) ───────────────────────────────────────────
@@ -860,13 +1057,33 @@ export function createNeuralSynapse(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 12. SAKURA FALL (Anime & Nature) ─────────────────────────────────────────
@@ -929,13 +1146,33 @@ export function createSakuraFall(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 13. AUTUMN LEAVES (Nature) ───────────────────────────────────────────────
@@ -999,13 +1236,33 @@ export function createAutumnLeaves(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 14. FIREFLY FOREST (Nature) ──────────────────────────────────────────────
@@ -1066,13 +1323,33 @@ export function createFireflyForest(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 15. RAINY WINDOW (Nature & Lofi) ─────────────────────────────────────────
@@ -1130,13 +1407,33 @@ export function createRainyWindow(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 16. GENTLE SNOWFALL (Nature) ─────────────────────────────────────────────
@@ -1192,13 +1489,33 @@ export function createGentleSnowfall(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 17. OCEAN WAVES (Nature) ─────────────────────────────────────────────────
@@ -1245,13 +1562,33 @@ export function createOceanWaves(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 18. THUNDERSTORM LIGHTNING (Nature) ──────────────────────────────────────
@@ -1300,13 +1637,33 @@ export function createThunderstormLightning(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 19. HYPNOTIC SPIRAL (Abstract) ───────────────────────────────────────────
@@ -1350,13 +1707,33 @@ export function createHypnoticSpiral(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 20. VORONOI CELLS (Abstract) ─────────────────────────────────────────────
@@ -1420,13 +1797,33 @@ export function createVoronoiCells(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 21. PLASMA WAVES (Abstract) ──────────────────────────────────────────────
@@ -1474,13 +1871,33 @@ export function createPlasmaWaves(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 22. FLOW FIELD (Abstract) ────────────────────────────────────────────────
@@ -1543,13 +1960,33 @@ export function createFlowField(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 23. LISSAJOUS KNOTS (Abstract) ───────────────────────────────────────────
@@ -1591,13 +2028,33 @@ export function createLissajousKnots(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 24. CHLADNI RESONANCE (Abstract) ─────────────────────────────────────────
@@ -1650,13 +2107,33 @@ export function createChladniResonance(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 25. CASSETTE TAPE (Retro & Chill) ────────────────────────────────────────
@@ -1710,13 +2187,33 @@ export function createCassetteTape(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 26. ISOMETRIC CITY (Retro & City) ────────────────────────────────────────
@@ -1765,13 +2262,33 @@ export function createIsometricCity(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 27. NEON EQUALIZER (Retro & Audio) ───────────────────────────────────────
@@ -1855,7 +2372,13 @@ export function createNeonEqualizer(canvas, options = {}) {
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
   return { start, stop, pause, resume, updateOptions }
 }
 
@@ -1909,13 +2432,33 @@ export function createPixelStarNight(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 29. MATRIX HEX CODE (Cyberpunk & Minimal) ────────────────────────────────
@@ -1967,13 +2510,33 @@ export function createMatrixHexCode(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
 
 // ─── 30. SUNSET COASTAL DRIVE (Synthwave & Anime) ─────────────────────────────
@@ -2044,11 +2607,31 @@ export function createSunsetCoastalDrive(canvas, options = {}) {
     animId = requestAnimationFrame(frame)
   }
 
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
+  }
+
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
   function stop() {
-    if (animId) cancelAnimationFrame(animId)
+    pause()
     window.removeEventListener('resize', resize)
   }
 
-  function updateOptions(newOpts) { Object.assign(options, newOpts) }
-  return { start, stop, updateOptions }
+  function updateOptions(newOpts) {
+    Object.assign(options, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }

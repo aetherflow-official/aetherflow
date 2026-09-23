@@ -17,6 +17,37 @@ import { createRoot } from 'react-dom/client'
 import { ENGINES } from './engines/index.js'
 import './styles/index.css'
 
+// ─── Universal RAF Gatekeeper (Wallpaper Engine 0% CPU Architecture) ──────────
+let isGlobalWallpaperPaused = false
+const queuedRafCallbacks = new Set()
+const nativeRequestAnimationFrame = typeof window !== 'undefined' && window.requestAnimationFrame
+  ? window.requestAnimationFrame.bind(window)
+  : (cb) => setTimeout(cb, 16)
+const nativeCancelAnimationFrame = typeof window !== 'undefined' && window.cancelAnimationFrame
+  ? window.cancelAnimationFrame.bind(window)
+  : clearTimeout
+
+if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+  window.requestAnimationFrame = function (cb) {
+    if (isGlobalWallpaperPaused) {
+      queuedRafCallbacks.add(cb)
+      return -1
+    }
+    return nativeRequestAnimationFrame((timestamp) => {
+      if (isGlobalWallpaperPaused) {
+        queuedRafCallbacks.add(cb)
+        return
+      }
+      cb(timestamp)
+    })
+  }
+
+  window.cancelAnimationFrame = function (id) {
+    if (id === -1) return
+    nativeCancelAnimationFrame(id)
+  }
+}
+
 // ─── WallpaperCanvas Component ────────────────────────────────────────────────
 
 function WallpaperCanvas() {
@@ -210,6 +241,11 @@ function WallpaperCanvas() {
         paused: shouldStartPaused,
       })
       engineRef.current = engine
+      if (shouldStartPaused) {
+        isGlobalWallpaperPaused = true
+      } else {
+        isGlobalWallpaperPaused = false
+      }
       engine.start()
       if (shouldStartPaused) {
         try { engine.pause?.() } catch (e) {}
@@ -300,6 +336,8 @@ function WallpaperCanvas() {
         })
 
         await registerEvent('stop', () => {
+          isGlobalWallpaperPaused = false
+          queuedRafCallbacks.clear()
           bootSeqRef.current++
           activeIdRef.current = null
           setActiveId(null)
@@ -317,6 +355,7 @@ function WallpaperCanvas() {
         })
 
         await registerEvent('pause', () => {
+          isGlobalWallpaperPaused = true
           isPausedRef.current = true
           try { engineRef.current?.pause?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: true }) } catch (e) {}
@@ -326,9 +365,17 @@ function WallpaperCanvas() {
         })
 
         await registerEvent('resume', () => {
+          isGlobalWallpaperPaused = false
           isPausedRef.current = false
           try { engineRef.current?.resume?.() } catch (e) {}
           try { engineRef.current?.updateOptions?.({ paused: false }) } catch (e) {}
+          if (queuedRafCallbacks.size > 0) {
+            const callbacks = Array.from(queuedRafCallbacks)
+            queuedRafCallbacks.clear()
+            for (const cb of callbacks) {
+              nativeRequestAnimationFrame(cb)
+            }
+          }
           document.querySelectorAll('video').forEach(el => {
             try { el.play().catch(() => {}) } catch (e) {}
           })

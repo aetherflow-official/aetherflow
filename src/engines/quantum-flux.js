@@ -212,7 +212,9 @@ export function createQuantumFlux(canvas, options = {}) {
       canvas.addEventListener('mouseleave', handleMouseLeave)
       canvas.addEventListener('click', handleClick)
     }
-    animId = requestAnimationFrame(frame)
+    if (!opts.paused) {
+      animId = requestAnimationFrame(frame)
+    }
   }
 
   function stop() {
@@ -226,9 +228,26 @@ export function createQuantumFlux(canvas, options = {}) {
     canvas.removeEventListener('click', handleClick)
   }
 
-  function updateOptions(newOpts) {
-    Object.assign(opts, newOpts)
+  function pause() {
+    if (animId) {
+      cancelAnimationFrame(animId)
+      animId = null
+    }
   }
 
-  return { start, stop, updateOptions }
+  function resume() {
+    if (!animId) {
+      animId = requestAnimationFrame(frame)
+    }
+  }
+
+  function updateOptions(newOpts) {
+    Object.assign(opts, newOpts)
+    if (newOpts.paused !== undefined) {
+      if (newOpts.paused) pause()
+      else resume()
+    }
+  }
+
+  return { start, stop, updateOptions, pause, resume }
 }
