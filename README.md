@@ -41,18 +41,24 @@ AetherFlow is distributed as **Proprietary Freeware (Closed-Source)** — 100% f
 ## 📸 Desktop & In-App Showcase
 
 ### 1. Live Desktop Player & Real-Time Controls
-Adjust opacity, brightness, playback speed, and volume in real-time with instant hardware preview.
+Adjust opacity, brightness, contrast, saturation, playback speed, and volume in real-time with instant hardware preview.
 <p align="center">
   <img src="docs/screenshots/app_home_controls.png" alt="AetherFlow Live Desktop Player" width="92%" style="border-radius: 8px;" />
 </p>
 
-### 2. Video & Media Library
-Manage custom 4K MP4s, anime clips, and web streams with one-click desktop application.
+### 2. Wallpaper Library & Offline Cloud Stream
+Manage local storage, offline downloads, and cloud streaming saves (~1.5+ GB disk savings) with multi-criteria tag filtering.
 <p align="center">
-  <img src="docs/screenshots/app_favorites_grid.png" alt="Favorites and Media Library" width="92%" style="border-radius: 8px;" />
+  <img src="docs/screenshots/app_library.png" alt="Wallpaper Library & Cloud Stream" width="92%" style="border-radius: 8px;" />
 </p>
 
-### 3. Real Windows Desktop Captures
+### 3. Wallpaper Playlists & Automated Rotation
+Create custom playlists, select multi-monitor target displays, configure rotation intervals (1m to 1h), and smooth transitions (Fade, Slide, Zoom).
+<p align="center">
+  <img src="docs/screenshots/app_playlists.png" alt="Wallpaper Playlists Manager" width="92%" style="border-radius: 8px;" />
+</p>
+
+### 4. Real Windows Desktop Captures
 Live wallpapers pinned behind native Windows desktop icons with taskbar integration:
 
 | The Batman Cinematic Wallpaper | Cyberpunk GT-R Widebody (Video Engine) |
@@ -63,13 +69,19 @@ Live wallpapers pinned behind native Windows desktop icons with taskbar integrat
 |:---:|:---:|
 | <img src="docs/screenshots/desktop_cherry_blossom.png" width="100%" /> | <img src="docs/screenshots/desktop_anime_hashira.jpg" width="100%" /> |
 
-### 4. Community Hub Catalog
-Discover, preview, and download curated wallpapers created worldwide.
+### 5. Community Hub Open Catalog
+Discover, preview, and download curated wallpapers created worldwide with instant 1-click desktop apply.
 <p align="center">
   <img src="docs/screenshots/app_community.png" alt="AetherFlow Community Hub" width="92%" style="border-radius: 8px;" />
 </p>
 
-### 5. Live Theme Studio & Taskbar Personalization
+### 6. OLED Screensaver & Live Clock HUD
+Integrated OLED burn-in prevention screensaver featuring real-time clock HUD simulation and system idle automation.
+<p align="center">
+  <img src="docs/screenshots/app_screensaver.png" alt="OLED Screensaver & Clock HUD" width="92%" style="border-radius: 8px;" />
+</p>
+
+### 7. Live Theme Studio & Taskbar Personalization
 8 built-in themes plus a live CSS palette editor with Windows Taskbar transparent, acrylic blur, and color-matched modes.
 <p align="center">
   <img src="docs/screenshots/app_personalization.png" alt="Theme Studio and Taskbar" width="92%" style="border-radius: 8px;" />
