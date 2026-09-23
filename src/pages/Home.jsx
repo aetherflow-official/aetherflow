@@ -1576,7 +1576,10 @@ export default function HomePage() {
                   border: isSelected ? '1px solid var(--color-brand)' : undefined,
                   cursor: 'pointer',
                 }}
-                onClick={() => selectWallpaper(wallpaper)}
+                onClick={() => {
+                  selectWallpaper(wallpaper)
+                  setPreviewWallpaper(wallpaper)
+                }}
               >
                 <div style={{ width: 108, height: 62, borderRadius: 6, overflow: 'hidden', flexShrink: 0, position: 'relative', background: '#080c14' }}>
                   <WallpaperThumbnail wallpaper={wallpaper} isHovered={false} mode={thumbnailMode} />
@@ -1658,7 +1661,10 @@ export default function HomePage() {
                   selectWallpaper(wp)
                   handleApply(wp)
                 }}
-                onPreview={(wp) => selectWallpaper(wp)}
+                onPreview={(wp) => {
+                  selectWallpaper(wp)
+                  setPreviewWallpaper(wp)
+                }}
                 onModalPreview={(wp) => setPreviewWallpaper(wp)}
                 onToggleLike={(id) => toggleLikeWallpaper(id)}
                 onTogglePin={(id) => unpinFromHome(id)}
